@@ -194,6 +194,15 @@ retrieval:
     model: cross-encoder/nli-deberta-v3-small
     max_pairs_per_subquestion: 15   # top-6 passages => 15 pairs, caps CPU cost
     contradiction_threshold: 0.60
+    # Two chunks of the SAME paper appearing to contradict each other is
+    # usually an artefact — a hypothesis stated before it is refuted, a
+    # limitation acknowledged after a result. That is not sources
+    # disagreeing, and counting it would inflate f5 on a corpus that agrees.
+    cross_source_only: true
+    # NLI heads are asymmetric in practice even where the relation is
+    # symmetric in principle. Score both directions and take the stronger
+    # signal: missing a real contradiction costs more than the forward pass.
+    symmetric: true
 
 chunking:
   web:

@@ -37,11 +37,13 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Protocol
 
 from src.config import Config, get_config, has_env, require_env
+from src.llm.cache import CachedResponse, PromptCache
 from src.llm.rate_limit import (
     ModelLimits,
     QuotaExhausted,
@@ -285,11 +287,15 @@ class LLMProvider:
         ledger: QuotaLedger | None = None,
         sleep: Callable[[float], None] = time.sleep,
         now: Callable[[], float] = time.time,
+        cache: PromptCache | None = None,
     ) -> None:
         self.cfg = config or get_config()
         self._sleep = sleep
         self._now = now
-        self._cache = None  # wired in C3
+        self.cache = cache if cache is not None else PromptCache(
+            self.cfg.path("llm.cache.dir"),
+            enabled=bool(self.cfg.get("llm.cache.enabled", True)),
+        )
 
         self.chains: dict[Role, list[ModelSpec]] = {}
         all_specs: dict[str, ModelSpec] = {}
@@ -346,6 +352,7 @@ class LLMProvider:
         temperature: float | None = None,
         max_output_tokens: int | None = None,
         json_mode: bool = False,
+        use_cache: bool = True,
     ) -> LLMResponse:
         chain = self.chains.get(role) or []
         if not chain:
@@ -359,6 +366,41 @@ class LLMProvider:
 
         errors: list[str] = []
         started = self._now()
+
+        # Cache is checked across the ENTIRE chain before any live call.
+        #
+        # The naive alternative — check each model's cache just before calling
+        # it — breaks re-runs. If the first run fell back to the secondary
+        # model, a re-run would miss on the primary, spend real quota there,
+        # and never reach the cached secondary entry. Checking the whole chain
+        # first makes "re-running an unchanged question costs zero" true
+        # regardless of which model answered originally.
+        if use_cache and self.cache.enabled:
+            for index, spec in enumerate(chain):
+                budget = max_output_tokens or spec.max_output_tokens
+                key = PromptCache.make_key(
+                    model=spec.model,
+                    system=system,
+                    user=user,
+                    temperature=temperature,
+                    max_output_tokens=budget,
+                    json_mode=json_mode and spec.supports_json_mode,
+                )
+                hit = self.cache.get(key)
+                if hit is not None:
+                    return LLMResponse(
+                        text=hit.text,
+                        model=hit.model,
+                        provider=hit.provider,
+                        role=role,
+                        prompt_tokens=hit.prompt_tokens,
+                        completion_tokens=hit.completion_tokens,
+                        total_tokens=hit.total_tokens,
+                        latency_s=self._now() - started,
+                        attempts=0,
+                        fell_back=index > 0,
+                        from_cache=True,
+                    )
 
         for index, spec in enumerate(chain):
             budget = max_output_tokens or spec.max_output_tokens
@@ -398,10 +440,34 @@ class LLMProvider:
                     continue
 
                 total = prompt_tok + completion_tok
+                # Quota is charged only for calls that actually happened —
+                # a cache hit returns above and never reaches this line.
                 self.ledger.record(spec.model, total, now=self._now())
                 if not text.strip():
+                    # Never cache an empty response: it would poison every
+                    # future run of this prompt with a permanent failure.
                     errors.append(f"{spec.model}: empty response")
                     break
+                if use_cache:
+                    self.cache.put(
+                        PromptCache.make_key(
+                            model=spec.model,
+                            system=system,
+                            user=user,
+                            temperature=temperature,
+                            max_output_tokens=budget,
+                            json_mode=json_mode and spec.supports_json_mode,
+                        ),
+                        CachedResponse(
+                            text=text,
+                            model=spec.model,
+                            provider=spec.provider,
+                            prompt_tokens=prompt_tok,
+                            completion_tokens=completion_tok,
+                            total_tokens=total,
+                            created_at=datetime.now().isoformat(timespec="seconds"),
+                        ),
+                    )
                 return LLMResponse(
                     text=text,
                     model=spec.model,

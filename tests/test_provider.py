@@ -81,7 +81,7 @@ def make_config(tmp_path, **over):
     return Config(data)
 
 
-def build(tmp_path, backend=None, **over):
+def build(tmp_path, backend=None, cache_enabled=False, **over):
     cfg = make_config(tmp_path, **over)
     backend = backend or FakeBackend()
     specs = {}
@@ -91,12 +91,14 @@ def build(tmp_path, backend=None, **over):
             specs[raw["model"]] = ModelLimits.from_config(raw["limits"])
     ledger = QuotaLedger(tmp_path / "q.json", specs)
     slept = []
+    from src.llm.cache import PromptCache
     provider = LLMProvider(
         cfg,
         backends={"groq": backend, "gemini": backend},
         ledger=ledger,
         sleep=slept.append,
         now=lambda: T0,
+        cache=PromptCache(tmp_path / "cache", enabled=cache_enabled),
     )
     return provider, backend, ledger, slept
 
@@ -142,9 +144,11 @@ def test_role_uses_per_model_output_cap(tmp_path):
 def test_unconfigured_role_raises(tmp_path):
     cfg = make_config(tmp_path)
     cfg = cfg.with_overrides({"llm.roles.mechanical": []})
+    from src.llm.cache import PromptCache
     provider = LLMProvider(cfg, backends={"groq": FakeBackend()},
                            ledger=QuotaLedger(tmp_path / "q.json", {}),
-                           now=lambda: T0)
+                           now=lambda: T0,
+                           cache=PromptCache(tmp_path / "c", enabled=False))
     with pytest.raises(ProviderError, match="no models configured"):
         provider.complete("s", "u", role=Role.MECHANICAL)
 
@@ -331,3 +335,86 @@ def test_thinking_budget_defaults_to_not_sent():
                      limits=ModelLimits(rpm=30))
     assert spec.thinking_budget is None
     assert spec.supports_system_instruction is True   # opt-out, not default
+
+
+# --- cache integration -----------------------------------------------------
+
+
+def test_second_identical_call_makes_no_api_request(tmp_path):
+    """The C3 acceptance check: re-running an unchanged prompt is free."""
+    provider, backend, _, _ = build(tmp_path, cache_enabled=True)
+    first = provider.complete("s", "u")
+    second = provider.complete("s", "u")
+    assert len(backend.calls) == 1
+    assert first.from_cache is False
+    assert second.from_cache is True
+    assert second.text == first.text
+    assert provider.cache.stats.hits == 1
+
+
+def test_cache_hit_costs_no_quota(tmp_path):
+    """A cached response is a recorded observation, not a new API call.
+    Charging quota for it would make the ledger over-report and could
+    falsely exhaust a model."""
+    provider, backend, ledger, _ = build(tmp_path, cache_enabled=True)
+    provider.complete("s", "u")
+    spent_after_live = ledger.snapshot(now=T0)["primary"]["tpd"][0]
+    provider.complete("s", "u")
+    assert ledger.snapshot(now=T0)["primary"]["tpd"][0] == spent_after_live
+
+
+def test_changed_prompt_misses(tmp_path):
+    provider, backend, _, _ = build(tmp_path, cache_enabled=True)
+    provider.complete("s", "u")
+    provider.complete("s", "different question")
+    assert len(backend.calls) == 2
+
+
+def test_different_role_misses_because_model_differs(tmp_path):
+    provider, backend, _, _ = build(tmp_path, cache_enabled=True)
+    provider.complete("s", "u", role=Role.JUDGMENT)
+    provider.complete("s", "u", role=Role.MECHANICAL)
+    assert len(backend.calls) == 2
+
+
+def test_rerun_hits_cache_even_when_original_fell_back(tmp_path):
+    """The reason lookup scans the whole chain. If run 1 fell back to the
+    secondary model, run 2 must NOT spend quota probing the primary."""
+    backend = FakeBackend(script=[FakeStatusError(429), '{"ok": true}'])
+    provider, backend, ledger, _ = build(
+        tmp_path, backend=backend, cache_enabled=True
+    )
+    first = provider.complete("s", "u")
+    assert first.model == "secondary" and first.fell_back
+
+    calls_before = len(backend.calls)
+    second = provider.complete("s", "u")
+    assert second.from_cache is True
+    assert second.model == "secondary"
+    assert len(backend.calls) == calls_before      # no live call at all
+
+
+def test_use_cache_false_bypasses_both_read_and_write(tmp_path):
+    """C37 re-runs the judge blind; a cached verdict would defeat that."""
+    provider, backend, _, _ = build(tmp_path, cache_enabled=True)
+    provider.complete("s", "u")
+    provider.complete("s", "u", use_cache=False)
+    assert len(backend.calls) == 2
+    assert provider.cache.stats.hits == 0
+
+
+def test_empty_response_is_never_cached(tmp_path):
+    """Caching a failure would poison every future run of that prompt."""
+    backend = FakeBackend(script=["   ", '{"ok": true}', '{"ok": true}'])
+    provider, backend, _, _ = build(
+        tmp_path, backend=backend, cache_enabled=True
+    )
+    provider.complete("s", "u")                    # primary empty -> secondary
+    assert provider.cache.count() == 1             # only the good one stored
+
+
+def test_cache_disabled_by_config_makes_two_calls(tmp_path):
+    provider, backend, _, _ = build(tmp_path, cache_enabled=False)
+    provider.complete("s", "u")
+    provider.complete("s", "u")
+    assert len(backend.calls) == 2

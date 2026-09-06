@@ -980,3 +980,39 @@ longer quota-bound in any meaningful sense — the earlier estimate of
 critic batch all claims into one call still stands**: it is now good design
 rather than a survival requirement, and batched judging is also less noisy
 than per-claim calls.
+
+**2026-09-06 — C3. Prompt-hash cache.**
+
+`src/llm/cache.py`, wired into the provider. sha256 over model, system, user,
+temperature, max_output_tokens and json_mode; sharded on the first two hex
+chars; atomic writes; nothing ever evicted.
+
+One design decision worth recording because the naive version is subtly
+wrong: **the cache is checked across the entire role chain before any live
+call**, not per model just before calling it. If run 1 fell back to the
+secondary model, per-model checking would miss on the primary during a
+re-run, spend real quota there, and only then reach the cached secondary
+entry. Chain-wide lookup makes "re-running an unchanged question costs zero"
+true regardless of which model originally answered.
+
+Three invariants, each covered by a test:
+- **A cache hit charges no quota.** It never reaches `ledger.record`. Charging
+  for it would over-report spend and could falsely exhaust a model.
+- **Empty responses are never cached.** Caching a failure would poison every
+  future run of that prompt permanently.
+- **Corrupt or stale-version entries degrade to a miss**, never to a crash.
+
+`use_cache=False` bypasses read and write both. This is what C37 needs: the
+scoring pass re-runs the judge blind, and a cached verdict would defeat the
+point. `evaluation.judge.cache_enabled: false` in config.yaml already
+anticipated this.
+
+Note a consequence of keying on temperature: **calls with temperature > 0 are
+frozen after their first execution.** That is intended — it makes reported
+numbers reproducible — but any deliberate measurement of sampling variance
+must pass `use_cache=False`.
+
+Also fixed here: `.gitignore` now excludes all of `data/`.
+`data/quota_ledger.json` was committed at C2, which is wrong — it records what
+one machine spent today, so a fresh clone would start life believing it had
+already consumed someone else's quota, and every pull would conflict.

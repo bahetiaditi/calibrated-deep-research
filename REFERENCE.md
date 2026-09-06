@@ -1016,3 +1016,44 @@ Also fixed here: `.gitignore` now excludes all of `data/`.
 `data/quota_ledger.json` was committed at C2, which is wrong — it records what
 one machine spent today, so a fresh clone would start life believing it had
 already consumed someone else's quota, and every pull would conflict.
+
+**2026-09-06 — C4. Structured tracing.**
+
+`src/tracing/tracer.py`: JSONL, one file per run named by `trace_id`,
+append-only, flushed per event so a run killed mid-eval keeps what it did.
+`TraceReader` skips unparseable lines, so a partial final line from a killed
+process costs one event rather than the file.
+
+**The design point beyond the original spec.** §8 framed C4 as MAST
+substrate. It is also the *verification mechanism for the agency claim*.
+C35's check reads "verify by trace inspection that the disabled surface
+really is disabled — e.g. A1 shows zero plan revisions", and that is only
+possible if every exercise of D1–D5 is a first-class, queryable event. So the
+tracer has an explicit `DecisionSurface` enum and a `decision()` method
+recording the chosen option, **the alternatives considered**, the rationale,
+and the inputs.
+
+Critically, `decision(..., was_adaptive=False)` marks a call made under a
+static policy. `TraceReader.adaptive_decision_counts()` counts only adaptive
+ones, so an A1 run must report `D1_plan_revision: 0`. **A non-zero count means
+the ablation did not take effect and its result is invalid** — without this,
+a broken ablation would silently produce a plausible-looking number.
+
+Recording alternatives also matters for §2.4's anti-patterns: a decision with
+an empty alternatives list every time is a decision in name only, and now
+that is visible in the data rather than a matter of opinion.
+
+Payloads pass through a truncator (2000 chars, 25 list items, depth 6).
+§3.3 asks routing events to carry "the state snapshot that produced it";
+dumping full state is not viable when evidence passages run to kilobytes and
+a run makes tens of routing decisions, so `route()` takes a `state_summary` —
+the fields routing actually reads. A trace too large to read is a trace
+nobody reads.
+
+Also wired: `LLMProvider` takes an optional `tracer` and records every call,
+**including cache hits**. Omitting cached calls would make cache
+effectiveness invisible in the per-run cost analysis §6.7 requires.
+
+`scripts/smoke_c4.py` is the acceptance check and costs zero API calls — it
+simulates a four-node run including a route escalation, a static (ablated)
+decision, and a node failure, then asserts the reader recovers all of it.

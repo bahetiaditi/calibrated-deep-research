@@ -288,10 +288,14 @@ class LLMProvider:
         sleep: Callable[[float], None] = time.sleep,
         now: Callable[[], float] = time.time,
         cache: PromptCache | None = None,
+        tracer: Any = None,
     ) -> None:
         self.cfg = config or get_config()
         self._sleep = sleep
         self._now = now
+        # Optional: when set, every call (live or cached) is recorded.
+        # Attached by the graph at C19 so a run's trace includes its LLM spend.
+        self.tracer = tracer
         self.cache = cache if cache is not None else PromptCache(
             self.cfg.path("llm.cache.dir"),
             enabled=bool(self.cfg.get("llm.cache.enabled", True)),
@@ -388,6 +392,11 @@ class LLMProvider:
                 )
                 hit = self.cache.get(key)
                 if hit is not None:
+                    self._trace_call(
+                        role, hit.model, hit.provider, hit.prompt_tokens,
+                        hit.completion_tokens, hit.total_tokens,
+                        self._now() - started, True, index > 0, 0,
+                    )
                     return LLMResponse(
                         text=hit.text,
                         model=hit.model,
@@ -468,6 +477,10 @@ class LLMProvider:
                             created_at=datetime.now().isoformat(timespec="seconds"),
                         ),
                     )
+                self._trace_call(
+                    role, spec.model, spec.provider, prompt_tok, completion_tok,
+                    total, self._now() - started, False, index > 0, attempt,
+                )
                 return LLMResponse(
                     text=text,
                     model=spec.model,
@@ -576,6 +589,25 @@ class LLMProvider:
             self.ledger.record(spec.model, remaining, now=self._now())
         elif spec.limits.rpd is not None:
             self.ledger.record(spec.model, 0, now=self._now())
+
+    def _trace_call(
+        self, role, model, provider, prompt_tok, completion_tok, total,
+        latency_s, from_cache, fell_back, attempts,
+    ) -> None:
+        if self.tracer is None:
+            return
+        self.tracer.llm_call(
+            role=role.value if hasattr(role, "value") else str(role),
+            model=model,
+            provider=provider,
+            prompt_tokens=prompt_tok,
+            completion_tokens=completion_tok,
+            total_tokens=total,
+            latency_s=latency_s,
+            from_cache=from_cache,
+            fell_back=fell_back,
+            attempts=attempts,
+        )
 
     def quota_report(self) -> str:
         lines = ["model                          rpm        tpm            rpd       tpd"]

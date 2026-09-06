@@ -418,3 +418,32 @@ def test_cache_disabled_by_config_makes_two_calls(tmp_path):
     provider.complete("s", "u")
     provider.complete("s", "u")
     assert len(backend.calls) == 2
+
+
+# --- tracing integration ---------------------------------------------------
+
+
+def test_provider_traces_live_and_cached_calls(tmp_path):
+    """A run's trace must account for its whole LLM spend, including the
+    calls that cost nothing — otherwise cache effectiveness is invisible."""
+    from src.tracing.tracer import EventType, TraceReader, Tracer
+
+    tracer = Tracer(tmp_path / "traces", trace_id="p1")
+    provider, backend, _, _ = build(tmp_path, cache_enabled=True)
+    provider.tracer = tracer
+
+    provider.complete("s", "u")      # live
+    provider.complete("s", "u")      # cached
+    tracer.close()
+
+    totals = TraceReader.load(tracer.path).llm_totals()
+    assert totals["calls"] == 2
+    assert totals["live_calls"] == 1
+    assert totals["cached_calls"] == 1
+
+
+def test_provider_works_without_a_tracer(tmp_path):
+    """Tracing is optional — unit tests and scripts run without one."""
+    provider, backend, _, _ = build(tmp_path)
+    assert provider.tracer is None
+    assert provider.complete("s", "u").text

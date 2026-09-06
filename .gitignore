@@ -1,0 +1,38 @@
+# ---- secrets ----
+.env
+*.key
+
+# ---- python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ---- generated data ----
+# Caches and indexes are reproducible; traces and results are NOT
+# (they cost API quota). See the exceptions below.
+data/cache/
+data/qdrant/
+data/bm25/
+data/checkpoints.sqlite
+*.joblib
+
+# Traces are large and per-run. Keep the ones backing published numbers.
+traces/*
+!traces/.gitkeep
+!traces/published/
+
+# Results: commit the metric tables and figures, not the raw dumps.
+results/*
+!results/.gitkeep
+!results/*.md
+!results/*.csv
+!results/*.png
+
+# ---- os / editor ----
+.DS_Store
+.vscode/
+.idea/

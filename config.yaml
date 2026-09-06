@@ -1,0 +1,177 @@
+# calibrated-deep-research — central configuration
+#
+# RULE: no magic numbers in src/. If a value could reasonably be changed,
+# it lives here. Ablations and baselines work by overriding this file
+# (see benchmark/run_ablations.py), which is only possible if nothing is
+# hardcoded. Treat a literal in a node as a bug.
+
+run:
+  seed: 20260805
+  trace_dir: traces
+  results_dir: results
+  checkpoint_db: data/checkpoints.sqlite   # LangGraph SqliteSaver (C19)
+
+# ---------------------------------------------------------------------------
+# LLM providers
+# ---------------------------------------------------------------------------
+llm:
+  primary:
+    provider: gemini
+    model: gemini-2.5-flash
+    temperature: 0.0          # deterministic by default; nodes may override
+    max_output_tokens: 2048
+    # Free tier as of 2026: Flash / Flash-Lite only, 5-15 RPM, ~1000 RPD.
+    # Verify live limits in AI Studio for THIS project before an eval run.
+    rpm_limit: 10
+    rpd_limit: 1000
+  fallback:
+    provider: groq
+    model: llama-3.3-70b-versatile
+    temperature: 0.0
+    max_output_tokens: 2048
+  retry:
+    max_attempts: 3
+    initial_backoff_s: 2.0
+    backoff_multiplier: 2.0
+    fallback_on_status: [429, 500, 502, 503, 504]
+  cache:
+    enabled: true             # MANDATORY during eval — see REFERENCE.md §7.1
+    dir: data/cache/llm
+    # Key = sha256(model + system + user + temperature + max_output_tokens).
+    # Disable only when deliberately re-running a judge blind (C37 scoring).
+
+# ---------------------------------------------------------------------------
+# Budget (D4). One "run" = one benchmark question end to end.
+# ---------------------------------------------------------------------------
+budget:
+  llm_calls_max: 25
+  retrieval_calls_max: 20
+  wall_clock_max_s: 900
+  reserve_fraction: 0.20      # held back for critic + decider; D4 may not spend it
+  min_calls_per_subquestion: 1
+  max_rounds_per_subquestion: 3
+  max_plan_revisions: 2
+
+# ---------------------------------------------------------------------------
+# Retrieval / RAG layer
+# ---------------------------------------------------------------------------
+retrieval:
+  dense:
+    model: BAAI/bge-small-en-v1.5
+    dim: 384
+    # REQUIRED by the model card. Omitting it silently degrades recall.
+    query_prefix: "Represent this sentence for searching relevant passages: "
+    batch_size: 32
+  sparse:
+    backend: bm25s
+    stemmer: english
+  fusion:
+    method: rrf
+    k: 60                     # Cormack et al. 2009; parameter-free in practice
+    candidates_per_retriever: 50
+  rerank:
+    model: BAAI/bge-reranker-base
+    input_candidates: 30
+    output_top_k: 8
+    batch_size: 16
+  store:
+    backend: qdrant
+    path: data/qdrant
+    collection: evidence
+    distance: cosine
+  contradiction:
+    model: cross-encoder/nli-deberta-v3-small
+    max_pairs_per_subquestion: 15   # top-6 passages => 15 pairs, caps CPU cost
+    contradiction_threshold: 0.60
+
+chunking:
+  web:
+    size_chars: 800
+    overlap_chars: 150
+    sentence_boundary_aware: true
+  paper:
+    strategy: section_aware
+    size_chars: 1000
+    overlap_chars: 150
+    never_cross_section_boundary: true
+    canonical_sections:
+      - Abstract
+      - Introduction
+      - Background
+      - Related Work
+      - Method
+      - Methods
+      - Approach
+      - Experiments
+      - Experimental Setup
+      - Results
+      - Analysis
+      - Discussion
+      - Ablation
+      - Limitations
+      - Conclusion
+      - References
+    header_regex: '^\s*(\d+(?:\.\d+)*)\s+([A-Z][A-Za-z \-]{2,60})\s*$'
+
+sources:
+  arxiv:
+    delay_seconds: 3.0        # arXiv API etiquette — do not lower
+    num_retries: 3
+    max_results_default: 8
+    pdf_cache_dir: data/cache/pdf
+  web:
+    provider: tavily          # tavily | ddgs — ddgs is dev-only, rate-limits hard
+    max_results_default: 6
+    tavily_search_depth: basic   # "advanced" costs 2 credits; budget is 1000/mo
+
+# ---------------------------------------------------------------------------
+# Sufficiency scoring and the abstention decision (§5)
+# ---------------------------------------------------------------------------
+sufficiency:
+  model_path: results/sufficiency_model.joblib
+  calibration:
+    method: isotonic          # applied only if the reliability diagram warrants
+    apply: auto               # auto | always | never
+  thresholds:
+    # Placeholders. Overwritten by analysis/calibrate.py at C33 using the
+    # CALIBRATION split only. Never hand-tune these against test results.
+    tau_answer: 0.65
+    tau_partial: 0.40
+    target_risk: 0.10         # target error rate among answered questions
+  hard_rules:
+    abstain_on_failed_premise: true       # categorical, bypasses tau
+    premise_grounding_min: 0.35
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
+evaluation:
+  benchmark_path: benchmark/questions.json
+  retrieval_labels_path: benchmark/retrieval_labels.json
+  splits: [calibration, test]
+  judge:
+    model: gemini-2.5-flash
+    temperature: 0.0
+    cache_enabled: false      # judge runs blind — no cache reuse from the agent
+  spot_check_fraction: 0.20
+  bootstrap_iterations: 1000  # CIs — n=24 per split, report them honestly
+
+# ---------------------------------------------------------------------------
+# Agency switches. Each flag freezes exactly one decision surface.
+# Default = everything live. Ablations flip exactly one to false.
+# ---------------------------------------------------------------------------
+agency:
+  d1_plan_revision: true
+  d2_adaptive_route_and_query: true
+  d3_adaptive_depth_and_stopping: true
+  d4_budget_allocation: true
+  d5_terminal_decision: true
+  critic_five_way_routing: true
+
+  # Static counterparts used when the corresponding flag is false.
+  static:
+    route_rule: arxiv_meta            # A2: fixed route for every sub-question
+    query_verbatim: true              # A2: query = sub-question text
+    fixed_top_k: 8                    # A3: one round, fixed k, always stop
+    uniform_budget_split: true        # A4
+    critic_binary: true               # A5: re-retrieve or accept

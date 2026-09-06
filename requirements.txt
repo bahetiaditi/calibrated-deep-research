@@ -1,0 +1,52 @@
+# calibrated-deep-research — direct dependencies
+# Python >= 3.12 (numpy 2.5+ and pandas 3.x require it)
+# Versions verified against PyPI on 2026-09-05.
+# Transitive deps (torch, transformers, httpx, ...) are resolved by pip and
+# frozen into requirements.lock.txt at C42. Do not pin torch here — let
+# sentence-transformers pick the wheel that matches the platform.
+
+# ---- orchestration -----------------------------------------------------
+langgraph==1.2.11
+langgraph-checkpoint-sqlite==3.1.1     # SqliteSaver, durable execution (C19)
+langchain-core==1.6.2                  # message/prompt abstractions only
+
+# ---- LLM providers -----------------------------------------------------
+# NOTE: google-generativeai is DEPRECATED (last release 2025-12-16).
+# Google unified its SDKs into google-genai. Use google.genai everywhere.
+google-genai==2.22.0                   # Gemini Flash — primary
+groq==1.7.0                            # Llama 3.3 70B — fallback on 429/500
+
+# ---- retrieval ---------------------------------------------------------
+qdrant-client==1.19.0                  # local mode, payload filtering
+sentence-transformers==6.0.1           # bge-small, bge-reranker, NLI
+bm25s==0.3.11                          # sparse retrieval
+PyStemmer==3.1.0                       # bm25s stemming backend (optional but fast)
+
+# ---- sources -----------------------------------------------------------
+arxiv==4.0.1                           # arXiv API wrapper (4.x — API changed from 3.x)
+tavily-python==0.8.1                   # web search, primary during eval
+ddgs==9.16.0                           # DuckDuckGo, dev/debug only
+pypdf==6.17.0                          # PDF text extraction
+
+# ---- analysis ----------------------------------------------------------
+scikit-learn==1.9.0                    # logistic regression, calibration, isotonic
+numpy==2.5.2
+pandas==3.0.5
+matplotlib==3.11.1
+
+# ---- infrastructure ----------------------------------------------------
+PyYAML==6.0.3                          # config.yaml
+python-dotenv==1.2.3                   # .env loading
+tenacity==9.1.4                        # retry/backoff for provider + tools
+tqdm==4.70.0                           # eval progress
+
+# ---- demo + tests ------------------------------------------------------
+gradio==6.26.0
+pytest==9.1.1
+
+# ---- optional ----------------------------------------------------------
+# agentdash==0.1.0
+#   MAST annotation helper (Cemri et al. 2025). Last release 2025-08-12 and
+#   effectively unmaintained. Install separately at C38 if it still works;
+#   the annotation protocol does not depend on it — the 14-mode taxonomy can
+#   be applied by hand against traces. Do not let a stale package block C38.

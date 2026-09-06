@@ -1316,3 +1316,42 @@ date constraint, because Qdrant cannot match a missing field either.
 R1 and R2 configurations need each arm in isolation, and a parallel code path
 in the evaluation harness would risk measuring something subtly different from
 what the system actually runs.
+
+**2026-09-06 — C11. Cross-encoder reranking.**
+
+`src/rag/rerank.py`. `bge-reranker-base` over the top 30 fused candidates,
+keeping 5-10.
+
+**The decision that matters: raw logits are persisted, not probabilities.**
+`CrossEncoder.predict()` returns unbounded logits (verified against the
+library's own documented example: 8.6, 5.5, 6.35). A sigmoid would map them to
+[0,1] and read more nicely. It would also be wrong to store, because sigmoid
+**saturates**, and feature f3 (§5.2) is precisely a score *gap*.
+
+Concretely: logits of 9.0 and 7.5 differ by 1.5, a clear difference in
+evidence strength. In probability space both map to ~0.999 and the gap becomes
+0.0005 — the signal is destroyed exactly where evidence is strongest and the
+sharp-peak-versus-flat-mush distinction matters most. `Passage.rerank_score`
+therefore holds the logit; the sigmoid is derivable from it, the logit is not
+recoverable from a saturated sigmoid. A test asserts this property directly so
+nobody "tidies" it later.
+
+**f1-f3 are computed here, not at C20**, because their semantics live with the
+scores: they are logit-space quantities and computing them from sigmoids would
+silently flatten f3. `f3_score_gap` returns **None** with fewer than five
+results rather than 0.0 — None is honest, whereas zero reads as "no gap",
+which is a strong claim about ambiguity the data does not license. That
+distinction matters when the sufficiency model is fit at C33.
+
+**Rerank failure degrades to fusion order** rather than raising. A worse
+ordering is recoverable; a crashed run mid-eval is not.
+
+**Pre-rerank position is preserved** on every result (`dense_rank` /
+`sparse_rank` survive `replace`), so C13 can measure what reranking actually
+changed rather than assuming R4 ≥ R3.
+
+The smoke test's hand-checked example is built adversarially: the correct
+passage answers the question *without using its words*, while four distractors
+repeat the query's wording without answering it. Lexical retrieval buries the
+right answer; if the cross-encoder cannot rescue it, it is not earning the
+latency it costs.

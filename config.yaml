@@ -231,9 +231,19 @@ sources:
     max_results_default: 8
     pdf_cache_dir: data/cache/pdf
   web:
+    # Preferred provider first; the other follows as fallback. A provider
+    # without credentials is skipped, not an error — someone without a
+    # Tavily account can still run the system on ddgs.
     provider: tavily          # tavily | ddgs — ddgs is dev-only, rate-limits hard
     max_results_default: 6
     tavily_search_depth: basic   # "advanced" costs 2 credits; budget is 1000/mo
+    # Tavily credits are the one hard external budget in retrieval. The full
+    # eval needs ~250; careless development could spend 1000 in an afternoon.
+    # The daily cap turns that failure into a fallback to ddgs rather than a
+    # dead key two weeks before the eval run.
+    tavily_credits_per_month: 1000
+    tavily_credits_per_day: 33
+    credit_ledger_path: data/search_credits.json
 
 # ---------------------------------------------------------------------------
 # Sufficiency scoring and the abstention decision (§5)

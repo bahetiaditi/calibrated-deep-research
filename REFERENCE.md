@@ -1101,3 +1101,90 @@ plainly in a comment rather than pretending D4 is already live.
 **Phase 0 exit criterion met:** `scripts/smoke_c5.py` makes a cached, traced,
 budgeted LLM call with automatic fallback, and verifies each of those four
 properties independently.
+
+---
+
+## Phase 1 — RAG substrate
+
+**2026-09-06 — C6. arXiv tool.**
+
+`src/tools/arxiv_tool.py`, plus `src/state.py` pulled forward from C14 (only
+`Passage`, `make_passage_id`, and the shared Literals — C6 cannot build
+passages without the schema, and defining it here avoids a circular
+dependency between the tools and the graph).
+
+**arxiv 4.x API differences from the 3.x the plan assumed.** Verified by
+introspecting the installed package rather than trusting examples:
+- `Result.download_pdf()` **no longer exists**. `Result.pdf_url` is still
+  present (derived from the result's links), and C8 will fetch it directly —
+  which is what content-hash caching wanted anyway.
+- `Client(page_size, delay_seconds, num_retries)` and `Client.results(search)`
+  are the current surface; `Search.results()` is gone.
+- `SortCriterion` has exactly Relevance, LastUpdatedDate, SubmittedDate.
+
+**Failure is a result, not an exception.** `search()` returns `[]` on any
+error and records the failure in the trace. This is a deliberate contract:
+a retrieval failure is *information the agent acts on* — it is what tells D2
+to escalate to another route and D3 that a sub-question may be unresolvable.
+An exception propagating into the graph would turn a normal, informative
+outcome into a crashed run. One malformed feed entry is skipped rather than
+discarding the whole page. The trace distinguishes "returned zero results"
+from "failed with an error", which C38 needs to annotate retrieval failures
+correctly against MAST.
+
+**Passage ids are content-addressed, not sequential.** §3.2 sketched
+"P0001 …"; `make_passage_id` hashes (source_id, section, text) instead. The
+evidence store accumulates across runs (§4.1), so a per-run counter would
+collide between runs and re-ingesting a paper would duplicate it. Section is
+part of the hash because the same sentence in Results and in Related Work is
+not the same evidence.
+
+The cost: hex ids are error-prone for an LLM to transcribe, and C18 requires
+the synthesizer to reproduce them exactly. **That is solved at C18 with a
+per-prompt label map (P01…P20 → id), not by weakening the storage id.**
+
+**Abstracts carry `section="Abstract"`.** A claim sourced from an abstract is
+a summary claim, not a measured result; labelling it now means the critic can
+weigh it differently without re-deriving where it came from.
+
+`scripts/smoke_c6.py` is the acceptance check: three real queries, a
+malformed query, an empty query, and an id-stability re-run. ~20s because
+arXiv's 3-second inter-request delay is honoured — do not lower it to speed
+up a benchmark, since a blocked IP costs far more than the time saved.
+
+**2026-09-06 — C7. Web search with a provider interface.**
+
+`src/tools/web_search.py`: `SearchProvider` ABC, Tavily and DuckDuckGo
+implementations, a `WebSearchTool` chain, and a factory that skips providers
+whose credentials are absent rather than treating that as an error.
+
+**The two providers are not interchangeable, and the interface says so.**
+Tavily returns pre-extracted page content; ddgs returns snippets. That
+distinction is recorded as `returns_full_content` because it decides what the
+provider is *for*: a critic cannot verify a claim against forty words of
+search-result teaser, so ddgs is a development tool and Tavily produces the
+evidence the eval judges. Where both are available, Tavily's `raw_content` is
+preferred over its own extraction.
+
+**Tavily credits are policed by the existing QuotaLedger.** 1000/month free,
+one per basic search; the full eval needs ~250 and careless development could
+spend the lot in an afternoon. Rather than invent a second accounting
+mechanism, Tavily is registered as a pseudo-model with a daily cap
+(`tavily_credits_per_day: 33`) in `data/search_credits.json`. Overrunning then
+costs a graceful fallback to ddgs instead of a dead key two weeks before the
+eval. `search_depth` stays `basic` in config because `advanced` costs two
+credits and defaulting to it would halve the allowance silently.
+
+**Same failure contract as C6.** A rate-limited, credit-exhausted or broken
+provider falls through to the next; only exhausting the chain yields `[]`,
+and the trace records the provider that answered, whether it fell back, and
+the accumulated errors if none did. C38 needs to distinguish "found nothing"
+from "everything was broken".
+
+**Results shorter than 80 characters are dropped.** A fragment is not
+evidence and would only dilute the reranker's candidate pool at C11.
+
+**`source_domain` strips `www.`** so two pages from one site count as one
+independent source in feature f4 (§5.2). Counting them as two would inflate
+the sufficiency score exactly when the evidence is weakest — the failure mode
+the whole abstention layer exists to prevent.

@@ -1274,4 +1274,4 @@ retrieval is the entire reason Qdrant was chosen over Chroma (§4.3).
 Filters implemented: section (one or many), source_type, source_domain,
 published_after, and exclude_sections. That last one is the misattribution
 guard from C8 made queryable — a claim from Related Work describes someone
-else's contribution, and the retriever can now say so.
+else's contribution, and the retriever can now say so..

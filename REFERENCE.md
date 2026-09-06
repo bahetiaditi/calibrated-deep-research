@@ -1188,3 +1188,90 @@ evidence and would only dilute the reranker's candidate pool at C11.
 independent source in feature f4 (§5.2). Counting them as two would inflate
 the sufficiency score exactly when the evidence is weakest — the failure mode
 the whole abstention layer exists to prevent.
+
+**2026-09-06 — C8. PDF ingestion and section-aware chunking.**
+
+`src/rag/chunking.py` and `src/rag/ingest.py`.
+
+**Section canonicalisation, not just detection.** §4.2 specified detecting
+headers; that is not sufficient on its own. "2.1 RELATED WORK", "Prior Work"
+and "Related work" are one section, and unless they map to a single canonical
+label the retriever's section filter (§4.4) matches none of them reliably.
+`SECTION_ALIASES` handles the variants seen in practice. An *unrecognised*
+heading still splits the document but gets `section=None` — it is a real
+boundary, and inventing a label would let the retriever filter on a category
+that means nothing.
+
+**Two additions not in the plan, both defensible:**
+
+*Bibliographies are dropped.* A References chunk is never evidence, but it is
+dense with exactly the high-IDF tokens (author names, paper titles, venues)
+that make BM25 rank it highly. Retaining it would have quietly degraded
+sparse retrieval at C10 in a way that is very hard to notice.
+
+*Hyphenation is repaired first.* pypdf preserves the line breaks of a
+justified two-column layout, so "atten-\ntion" arrives as two fragments.
+Dense retrieval degrades quietly; **BM25 breaks outright**, because
+"attention" stops being a token in a paper entirely about attention.
+
+**Deduplication at ingestion.** Content-addressed ids mean byte-identical
+chunks share an id. Returning them all would let ONE piece of evidence count
+repeatedly toward f2 (mean of top-3 rerank scores) and f4 (independent source
+count) — inflating sufficiency exactly when evidence is thinnest, which is
+the precise failure the abstention layer exists to prevent. Found by a test;
+the dedup now lives in `ingest`.
+
+**Failure handling, consistent with C6/C7.** A download that is not a PDF (an
+HTML error page) is rejected rather than cached; an unparseable page is
+skipped rather than failing the document; extraction yielding under 500
+characters returns nothing, since that means a scanned PDF with no text layer
+and OCR is out of scope. Reporting nothing beats feeding the reranker noise.
+
+**Caching is cross-run and idempotent** (§4.1): a paper downloaded for
+question 7 is free for question 23. That is not only speed — it is what makes
+the `evidence_store` route in D2 meaningful. Downloads are atomic (temp file
+plus rename) with a content-hash sidecar.
+
+Minor fix: `sliding_window` validated its parameters *after* an early return,
+so an invalid overlap/size config passed silently until the first long
+document arrived. Validation now runs first.
+
+**2026-09-06 — C9. Embeddings and Qdrant store.**
+
+`src/rag/embed.py` and `src/rag/store.py`.
+
+**The prefix is not a parameter.** `bge-small-en-v1.5` is asymmetric: queries
+take the instruction prefix, documents must not. Getting it wrong in *either*
+direction raises nothing — recall simply drops, and the natural conclusion is
+that the reranker or the chunking is at fault. This is the most expensive bug
+this project could carry, because C13's retrieval evaluation would faithfully
+measure a crippled system and report the number as a finding. So `embed_query`
+applies the prefix and `embed_documents` does not, as separate methods, so the
+choice cannot be made by accident at a call site. A blank prefix in config
+raises at construction. `smoke_c9.py` measures the effect directly on the real
+model, since no unit test can catch a silent quality loss.
+
+**Point ids are uuid5 of the passage id.** Qdrant requires ints or UUIDs;
+passage ids are strings like `Pa3f9c2b1d004`. The mapping is deterministic, so
+re-ingesting a passage overwrites rather than duplicates — the idempotency
+established at C8 survives into storage. The string id stays in the payload
+and remains what the rest of the system cites.
+
+**API note:** qdrant-client 1.19 has removed `search()`. `query_points()` is
+the current entry point and returns a response object with `.points`.
+
+**Local Qdrant ignores payload indexes** and warns on every call. Filtering
+itself works correctly without them — the store tests verify this against a
+real local client, not a mock — an index only makes it faster. The indexes are
+still declared so that moving to a server deployment needs no code change, and
+the notice is suppressed rather than printed on every ingestion.
+
+**Store tests run against real Qdrant in local mode**, with a fake embedder
+supplying deterministic vectors. Mocking Qdrant would have tested our belief
+about how payload filtering behaves rather than how it behaves, and filtered
+retrieval is the entire reason Qdrant was chosen over Chroma (§4.3).
+
+Filters implemented: section (one or many), source_type, source_domain,
+published_after, and exclude_sections. That last one is the misattribution
+guard from C8 made queryable — a claim from Related Work describes someone
+else's contribution, and the retriever can now say so.

@@ -1057,3 +1057,47 @@ effectiveness invisible in the per-run cost analysis §6.7 requires.
 `scripts/smoke_c4.py` is the acceptance check and costs zero API calls — it
 simulates a four-node run including a route escalation, a static (ablated)
 decision, and a node failure, then asserts the reader recovers all of it.
+
+**2026-09-06 — C5. Budget manager. Phase 0 complete.**
+
+`src/budget.py`. Smaller than §8 planned, because `src/config.py` already
+landed at C2; this commit is budget only.
+
+**Budget is not quota, and the distinction is load-bearing.**
+`llm/rate_limit.py` tracks what this machine may spend against the providers
+today — an external constraint, persisted across runs. `budget.py` tracks
+what a *single question* may consume before the system must stop researching
+and decide — an internal constraint we impose on ourselves. The second exists
+because **D4 is only a real decision surface if the budget can run out.** An
+agent that never faces scarcity is not allocating, it is just spending, and
+the A4 ablation would be measuring nothing.
+
+**The reserve.** `reserve_fraction` (20%) of the LLM budget is withheld from
+allocation. The critic and decider run *after* retrieval; a system that
+spends everything researching and then cannot afford to verify or decide has
+failed in the most embarrassing way available — it did all the work and
+produced nothing. `allocatable()` excludes the reserve; `in_reserve()` is
+what the controller reads to stop retrieving and start verifying.
+
+**Two exhaustion paths, deliberately.** `can_spend()` is the graceful path
+the controller consults to route to the decider. `spend()` raises
+`BudgetExhausted` and should never fire in correct operation — if it does, a
+node bypassed the controller's check, and that is a bug worth hearing loudly
+rather than a run that silently overruns.
+
+**Allocation sums exactly to the pool.** Plain integer division would discard
+up to n-1 calls; at a 25-call budget with 5 sub-questions that is a material
+fraction silently lost. `_distribute` hands out the remainder one call at a
+time, and under scarcity funds as many sub-questions as it can at the floor
+rather than starving all of them equally.
+
+`UniformAllocator` is the static policy and **is literally ablation A4**. It
+logs its decision with `was_adaptive=False`, so an A4 run's trace shows zero
+adaptive D4 decisions and C35's check works from the trace alone. The
+adaptive allocator arrives at C22 and must beat it, or D4 was decorative.
+`get_allocator()` currently returns uniform in both branches — stated
+plainly in a comment rather than pretending D4 is already live.
+
+**Phase 0 exit criterion met:** `scripts/smoke_c5.py` makes a cached, traced,
+budgeted LLM call with automatic fallback, and verifies each of those four
+properties independently.

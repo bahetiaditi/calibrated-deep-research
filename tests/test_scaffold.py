@@ -26,7 +26,10 @@ def test_config_parses():
 
 
 @pytest.mark.parametrize("path", [
-    ("llm", "primary", "model"),
+    ("llm", "roles", "judgment"),
+    ("llm", "roles", "mechanical"),
+    ("llm", "roles", "judge"),
+    ("llm", "quota_ledger_path"),
     ("llm", "cache", "enabled"),
     ("budget", "llm_calls_max"),
     ("retrieval", "dense", "query_prefix"),
@@ -39,6 +42,44 @@ def test_required_config_keys(path):
     for key in path:
         assert key in node, f"config.yaml missing {'.'.join(path)}"
         node = node[key]
+
+
+def test_every_model_declares_its_limits():
+    """The quota ledger cannot police a model whose limits it does not know.
+    A model added without limits would silently bypass all accounting."""
+    cfg = yaml.safe_load((ROOT / "config.yaml").read_text())
+    for role, chain in cfg["llm"]["roles"].items():
+        assert chain, f"role {role} has an empty model chain"
+        for spec in chain:
+            assert "provider" in spec and "model" in spec, f"{role}: incomplete spec"
+            limits = spec.get("limits")
+            assert limits, f"{role}/{spec['model']} declares no limits"
+            assert "rpm" in limits and "rpd" in limits, (
+                f"{role}/{spec['model']} missing rpm/rpd"
+            )
+
+
+def test_retired_groq_model_is_not_referenced():
+    """llama-3.3-70b-versatile was retired from Groq's catalog and is not
+    callable on this account. Checks configured model VALUES, not raw text —
+    the config comment explaining the retirement is deliberate and stays."""
+    cfg = yaml.safe_load((ROOT / "config.yaml").read_text())
+    configured = {
+        spec["model"]
+        for chain in cfg["llm"]["roles"].values()
+        for spec in chain
+    }
+    assert "llama-3.3-70b-versatile" not in configured
+
+
+def test_judge_is_independent_of_the_system_under_test():
+    """Scoring output with the same model that produced it invites
+    self-preference bias. The judge must not share a provider with the
+    judgment chain."""
+    cfg = yaml.safe_load((ROOT / "config.yaml").read_text())
+    judge_providers = {m["provider"] for m in cfg["llm"]["roles"]["judge"]}
+    judgment_providers = {m["provider"] for m in cfg["llm"]["roles"]["judgment"]}
+    assert not (judge_providers & judgment_providers)
 
 
 def test_bge_query_prefix_present():
@@ -77,3 +118,34 @@ def test_env_example_has_no_real_secrets():
 
 def test_dotenv_is_gitignored():
     assert ".env" in (ROOT / ".gitignore").read_text().splitlines()
+
+
+# Models verified by scripts/probe_gemini.py to REJECT the thinking_budget
+# parameter with 400 "Thinking budget is not supported".
+NO_THINKING_BUDGET = ("gemma-",)
+
+
+def test_thinking_budget_not_sent_to_models_that_reject_it():
+    """Gemma returns 400 if thinking_budget is present at all. This is a
+    config-only failure with no local symptom, so assert it here."""
+    cfg = yaml.safe_load((ROOT / "config.yaml").read_text())
+    for role, chain in cfg["llm"]["roles"].items():
+        for spec in chain:
+            if any(spec["model"].startswith(p) for p in NO_THINKING_BUDGET):
+                assert "thinking_budget" not in spec, (
+                    f"{role}/{spec['model']} must omit thinking_budget entirely"
+                )
+
+
+def test_gemma_declares_no_system_instruction_support():
+    """Gemma has no separate system role on the Gemini API. Left at the
+    default the system prompt would be silently dropped — a quality
+    regression with no error."""
+    cfg = yaml.safe_load((ROOT / "config.yaml").read_text())
+    for role, chain in cfg["llm"]["roles"].items():
+        for spec in chain:
+            if spec["model"].startswith("gemma-"):
+                assert spec.get("supports_system_instruction") is False, (
+                    f"{role}/{spec['model']} must set "
+                    f"supports_system_instruction: false"
+                )

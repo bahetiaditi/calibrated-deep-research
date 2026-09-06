@@ -832,3 +832,151 @@ Three corrections resulted:
    `agentdash` has not been released since 2025-08-12; treat as optional at C38.
 
 Full resolved dependency set: 113 packages, no conflicts, on Python 3.12.
+
+**2026-09-06 — C2. Provider architecture changed on measured evidence.**
+
+Measured free-tier limits on this account (AI Studio + Groq console):
+
+| Model | RPM | RPD | TPM | TPD |
+|---|---|---|---|---|
+| Gemini 2.5 Flash | 5 | 20 | 250K | — |
+| Gemini 2.5 Flash Lite | 10 | 20 | 250K | — |
+| Groq `openai/gpt-oss-120b` | 30 | 1K | 8K | 200K |
+| Groq `openai/gpt-oss-20b` | 30 | 1K | 8K | 200K |
+| Groq `qwen/qwen3.8-27b` | 30 | 1K | 8K | 200K |
+
+Four consequences, all now implemented:
+
+1. **§7.1's "Gemini primary, Groq fallback" is dead.** 20 RPD is half of one
+   benchmark question. Groq is the workhorse; **Gemini is the evaluation judge
+   only**. This is an improvement, not a concession: judging output with a
+   different model family than produced it removes self-preference bias, which
+   the original single-provider design had. Record it as a methodology choice
+   in the writeup, not a constraint.
+
+2. **`llama-3.3-70b-versatile` is retired** from Groq's catalog and not
+   callable. §7.2's dependency table is superseded by `config.yaml`'s
+   `llm.roles`. A scaffold test asserts it is never reintroduced.
+
+3. **Roles replace a single model.** JUDGMENT (planner, critic, decider) →
+   gpt-oss-120b → qwen3.8-27b → gpt-oss-20b. MECHANICAL (segmentation, query
+   reformulation) → gpt-oss-20b → qwen3.8-27b. JUDGE → gemini-2.5-flash, no
+   fallback (a judge that changes model mid-run makes scores incomparable).
+   Limits are per model, so chains genuinely add capacity.
+
+4. **TPD binds, not RPD.** At ~3K tokens/call, 200K TPD ≈ 66 calls/day/model,
+   ~200/day across the chain — the 1000 RPD ceiling is never approached. A
+   test asserts this empirically. Two further implications:
+   - **TPM is only 8K.** One fat synthesis call can consume most of a minute's
+     budget, hence per-role `max_output_tokens` caps.
+   - **gpt-oss are reasoning models** and Gemini 2.5 Flash thinks by default.
+     Hidden reasoning tokens bill against the same TPD ceiling, so
+     `reasoning_effort` (low for mechanical, medium for judgment) and
+     `thinking_budget: 0` (judge) are set explicitly. The Gemini backend adds
+     `thoughts_token_count` to recorded usage — omitting it would make the
+     ledger under-report and cause surprise 429s.
+
+**Budget revision to §6 and §7.1.** The critic must batch all claims into ONE
+structured call rather than one call per claim. That takes a question from
+~20 LLM calls to ~9, which is what makes ~190 question-runs (calibration,
+test, B1, A1–A5) feasible at ~200 calls/day: roughly 2–3 weeks of eval
+wall-clock rather than four months. **This is now a hard design constraint on
+C23, not an optimization.**
+
+**New in C2, beyond the original plan:** `src/config.py` (dotted-path loader
+with non-mutating overrides — the mechanism ablations use) and
+`src/llm/rate_limit.py` (persistent four-dimensional quota ledger). The ledger
+survives restarts deliberately: a resumed eval that forgets yesterday's spend
+would burn quota it does not have.
+
+**2026-09-06 — C2 addendum. Model availability probed; allocation revised.**
+
+Two failure modes discovered that are worth carrying forward as method:
+
+1. **Listed ≠ callable.** `gemini-2.5-flash` appears on AI Studio's
+   rate-limit page with 5 RPM / 20 RPD *and* in `models.list()` with a 1M
+   context window, yet `generateContent` returns 404 "no longer available to
+   new users". Neither surface is authoritative. `scripts/probe_gemini.py`
+   makes a real call and is the only check that counts.
+
+2. **200 ≠ usable.** `gemini-3.7-flash` and `gemini-3.8-flash` returned HTTP
+   200 with **empty text**, having spent the whole output budget on hidden
+   thinking — they ignore `thinking_budget: 0`. The probe now treats an
+   empty-text 200 as a failure. Any model added to `llm.roles` must be shown
+   to return non-empty text, not merely to respond.
+
+**Verified callable (2026-09-06):**
+
+| Model | RPM | TPM | RPD | Status |
+|---|---|---|---|---|
+| `gemini-3.1-flash-lite` | 15 | 250K | **500** | text OK |
+| `gemini-3.5-flash` | 5 | 250K | 20 | text OK |
+| `gemini-3.7/3.8-flash` | 5 | 250K | 20 | empty text — unusable |
+| `gemini-3.6-flash`, `3.5-flash-lite` | — | — | — | 400 INVALID_ARGUMENT |
+| `gemini-2.5-flash`, `2.5-flash-lite` | — | — | — | 404 retired |
+
+**Allocation now:** JUDGMENT = Groq only (gpt-oss-120b → qwen3.8-27b →
+gpt-oss-20b). MECHANICAL = gpt-oss-20b → gemini-3.1-flash-lite. JUDGE =
+gemini-3.1-flash-lite, pinned, no fallback.
+
+Judge choice is driven by **volume, not quality**. Scoring the test split plus
+B0–B3 plus A1–A5 is ~10 result files × 24 questions ≈ **240 judge calls**. At
+20 RPD that is twelve days; at 500 RPD it is one. Flash-Lite is the weaker
+model and that is a real limitation — the mitigation is the 20% manual
+spot-check already specified in §6.4/C37, which becomes load-bearing rather
+than a formality. State this trade-off explicitly in the writeup.
+
+Judgment stays wholly on Groq so the model family that writes the report is
+never the family that grades it. A scaffold test enforces the separation.
+
+**Unexplored upside:** `gemma-4-31b-it` and `gemma-4-26b-a4b-it` show
+30 RPM / 16K TPM / **14.4K RPD** — an order of magnitude more daily calls
+than anything else on the account. Not yet probed. If they work, the eval
+budget stops being a constraint at all. Gemma on the Gemini API has
+historically ignored `system_instruction`, so verify output quality, not just
+a 200 response.
+
+**2026-09-06 — C2 final. Gemma probed; roles reallocated; budget crisis over.**
+
+`gemma-4-31b-it` and `gemma-4-26b-a4b-it` are callable at **30 RPM / 16K TPM
+/ 14.4K RPD** — roughly 30x the daily allowance of anything else on the
+account. The earlier 400 was our own bug: they reject `thinking_budget`
+outright ("Thinking budget is not supported"), so the probe now retries
+without it.
+
+Two Gemma properties that must be respected in config, both enforced by
+scaffold tests:
+
+- **Thinking cannot be disabled and is expensive.** A one-word reply cost 52
+  tokens, 43 of them hidden reasoning — a ~5x overhead. `max_output_tokens`
+  is raised to 2048 accordingly; a 1024 cap would leave little for the answer.
+  With 16K TPM this means ~5 calls/minute sustained, which is the real
+  ceiling for this model, not its 14.4K RPD.
+- **No system role.** `supports_system_instruction: false`; the provider
+  folds the system prompt into the user content. Left at the default the
+  system prompt would be silently dropped — a quality regression with no
+  error, which is the worst kind.
+
+`supports_json_mode: false` for Gemma until proven otherwise; the structured
+layer's local repair covers fenced and damaged output without it.
+
+**Final allocation:**
+
+| Role | Chain | Rationale |
+|---|---|---|
+| judgment | gpt-oss-120b → qwen3.8-27b → gpt-oss-20b (Groq) | Quality. Now the *only* consumer of Groq's 600K TPD. |
+| mechanical | gemma-4-31b-it → gemini-3.1-flash-lite → gpt-oss-20b | Volume. 14.4K RPD absorbs the high-count, low-judgment work. |
+| judge | gemini-3.1-flash-lite (pinned, no fallback) | Quality over capacity — see below. |
+
+Judge stays Flash-Lite rather than moving to Gemma's larger allowance:
+entailment judging is the one place in the eval where model quality directly
+moves the reported numbers, and 500 RPD already covers the ~240 judge calls
+in a single day. Capacity is not the binding constraint for that role.
+
+**Effect on §7.1's budget arithmetic.** Moving mechanical work off Groq frees
+the entire 600K TPD for judgment, and Gemma absorbs the volume. Eval is no
+longer quota-bound in any meaningful sense — the earlier estimate of
+2–3 weeks of wall-clock collapses to days. **The C23 constraint that the
+critic batch all claims into one call still stands**: it is now good design
+rather than a survival requirement, and batched judging is also less noisy
+than per-claim calls.

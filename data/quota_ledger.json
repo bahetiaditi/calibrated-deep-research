@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "saved_at": "2026-09-06T15:32:57",
+  "models": {
+    "openai/gpt-oss-120b": {
+      "events": [
+        [
+          1788688975.898911,
+          125
+        ],
+        [
+          1788688977.1199958,
+          296
+        ]
+      ],
+      "day_key": "2026-09-06",
+      "day_requests": 2,
+      "day_tokens": 421
+    },
+    "openai/gpt-oss-20b": {
+      "events": [
+        [
+          1788688976.342783,
+          111
+        ]
+      ],
+      "day_key": "2026-09-06",
+      "day_requests": 1,
+      "day_tokens": 111
+    }
+  }
+}

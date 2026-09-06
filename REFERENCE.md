@@ -1274,4 +1274,45 @@ retrieval is the entire reason Qdrant was chosen over Chroma (§4.3).
 Filters implemented: section (one or many), source_type, source_domain,
 published_after, and exclude_sections. That last one is the misattribution
 guard from C8 made queryable — a claim from Related Work describes someone
-else's contribution, and the retriever can now say so..
+else's contribution, and the retriever can now say so.
+
+**2026-09-06 — C10. BM25 and RRF fusion.**
+
+`src/rag/sparse.py` and `src/rag/fusion.py`. `HybridRetriever.retrieve()` is
+the unified entry point; nothing above this layer knows two retrievers exist.
+
+**The tokeniser default would have cost us version numbers.** bm25s defaults
+to `(?u)\b\w\w+\b`, requiring two or more word characters — which silently
+discards the "2" in FlashAttention-2 and the "3" in Llama 3. Those are
+precisely the tokens a research question turns on. Widened to `(?u)\b\w+\b`.
+This is the same class of silent-degradation bug as the bge query prefix:
+nothing errors, retrieval is just quietly worse.
+
+**Titles are indexed with the body.** A paper's own name is the highest-signal
+exact match available when a sub-question names a method or model.
+
+**RRF over score blending.** Cosine lives in [-1,1] and clusters at 0.5-0.9;
+BM25 is unbounded and corpus-dependent, routinely 2-30. Blending them by
+weighted sum means normalising two distributions whose shapes differ per
+query. RRF uses rank, not score: parameter-free, robust to either arm
+producing garbage. The cost is that magnitude is discarded — a first place won
+by a mile scores the same as one won by a hair — and **C13's R1-R4 table is
+what tests whether that trade was right on this corpus.**
+
+**The asymmetry worth stating in the writeup.** Qdrant applies payload filters
+*during* HNSW traversal; BM25 has no equivalent and must post-filter with
+oversampling. So a low-selectivity filter degrades the sparse arm
+specifically. That is Project 1's regime appearing inside a live system, and
+it is the honest version of the bridge between the two projects — not "I used
+filtering in both", but "here is where post-filtering measurably hurts and
+why the dense arm does not have that problem".
+
+The two filter implementations must agree exactly: a mismatch would mean the
+arms search different corpora and fusion silently favours whichever has the
+looser filter. Both exclude passages with a missing `published` field under a
+date constraint, because Qdrant cannot match a missing field either.
+
+**`dense_only` / `sparse_only` are built in now**, not bolted on later — C13's
+R1 and R2 configurations need each arm in isolation, and a parallel code path
+in the evaluation harness would risk measuring something subtly different from
+what the system actually runs.

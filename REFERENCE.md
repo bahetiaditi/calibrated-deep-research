@@ -1355,3 +1355,98 @@ passage answers the question *without using its words*, while four distractors
 repeat the query's wording without answering it. Lexical retrieval buries the
 right answer; if the cross-encoder cannot rescue it, it is not earning the
 latency it costs.
+
+**2026-09-06 — C12. Contradiction detection.**
+
+`src/rag/contradiction.py`. Pairwise NLI over the top reranked passages,
+producing `ContradictionRecord`s for `state["contradictions"]` and feature f5.
+
+**Label indices are resolved from the model, never hardcoded.** NLI heads
+differ in label order between checkpoints. Assuming index 0 is "contradiction"
+is a silent correctness bug of the worst kind: it produces plausible-looking
+numbers that point the *wrong way*, with no error anywhere, and f5 would then
+push the sufficiency model toward abstaining on agreement and answering on
+disagreement. The detector reads `config.id2label` and only falls back to the
+documented order if unavailable — and the smoke test prints what it resolved,
+because no unit test can verify the real checkpoint's ordering.
+
+**Only cross-source pairs count toward f5.** Two chunks of the *same* paper
+appearing to contradict each other is usually an artefact — a hypothesis
+stated before it is refuted, a limitation acknowledged after a result, a "one
+might expect X" setup. That is not sources disagreeing, and counting it would
+inflate f5 on a corpus that actually agrees. Same-source pairs are still
+detected and recorded (`cross_source: False`) but excluded from the rate.
+
+**Both directions are scored.** Contradiction is symmetric in principle but
+NLI heads are asymmetric in practice; missing a real disagreement costs more
+than the extra forward pass.
+
+**Known limitation, stated rather than hidden:** NLI models are trained on
+sentence pairs, not 1000-character chunks. Passages are truncated to a leading
+400-character claim-bearing window before scoring. Sentence-level pairing
+would be more faithful but multiplies cost by roughly the square of sentences
+per chunk. **This belongs in the writeup's limitations section** — the method
+is a reasonable proxy for cross-source disagreement, not a rigorous
+entailment analysis.
+
+Records carry both passages' sections, so downstream a conflict involving a
+Related Work chunk can be weighted differently: that chunk describes someone
+else's claim, so the "contradiction" may be a competing method rather than a
+genuine dispute.
+
+`contradiction_rate()` returns 0.0 when there are too few passages to form a
+pair. That is the honest reading — no disagreement was *observed*, which is
+different from evidence agreeing — and thin evidence is already captured by
+f1, f2 and f4.
+
+**2026-09-06 — C13. Retrieval evaluation harness. Phase 1 complete.**
+
+`analysis/retrieval_eval.py` (metrics + R1-R4 evaluator),
+`scripts/retrieval_labels.py` (build / label / stats / evaluate),
+`benchmark/retrieval_questions.json` (30 sub-questions, 8 seed papers → ~600
+pooled judgments).
+
+**Three protocol decisions that determine whether the numbers mean anything:**
+
+*Pooling.* Candidates are the union of the top-20 from all four
+configurations. No system gets its results labelled more thoroughly than
+another, which is what makes "unjudged = irrelevant" a fair assumption rather
+than a bias toward whichever system was labelled first. Consequence to
+remember: **adding a fifth configuration later and scoring it against this
+pool would be invalid** without re-pooling.
+
+*Blind.* The labelling view shows the passage and nothing else — no rank, no
+system, no score. Rank is the strongest anchor available; shown "rank 1 of the
+reranker", a labeller agrees with it.
+
+*Shuffled with a fixed seed.* Pool order within a query is randomised so
+labelling fatigue late in a session does not systematically penalise one
+system.
+
+**Metric choices.** nDCG uses exponential gain (`2^rel - 1`), so one fully
+relevant passage is worth three partial ones — which matches how evidence
+works here. The ideal ranking is computed over **all** judgments for a query,
+not just the retrieved ones; normalising against what was retrieved would
+score a system that found one relevant passage as perfectly as one that found
+ten. Recall is **pool-relative** and must be reported as such: the denominator
+is the judged-relevant set, not all relevant passages in the corpus. MRR is
+reported alongside because the agent consumes the top few passages, and nDCG@10
+partly hides the difference between rank 1 and rank 8.
+
+**Queries with no relevant passage are excluded**, not scored as zero. They
+cannot discriminate between systems, so including them drags every score
+toward zero equally and dilutes the comparison without adding information.
+
+**`check_expected_ordering` implements §8's exit criterion literally**,
+including its second clause. R4 ≥ R3 ≥ max(R1, R2) is a *hypothesis under
+test*, not a requirement — if fusion or reranking fails to help on this
+corpus, the runner says so plainly and names the likely causes to check
+(too few queries, the bge prefix, a corpus small enough that every system
+finds everything). That is the honest form of the C10/C11 design bets.
+
+**Phase 1 exit criterion met.** The retrieval system is measured rather than
+assumed, and the R1-R4 table is a self-contained study. Its real payoff comes
+at C37: when the full system gets a question wrong, this is what lets the
+writeup say whether it was a retrieval failure or a reasoning failure.
+Remaining work before the table has numbers is labelling, which is manual and
+takes an afternoon.

@@ -1,0 +1,149 @@
+{
+    "_comment": [
+        "Sub-questions for the C13 retrieval evaluation (REFERENCE.md 4.5).",
+        "These are RETRIEVAL queries, not benchmark questions — they are the",
+        "kind of sub-question the planner emits at C16, and they exist to",
+        "exercise the retriever, not the agent.",
+        "",
+        "Chosen to span the failure modes the two arms have:",
+        "  - exact identifiers (method and model names) where dense blurs",
+        "  - paraphrases with no shared vocabulary where sparse fails",
+        "  - numeric/result lookups where section filtering matters",
+        "  - contested topics where sources genuinely disagree",
+        "",
+        "seed_arxiv_ids are ingested full-text so the corpus contains real",
+        "Results and Related Work sections rather than abstracts alone."
+    ],
+    "seed_arxiv_ids": [
+        "1706.03762v7",
+        "2312.00752v2",
+        "2305.14314v1",
+        "2307.08691v1",
+        "2309.06180v1",
+        "2106.09685v2",
+        "2203.15556v1",
+        "2005.11401v4"
+    ],
+    "questions": [
+        {
+            "id": "rq01",
+            "text": "what fraction of theoretical peak FLOPs does FlashAttention-2 reach"
+        },
+        {
+            "id": "rq02",
+            "text": "how does PagedAttention manage the key value cache"
+        },
+        {
+            "id": "rq03",
+            "text": "what rank did the LoRA authors use for their main experiments"
+        },
+        {
+            "id": "rq04",
+            "text": "how does QLoRA quantise the frozen base model"
+        },
+        {
+            "id": "rq05",
+            "text": "what is the selection mechanism in Mamba's state space model"
+        },
+        {
+            "id": "rq06",
+            "text": "what compute optimal ratio of tokens to parameters do the Chinchilla scaling laws give"
+        },
+        {
+            "id": "rq07",
+            "text": "how many attention heads does the original Transformer use"
+        },
+        {
+            "id": "rq08",
+            "text": "what does retrieval augmented generation add to a parametric language model"
+        },
+        {
+            "id": "rq09",
+            "text": "how do systems avoid recomputing decoder state during generation"
+        },
+        {
+            "id": "rq10",
+            "text": "why does memory bandwidth rather than arithmetic limit attention kernels"
+        },
+        {
+            "id": "rq11",
+            "text": "what happens to model quality when adapter rank is increased too far"
+        },
+        {
+            "id": "rq12",
+            "text": "how is positional information represented without learned embeddings"
+        },
+        {
+            "id": "rq13",
+            "text": "what tradeoff does 4-bit quantisation introduce during finetuning"
+        },
+        {
+            "id": "rq14",
+            "text": "how does a linear time sequence model differ from quadratic attention"
+        },
+        {
+            "id": "rq15",
+            "text": "what evidence is there that larger models need proportionally more data"
+        },
+        {
+            "id": "rq16",
+            "text": "which datasets were used to evaluate the translation results"
+        },
+        {
+            "id": "rq17",
+            "text": "what throughput improvement is reported over the previous serving system"
+        },
+        {
+            "id": "rq18",
+            "text": "what memory savings does paged key value caching report"
+        },
+        {
+            "id": "rq19",
+            "text": "which optimiser and learning rate schedule was used for training"
+        },
+        {
+            "id": "rq20",
+            "text": "what perplexity does the model reach on the language modelling benchmark"
+        },
+        {
+            "id": "rq21",
+            "text": "what limitations do the authors acknowledge about their own method"
+        },
+        {
+            "id": "rq22",
+            "text": "what prior approaches to efficient attention are surveyed"
+        },
+        {
+            "id": "rq23",
+            "text": "how do the authors distinguish their contribution from earlier work"
+        },
+        {
+            "id": "rq24",
+            "text": "is a higher adapter rank always better for parameter efficient finetuning"
+        },
+        {
+            "id": "rq25",
+            "text": "do scaling laws hold at inference time as well as training time"
+        },
+        {
+            "id": "rq26",
+            "text": "how much accuracy is lost by quantising weights to four bits"
+        },
+        {
+            "id": "rq27",
+            "text": "what is the role of the gating mechanism in state space models"
+        },
+        {
+            "id": "rq28",
+            "text": "how are keys and values shared across attention heads"
+        },
+        {
+            "id": "rq29",
+            "text": "what makes retrieval augmentation fail on questions requiring synthesis"
+        },
+        {
+            "id": "rq30",
+            "text": "under what conditions does parameter efficient finetuning match full finetuning"
+        }
+    ]
+}

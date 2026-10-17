@@ -214,10 +214,12 @@ def test_all_four_configs_score(evaluator):
     assert all(0.0 <= s.ndcg_at_10 <= 1.0 for s in scores)
 
 
-def test_queries_without_relevant_judgments_are_excluded(evaluator):
-    """They cannot discriminate between systems; including them drags every
-    score toward zero equally and dilutes the comparison."""
-    assert evaluator.evaluate()[0].queries == 3     # q3 excluded
+def test_unusable_queries_are_excluded(evaluator):
+    """Two exclusions for different reasons: q3 has no relevant passage (it
+    cannot discriminate between systems), and q4 is partially labelled (an
+    unreached passage would score as a miss, biasing against the best
+    system). Leaving q1 and q2."""
+    assert evaluator.evaluate()[0].queries == 2
 
 
 def test_better_ranking_scores_higher(evaluator):
@@ -243,7 +245,7 @@ def test_no_relevant_judgments_at_all_raises(tmp_path):
         {"id": "q1", "query": "x", "judgments": {"Pa": 0}}
     ]}))
     ev = RetrievalEvaluator(FakeRetriever({"R1": {}}), Judgments.load(path))
-    with pytest.raises(ValueError, match="no queries have any relevant"):
+    with pytest.raises(ValueError, match="no usable queries"):
         ev.evaluate()
 
 
@@ -252,10 +254,10 @@ def test_no_relevant_judgments_at_all_raises(tmp_path):
 
 def test_expected_ordering_passes_when_bets_hold():
     scores = [
-        ConfigScore("R1", "d", 0.50, 0.6, 0.5, 3),
-        ConfigScore("R2", "s", 0.45, 0.5, 0.4, 3),
-        ConfigScore("R3", "f", 0.60, 0.7, 0.6, 3),
-        ConfigScore("R4", "r", 0.68, 0.7, 0.7, 3),
+        ConfigScore("R1", "d", 0.50, 0.6, 0.5, 0.5, 3),
+        ConfigScore("R2", "s", 0.45, 0.5, 0.4, 0.4, 3),
+        ConfigScore("R3", "f", 0.60, 0.7, 0.6, 0.6, 3),
+        ConfigScore("R4", "r", 0.68, 0.7, 0.6, 0.7, 3),
     ]
     assert check_expected_ordering(scores) == []
 
@@ -264,10 +266,10 @@ def test_fusion_failing_to_beat_single_arm_is_reported():
     """§8's exit criterion allows this outcome — it is a finding to explain,
     not a failure to hide."""
     scores = [
-        ConfigScore("R1", "d", 0.70, 0.6, 0.5, 3),
-        ConfigScore("R2", "s", 0.45, 0.5, 0.4, 3),
-        ConfigScore("R3", "f", 0.60, 0.7, 0.6, 3),
-        ConfigScore("R4", "r", 0.68, 0.7, 0.7, 3),
+        ConfigScore("R1", "d", 0.70, 0.6, 0.5, 0.5, 3),
+        ConfigScore("R2", "s", 0.45, 0.5, 0.4, 0.4, 3),
+        ConfigScore("R3", "f", 0.60, 0.7, 0.6, 0.6, 3),
+        ConfigScore("R4", "r", 0.68, 0.7, 0.6, 0.7, 3),
     ]
     problems = check_expected_ordering(scores)
     assert any("RRF is not helping" in p for p in problems)
@@ -275,10 +277,10 @@ def test_fusion_failing_to_beat_single_arm_is_reported():
 
 def test_rerank_failing_to_beat_fusion_is_reported():
     scores = [
-        ConfigScore("R1", "d", 0.50, 0.6, 0.5, 3),
-        ConfigScore("R2", "s", 0.45, 0.5, 0.4, 3),
-        ConfigScore("R3", "f", 0.60, 0.7, 0.6, 3),
-        ConfigScore("R4", "r", 0.55, 0.7, 0.7, 3),
+        ConfigScore("R1", "d", 0.50, 0.6, 0.5, 0.5, 3),
+        ConfigScore("R2", "s", 0.45, 0.5, 0.4, 0.4, 3),
+        ConfigScore("R3", "f", 0.60, 0.7, 0.6, 0.6, 3),
+        ConfigScore("R4", "r", 0.55, 0.7, 0.6, 0.7, 3),
     ]
     assert any("not earning its latency" in p
                for p in check_expected_ordering(scores))
@@ -288,9 +290,68 @@ def test_table_renders_every_config(evaluator):
     table = render_table(evaluator.evaluate())
     for name in CONFIGS:
         assert name in table
-    assert "nDCG@10" in table and "recall@20" in table
+    assert "nDCG@10" in table
+    assert "rec@20" in table and "rec@20!" in table
 
 
 def test_evaluate_ranking_shape(labels_file):
     metrics = evaluate_ranking("q1", ["Pa", "Pb"], Judgments.load(labels_file))
-    assert set(metrics) == {"ndcg", "recall", "mrr"}
+    assert set(metrics) == {"ndcg", "recall", "recall_strict", "mrr"}
+
+
+def test_strict_recall_ignores_partial_grades(labels_file):
+    """With a ~33-item pool and k=20, loose recall saturates: any system
+    returning 20 items captures ~61% of the pool regardless of ranking
+    quality. Strict recall keeps discriminating."""
+    metrics = evaluate_ranking("q1", ["Pb"], Judgments.load(labels_file))
+    assert metrics["recall"] > 0          # Pb is grade 1
+    assert metrics["recall_strict"] == 0.0
+
+
+# --- completeness (partial labelling is biased, not merely noisy) ----------
+
+
+@pytest.fixture
+def partial_labels(tmp_path):
+    path = tmp_path / "partial.json"
+    path.write_text(json.dumps({"queries": [
+        {"id": "q1", "query": "complete", "judgments": {"Pa": 2, "Pb": 0}},
+        {"id": "q2", "query": "half done", "judgments": {"Pc": 2, "Pd": None}},
+    ]}))
+    return path
+
+
+def test_complete_query_is_recognised(partial_labels):
+    assert Judgments.load(partial_labels).is_complete("q1")
+
+
+def test_incomplete_query_is_recognised(partial_labels):
+    assert not Judgments.load(partial_labels).is_complete("q2")
+
+
+def test_incomplete_queries_excluded_by_default(partial_labels):
+    """Unjudged counts as irrelevant, so a relevant passage the labeller
+    never reached scores as a miss — penalising whichever system ranked it
+    highly, which is usually the best one. That is bias, not noise."""
+    assert Judgments.load(partial_labels).usable_query_ids() == ["q1"]
+
+
+def test_incomplete_can_be_included_explicitly(partial_labels):
+    assert Judgments.load(partial_labels).usable_query_ids(
+        require_complete=False
+    ) == ["q1", "q2"]
+
+
+def test_coverage_reports_completeness(partial_labels):
+    coverage = Judgments.load(partial_labels).coverage()
+    assert coverage["queries_complete"] == 1
+    assert coverage["queries_usable"] == 1
+    assert coverage["pooled"] == 4
+
+
+def test_evaluator_skips_incomplete_queries(partial_labels):
+    rankings = {c: {"complete": ["Pa"], "half done": ["Pc"]}
+                for c in ("R1", "R2", "R3")}
+    ev = RetrievalEvaluator(FakeRetriever(rankings),
+                            Judgments.load(partial_labels))
+    assert ev.evaluate(["R1"])[0].queries == 1

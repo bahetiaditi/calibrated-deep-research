@@ -131,21 +131,40 @@ class Judgments:
 
     by_query: dict[str, dict[str, int]] = field(default_factory=dict)
     queries: dict[str, str] = field(default_factory=dict)   # id -> query text
+    pool_size: dict[str, int] = field(default_factory=dict)  # id -> candidates
 
     @classmethod
     def load(cls, path: str | Path) -> "Judgments":
         data = json.loads(Path(path).read_text())
         by_query: dict[str, dict[str, int]] = {}
         queries: dict[str, str] = {}
+        pool_size: dict[str, int] = {}
         for entry in data.get("queries", []):
             qid = str(entry["id"])
             queries[qid] = entry.get("query", "")
+            raw = entry.get("judgments") or {}
+            pool_size[qid] = len(raw)
             by_query[qid] = {
                 str(pid): int(grade)
-                for pid, grade in (entry.get("judgments") or {}).items()
+                for pid, grade in raw.items()
                 if grade is not None
             }
-        return cls(by_query=by_query, queries=queries)
+        return cls(by_query=by_query, queries=queries, pool_size=pool_size)
+
+    def is_complete(self, query_id: str) -> bool:
+        """Every pooled candidate for this query has been graded.
+
+        This matters more than it looks. Unjudged counts as irrelevant, which
+        is sound ONLY when the whole pool was judged. In a half-labelled
+        query, a relevant passage the labeller never reached scores as a miss
+        — penalising whichever system ranked it highly, which is usually the
+        best system. Partial labelling does not add noise; it adds bias
+        against the thing being measured.
+        """
+        pooled = self.pool_size.get(query_id)
+        if pooled is None:
+            return True   # externally supplied labels, nothing to compare
+        return len(self.by_query.get(query_id, {})) >= pooled
 
     def grade(self, query_id: str, passage_id: str) -> int:
         """Unjudged means irrelevant — valid only because the pool is the
@@ -161,17 +180,36 @@ class Judgments:
     def judged_query_ids(self) -> list[str]:
         return sorted(self.by_query)
 
+    def usable_query_ids(self, *, require_complete: bool = True) -> list[str]:
+        """Queries that can fairly discriminate between systems.
+
+        Two exclusions, for different reasons:
+          - no relevant passage: cannot separate systems, and scoring every
+            system 0 dilutes the comparison without adding information;
+          - incomplete: biased against the best system (see `is_complete`).
+        """
+        return [
+            qid for qid in sorted(self.by_query)
+            if self.has_relevant(qid)
+            and (not require_complete or self.is_complete(qid))
+        ]
+
     def coverage(self) -> dict[str, Any]:
         judged = sum(len(v) for v in self.by_query.values())
+        pooled = sum(self.pool_size.values()) or judged
         relevant = sum(
             1 for v in self.by_query.values() for g in v.values() if g >= PARTIAL
         )
         with_relevant = sum(1 for q in self.by_query if self.has_relevant(q))
+        complete = sum(1 for q in self.by_query if self.is_complete(q))
         return {
             "queries": len(self.by_query),
             "judgments": judged,
+            "pooled": pooled,
             "relevant": relevant,
             "queries_with_relevant": with_relevant,
+            "queries_complete": complete,
+            "queries_usable": len(self.usable_query_ids()),
             "mean_judgments_per_query": (
                 judged / len(self.by_query) if self.by_query else 0.0
             ),
@@ -188,14 +226,16 @@ class ConfigScore:
     config: str
     label: str
     ndcg_at_10: float
-    recall_at_20: float
+    recall_at_20: float          # counts grade 1 and 2
+    recall_at_20_strict: float   # grade 2 only
     mrr: float
     queries: int
 
     def as_row(self) -> str:
         return (
             f"{self.config:<4} {self.label:<28} "
-            f"{self.ndcg_at_10:>8.4f} {self.recall_at_20:>10.4f} {self.mrr:>7.4f}"
+            f"{self.ndcg_at_10:>8.4f} {self.recall_at_20:>9.4f} "
+            f"{self.recall_at_20_strict:>9.4f} {self.mrr:>7.4f}"
         )
 
 
@@ -212,6 +252,13 @@ def evaluate_ranking(
     return {
         "ndcg": ndcg_at_k(grades, all_grades, ndcg_k),
         "recall": recall_at_k(grades, all_grades, recall_k),
+        # Strict recall counts only fully-relevant passages. With a pool of
+        # ~33 and k=20, loose recall is structurally saturated: any system
+        # returning 20 items captures ~61% of the pool regardless of ranking
+        # quality. Strict recall has a far smaller denominator (median 8
+        # grade-2 per query on this label set) and keeps discriminating.
+        "recall_strict": recall_at_k(grades, all_grades, recall_k,
+                                     threshold=RELEVANT),
         "mrr": reciprocal_rank(grades),
     }
 
@@ -228,6 +275,7 @@ class RetrievalEvaluator:
         ndcg_k: int = 10,
         recall_k: int = 20,
         depth: int = 20,
+        require_complete: bool = True,
     ) -> None:
         self.retriever = retriever
         self.judgments = judgments
@@ -235,6 +283,7 @@ class RetrievalEvaluator:
         self.ndcg_k = ndcg_k
         self.recall_k = recall_k
         self.depth = depth
+        self.require_complete = require_complete
 
     def rank(self, config: str, query: str) -> list[str]:
         """Ranked passage ids for one configuration."""
@@ -253,15 +302,14 @@ class RetrievalEvaluator:
         return [r.passage["id"] for r in results]
 
     def evaluate(self, configs: Iterable[str] = tuple(CONFIGS)) -> list[ConfigScore]:
-        # Queries with no relevant passage in the pool cannot discriminate
-        # between systems; including them would drag every score toward zero
-        # equally and dilute the comparison without adding information.
-        query_ids = [
-            qid for qid in self.judgments.judged_query_ids()
-            if self.judgments.has_relevant(qid)
-        ]
+        query_ids = self.judgments.usable_query_ids(
+            require_complete=self.require_complete
+        )
         if not query_ids:
-            raise ValueError("no queries have any relevant judgment")
+            raise ValueError(
+                "no usable queries: none are both fully labelled and have at "
+                "least one relevant passage"
+            )
 
         scores: list[ConfigScore] = []
         for config in configs:
@@ -279,6 +327,7 @@ class RetrievalEvaluator:
                 label=CONFIGS.get(config, config),
                 ndcg_at_10=_mean(m["ndcg"] for m in per_query),
                 recall_at_20=_mean(m["recall"] for m in per_query),
+                recall_at_20_strict=_mean(m["recall_strict"] for m in per_query),
                 mrr=_mean(m["mrr"] for m in per_query),
                 queries=len(query_ids),
             ))
@@ -289,10 +338,16 @@ def render_table(scores: Sequence[ConfigScore], *, ndcg_k: int = 10,
                  recall_k: int = 20) -> str:
     header = (
         f"{'':<4} {'configuration':<28} "
-        f"{'nDCG@' + str(ndcg_k):>8} {'recall@' + str(recall_k):>10} {'MRR':>7}"
+        f"{'nDCG@' + str(ndcg_k):>8} {'rec@' + str(recall_k):>9} "
+        f"{'rec@' + str(recall_k) + '!':>9} {'MRR':>7}"
     )
     lines = [header, "-" * len(header)]
     lines.extend(s.as_row() for s in scores)
+    lines.append("")
+    lines.append(f"rec@{recall_k}   counts grades 1 and 2 — saturates when the "
+                 f"pool is small relative to k")
+    lines.append(f"rec@{recall_k}!  counts grade 2 only — the discriminating "
+                 f"one on this label set")
     return "\n".join(lines)
 
 

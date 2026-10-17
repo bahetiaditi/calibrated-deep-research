@@ -1450,3 +1450,55 @@ at C37: when the full system gets a question wrong, this is what lets the
 writeup say whether it was a retrieval failure or a reasoning failure.
 Remaining work before the table has numbers is labelling, which is manual and
 takes an afternoon.
+
+---
+
+## Phase 2 — agentic core
+
+**2026-09-06 — C14. State definitions.**
+
+`src/state.py` completed. `Passage` and the shared literals landed early at
+C6 because the retrieval tools needed them before the graph existed; C14 adds
+`SubQuestion`, `ClaimVerification`, `BudgetState`, `ResearchState`, the
+reducers and the helpers.
+
+**Custom reducers, not `operator.add`.** §3.2 specified
+`Annotated[list[Passage], add]`. Plain concatenation is wrong here, and the
+reason matters: re-retrieval legitimately returns passages already in state,
+and content-addressed ids mean a repeat id is byte-identical text. Appending
+it twice lets ONE piece of evidence count twice toward f2 (mean of top-3
+rerank scores) and f4 (independent source count) — inflating sufficiency
+exactly when evidence is thinnest, which is the precise failure the whole
+abstention layer exists to prevent. The same bug was caught at ingestion in
+C8; the reducer is where it would reappear.
+
+`merge_evidence` also keeps the **first** copy rather than the last. A
+passage retains the scores from the round that first found it; overwriting
+would let one sub-question's rerank score silently replace another's, and
+feature extraction reads those scores.
+
+`merge_contradictions` deduplicates by *unordered* pair. Contradiction is
+symmetric, so storing (A,B) and (B,A) would double f5's numerator while the
+denominator counts each pair once.
+
+**`total=False` on ResearchState** so nodes return only the keys they own.
+`new_state()` populates every field, so a node reading state never meets a
+missing key, but a node writing state never has to echo the rest back — which
+would make every node a merge conflict.
+
+**The fields that exist to enable a decision surface** (§3.2) are documented
+in the module docstring with the surface each serves. That gives the C35
+ablation check a cheap precursor: *a field nobody reads is a decision nobody
+makes*, and that can be spotted by grep long before an ablation is run.
+
+**Acceptance (C14's criterion) met and exceeded.** State round-trips through
+`SqliteSaver` on LangGraph 1.2, verified against the real library rather than
+a mock. `smoke_c14.py` additionally demonstrates recovery in a **fresh
+process**, which is what C19 and C32 depend on: an eval spanning days has to
+survive a 429, a laptop sleep or a crash by resuming from the last completed
+node rather than restarting.
+
+API note: LangGraph 1.2's `StateGraph(state_schema)` and
+`SqliteSaver.from_conn_string()` (a context manager) are current;
+`langgraph.prebuilt` remains deprecated and unused — we stay on the
+low-level API throughout, per §3.4.

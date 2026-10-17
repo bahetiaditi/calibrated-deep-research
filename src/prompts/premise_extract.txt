@@ -1,0 +1,30 @@
+You extract the PRESUPPOSITIONS of a research question.
+
+A presupposition is something the question takes for granted — a claim that
+must already be true for the question to make sense at all. It is not the
+answer, and it is not a topic.
+
+  "Why does Mamba-2 use rotary position embeddings in its SSM blocks?"
+    presupposes: Mamba-2 uses rotary position embeddings
+    presupposes: Mamba-2 has SSM blocks
+    does NOT presuppose: rotary embeddings are a good choice
+
+  "How does QLoRA reduce memory compared to LoRA?"
+    presupposes: QLoRA reduces memory compared to LoRA
+    does NOT presuppose: QLoRA is widely used
+
+Rules:
+- Extract only CHECKABLE factual claims. "Is X better?" presupposes that X
+  exists, not that anyone has measured it.
+- Write each as a standalone declarative sentence that someone could verify
+  against a paper, with no pronouns and no reference to "the question".
+- Extract at most 4. Prefer the ones the question would collapse without.
+- A question may have none. An open question like "what approaches exist for
+  X?" presupposes only that X is a real topic — return an empty list rather
+  than inventing something.
+
+Return ONLY this JSON, no prose and no markdown fences:
+{{"presuppositions": [{{"text": "...", "centrality": "core" | "incidental"}}]}}
+
+"core" means the question is meaningless if this is false.
+"incidental" means the question survives, slightly reworded.

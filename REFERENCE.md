@@ -1502,3 +1502,116 @@ API note: LangGraph 1.2's `StateGraph(state_schema)` and
 `SqliteSaver.from_conn_string()` (a context manager) are current;
 `langgraph.prebuilt` remains deprecated and unused — we stay on the
 low-level API throughout, per §3.4.
+
+**2026-09-06 — C15. Premise checker.**
+
+`src/nodes/premise_checker.py`, plus `src/prompts/` with a versioned prompt
+loader and the two templates this node uses.
+
+**Three verdicts, not two, and the distinction is the whole design.**
+§5.4 says a failed premise check abstains, bypassing τ. That is only safe if
+"failed" means the corpus *positively refutes* the presupposition:
+
+| verdict | meaning | fails the check |
+|---|---|---|
+| SUPPORTED | the corpus confirms it | no |
+| CONTRADICTED | the corpus says otherwise | **yes** |
+| UNVERIFIABLE | the corpus is silent | no |
+
+Collapsing UNVERIFIABLE into CONTRADICTED would refuse every question whose
+presuppositions the corpus happens not to restate — which is most of them,
+since a paper does not restate its own premises. The false-abstention rate on
+Tiers A-C (§5.5) would be catastrophic, and the project would report an
+excellent false-answer rate achieved by answering almost nothing. The
+verification prompt states the distinction explicitly and sends ties to
+UNVERIFIABLE; an unparseable verdict also degrades to UNVERIFIABLE, so a
+parse error can never cause an abstention.
+
+**f7 scores UNVERIFIABLE at 0.5, not 0.** Silence is genuinely uninformative.
+Scoring it as failure would make f7 a proxy for corpus coverage rather than
+for whether the question is well-posed.
+
+**Core vs incidental.** Only core presuppositions can fail the check or
+contribute to f7. "Mamba-2 was published in 2024" being wrong does not make
+"why does Mamba-2 use RoPE?" unanswerable; "Mamba-2 uses RoPE" being wrong
+does.
+
+**Two LLM calls per question, regardless of presupposition count** —
+one to extract, one to verify them all together. Per-presupposition
+verification would be three to five calls against a budget of roughly nine
+(§7.1), making the guard cost more than the research it guards. Same batching
+requirement C23 has for the critic.
+
+**Prompts are versioned .txt files** (§7.3). A prompt change becomes a
+readable diff, the writeup can quote the exact text behind the reported
+numbers, and the C3 prompt-hash cache key changes when the file does — which
+is correct, since a different prompt is a different experiment.
+
+**Caught by a test:** with every presupposition UNVERIFIABLE, grounding sits
+at 0.5, above the 0.35 floor, and the node originally reported
+"presuppositions grounded". Nothing had been verified; it merely had not been
+refuted. The rationale is surfaced in the decision explanation and quoted in
+case studies, so it now distinguishes confirmed from unrefuted explicitly.
+
+**Failure degrades, never propagates.** Extraction, retrieval or verification
+failing yields `ran=False` with no abstention: the hard rule is lost but the
+calibrated threshold still governs the decision. A premise checker that
+crashes a run would be worse than no premise checker.
+
+`smoke_c15.py` tests both directions. The valid-question half matters more:
+a checker that fails everything scores perfectly on false premises and
+quietly ruins the headline metric.
+
+**2026-09-06 — C15 live result. A constraint on Tier D1 (affects C30).**
+
+The smoke test caught 2 of 3 false premises. The miss is the more useful
+finding, and it is **correct behaviour** rather than a bug.
+
+| question | verdict | f7 |
+|---|---|---|
+| Why does Mamba-2 use **rotary position embeddings** in its SSM blocks? | UNVERIFIABLE | 0.75 |
+| How does QLoRA **avoid quantising** the base model weights? | CONTRADICTED | 0.67 |
+| Why does FlashAttention-2 **increase** memory usage? | CONTRADICTED | 0.00 |
+
+The QLoRA and FlashAttention papers positively state the opposite of their
+false premise, so the corpus refutes them. The Mamba paper simply never
+mentions rotary embeddings — it describes a selective state space mechanism
+and says nothing about RoPE either way. Under the three-verdict rule that is
+UNVERIFIABLE, and the hard abstention rule correctly does not fire.
+
+**This is the distinction earning its place.** The alternative — treating
+silence as refutation — would have "caught" all three and would equally have
+refused any well-posed question whose premises the corpus does not restate.
+The valid-question half of the smoke test passed with f7 = 1.00 on all three,
+which is the evidence that the strictness is not costing coverage.
+
+**Two consequences:**
+
+1. **f7 still carries the signal.** 0.75 for the Mamba case against 1.00 for
+   every valid question. The hard rule is a shortcut for the clear cases; the
+   calibrated score is what must catch the rest. This is the architecture
+   working as designed — §5.4's hard rule bypasses τ, it does not replace it.
+
+2. **C30 must account for this when writing Tier D1.** A false-premise
+   question whose falsehood the corpus only *fails to confirm* will not
+   trigger the hard rule, and grading it as "should have abstained via
+   premise check" would be grading the benchmark against a mechanism that
+   cannot fire. When curating the five D1 items, record for each whether the
+   corpus **refutes** the premise or is merely **silent** on it, and expect
+   the refuted ones to abstain via the hard rule and the silent ones via the
+   calibrated threshold. Both are correct abstentions; they are not the same
+   measurement, and §6.2 already requires recording *the reason* abstention
+   is correct.
+
+**Possible future feature, deliberately not built now.** An UNVERIFIABLE
+presupposition about a subject the corpus covers *thoroughly* is weak
+evidence of absence — if twenty passages describe Mamba-2's architecture and
+none mentions RoPE, silence becomes informative. That is a coverage-
+conditioned absence signal and would be a genuine addition to §5.2. It is
+scope creep for Phase 2; revisit only if C33 shows f7 underperforming.
+
+**Cost measured:** exactly 2.0 LLM calls per question over 7 questions, and
+2.6 retrieval calls. Batched verification holds. Wall-clock varied from 6.5s
+to 57s per check, dominated by CPU reranking rather than the LLM — worth
+watching at C32, since 48 questions is roughly 20-45 minutes of premise
+checking alone.

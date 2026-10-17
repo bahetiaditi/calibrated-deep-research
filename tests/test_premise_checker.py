@@ -387,24 +387,3 @@ def test_check_is_traced():
     name, payload = events[0]
     assert name == "premise_check"
     assert payload["failed"] is True and payload["verdicts"] == [CONTRADICTED]
-
-
-# --- prompts ---------------------------------------------------------------
-
-
-def test_every_shipped_prompt_renders():
-    """Prompts contain JSON examples, so literal braces must be doubled.
-    Getting that wrong raises only at call time, in the middle of a run."""
-    from src.prompts import PROMPT_DIR, render
-
-    fields = {"question": "q", "claims": "c", "evidence": "e"}
-    for path in PROMPT_DIR.glob("*.txt"):
-        rendered = render(path.stem, **fields)
-        assert rendered and "{question}" not in rendered or path.stem == "x"
-
-
-def test_missing_prompt_raises_with_available_names():
-    from src.prompts import PromptNotFound, load
-
-    with pytest.raises(PromptNotFound, match="available"):
-        load("does_not_exist")

@@ -1615,3 +1615,49 @@ scope creep for Phase 2; revisit only if C33 shows f7 underperforming.
 to 57s per check, dominated by CPU reranking rather than the LLM — worth
 watching at C32, since 48 questions is roughly 20-45 minutes of premise
 checking alone.
+
+**2026-09-06 — C16. Planner, initial mode.**
+
+`src/nodes/planner.py`, `src/prompts/planner_initial.txt`, plus a
+`planning.max_sub_questions` config key.
+
+**`rationale` is load-bearing, not documentation.** When a sub-question fails
+to retrieve, C25 must choose between rewriting it, splitting it, merging it
+with a sibling, or abandoning it as unanswerable. That choice depends on what
+the sub-question was *for*: one that exists to pin down a number can be
+rephrased, one that covers a whole topic should be split, one already covered
+by a sibling should be merged. Without the rationale the reviser sees only
+that retrieval failed, every failure looks identical, four options collapse
+into "try again", and **D1 becomes a retry loop** — §2.4's second
+anti-pattern, arrived at by omission rather than design.
+
+**The planner's route is a suggestion, stored as `suggested_route`, and
+deliberately NOT written into `attempted_routes`.** Recording it as attempted
+would tell D2 the route had already been tried and failed, pushing the
+retriever to escalate on its first move. Leaving the planner's guess
+non-binding is what gives D2 something to decide (§2.2).
+
+**Initial decomposition is traced with `was_adaptive=False`.** It happens in
+every configuration including the A1 ablation that freezes revision, so
+counting it as adaptive would make an A1 run report non-zero D1 activity and
+fail C35's check for the wrong reason. Only C25's revisions count as adaptive
+D1.
+
+**Premise-check results feed the prompt.** A confirmed presupposition does
+not need its own sub-question — re-researching it wastes budget. A *refuted*
+one means the plan should investigate the correction rather than elaborate
+the fiction, which is the difference between a useful abstention and a
+well-researched answer to a question that does not make sense.
+
+**Failure is fatal here, unlike C15.** The premise checker degrades to "no
+premise information" because the calibrated threshold still works without it.
+A planner failure propagates: there is nothing to research without a plan,
+and silently inventing one would hide the failure from the trace. An empty or
+all-fragment decomposition does fall back to researching the question
+verbatim — a question the planner could not split is still a question.
+
+**Prompt tests now introspect.** `tests/test_prompts.py` discovers each
+template's placeholders with `string.Formatter` rather than a hand-maintained
+field list, after the C16 prompt broke a hard-coded one. Undoubled braces in
+a JSON example otherwise raise at call time, mid-run, after retrieval has
+already been paid for.

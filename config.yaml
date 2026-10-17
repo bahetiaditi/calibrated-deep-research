@@ -152,6 +152,16 @@ llm:
     # Disable only when deliberately re-running a judge blind (C37 scoring).
 
 # ---------------------------------------------------------------------------
+# Planning (D1)
+# ---------------------------------------------------------------------------
+planning:
+  # Ceiling on initial decomposition. Over-decomposition is a named failure
+  # mode (6.7) and not merely untidy: each sub-question draws on a retrieval
+  # pool of ~20, so splitting one lookup into seven starves the sub-questions
+  # that needed the budget.
+  max_sub_questions: 7
+
+# ---------------------------------------------------------------------------
 # Budget (D4). One "run" = one benchmark question end to end.
 # ---------------------------------------------------------------------------
 budget:

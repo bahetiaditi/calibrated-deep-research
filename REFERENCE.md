@@ -1850,3 +1850,57 @@ were cited (37%). That is a usable proxy for retrieval precision — if C21's
 adaptive retriever is genuinely better, the citation rate should rise, since
 fewer retrieved passages will be irrelevant. Recorded alongside the C17
 baseline.
+
+**2026-09-06 — C19. Controller and minimal graph. The system runs end to end.**
+
+`src/controller.py` and `src/graph.py`.
+
+**Hub and spoke.** Every node routes back through the controller via
+`add_conditional_edges(node, controller.route, path_map)`, including the entry
+point. The routing table in `controller.py` *is* the control flow rather than
+a description of it. The alternative — hardcoded edges with conditionals
+where the path branches — makes "why did it stop researching?" a question
+about four files; here it is a question about one function, which is exactly
+what C38's MAST annotation needs.
+
+**Deterministic and LLM-free.** The controller makes no model calls, so the
+whole policy is testable exhaustively without an API key and a routing bug
+cannot hide behind sampling noise. The *decisions* are agentic (D1-D5 live in
+the nodes); the *dispatch* is not. Conflating them would make the agency
+claim unmeasurable.
+
+**The full table is written once.** Nodes arrive across Phases 2 and 3, and
+the controller skips any stage whose node is not registered. C19 runs
+premise_checker → planner → retriever → synthesizer; the critic at C23 and
+decider at C27 change no routing code, only the registry. The usual outcome —
+routing growing a branch per commit until nobody can state the whole policy —
+is what this avoids.
+
+**New config key: `agency.skip_research_on_failed_premise`.** A refuted core
+premise skips research and goes straight to the decision. The correction is
+already in state from the premise check, and the decider abstains regardless,
+so researching anyway spends the whole budget elaborating something known to
+be false. Only CONTRADICTED triggers it; UNVERIFIABLE is silence and research
+proceeds (C15). It is a config key rather than a constant because §6.5 may
+want to ablate it.
+
+**Two loops caught by tests, both costing real money.**
+
+The first: with the planner absent and an empty plan, routing fell through to
+the synthesizer, which returns an empty draft, which leaves `not
+state["draft"]` true, which routes to the synthesizer again. Guarded by
+requiring evidence before synthesis — correct in its own right, since no
+evidence means no report.
+
+The second, which the first guard did not close: with evidence present and
+the model returning an empty string, the same loop reappears. Fixed in two
+places. `synthesizer_node` now reports an empty draft as an **error** — a
+silently empty result is a failure and must be recorded as one — and the
+controller refuses to re-enter the synthesizer once `state["error"]` is set.
+**Each iteration of that loop was an LLM call**, so it would have burned a
+day's quota before the recursion limit fired.
+
+**Phase 2 milestone reached.** The system runs end to end, checkpoints after
+every node, and resumes in a fresh process. Everything after this makes it
+agentic (C20-C22) and calibrated (C26-C27) rather than building new
+machinery.

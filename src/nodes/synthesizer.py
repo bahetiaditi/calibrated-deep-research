@@ -260,6 +260,13 @@ def synthesizer_node(synthesizer: Synthesizer):
         update: dict[str, Any] = {"draft": draft.text}
         if draft.error:
             update["error"] = draft.error
+        elif not draft.text.strip():
+            # An empty draft with no exception is still a failure, and it
+            # must be reported as one. The controller routes to the
+            # synthesizer while `draft` is falsy, so a silently empty result
+            # sends it straight back — an infinite loop that costs an LLM
+            # call per iteration until the recursion limit fires.
+            update["error"] = "synthesizer returned no text"
         return update
 
     return node

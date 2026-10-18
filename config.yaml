@@ -301,6 +301,14 @@ evaluation:
 # Default = everything live. Ablations flip exactly one to false.
 # ---------------------------------------------------------------------------
 agency:
+  # When the premise checker REFUTES a core presupposition, skip research
+  # entirely and go straight to the decision. The correction is already in
+  # state from the premise check, and the decider abstains regardless
+  # (5.4's hard rule) — so researching anyway spends the whole budget
+  # elaborating something known to be false. Only CONTRADICTED triggers
+  # this; UNVERIFIABLE is silence and research proceeds (C15).
+  skip_research_on_failed_premise: true
+
   d1_plan_revision: true
   d2_adaptive_route_and_query: true
   d3_adaptive_depth_and_stopping: true

@@ -212,3 +212,78 @@ def test_flat_scores_yield_a_small_gap():
         "q", [result(f"P{i}", "x") for i in range(5)], top_k=5
     )
     assert rerank_features(out)["f3_score_gap"] < 0.1
+
+
+# --- the activation-function trap (found live at C17) ----------------------
+
+
+def test_probability_signature_is_detected():
+    """sentence-transformers defaults activation_fn to nn.Sigmoid when
+    num_labels == 1, which bge-reranker-base is. Left at the default,
+    predict() returns probabilities and C11's decision is silently reversed:
+    ranking is unchanged (sigmoid is monotonic), nothing errors, and only f3
+    stops carrying information."""
+    from src.rag.rerank import looks_like_probabilities
+
+    assert looks_like_probabilities([0.969, 0.961, 0.950, 0.889, 0.880])
+
+
+def test_logits_are_not_mistaken_for_probabilities():
+    from src.rag.rerank import looks_like_probabilities
+
+    assert not looks_like_probabilities([9.0, 7.5, 6.0, 2.0, -3.0])
+
+
+def test_small_in_range_sample_does_not_trigger():
+    """A logit can legitimately fall in [0,1]; the check only fires on the
+    saturation signature, and it warns rather than transforming."""
+    from src.rag.rerank import looks_like_probabilities
+
+    assert not looks_like_probabilities([0.4, 0.2])
+
+
+def test_sigmoid_output_is_warned_about_not_silently_accepted():
+    events = []
+
+    class FakeTracer:
+        def note(self, name, **kw):
+            events.append((name, kw))
+
+    model = FakeCrossEncoder(scores=[0.97, 0.96, 0.95, 0.89, 0.88])
+    r = reranker(model, tracer=FakeTracer())
+    out = r.rerank("q", [result(f"P{i}", "x") for i in range(5)], top_k=5)
+
+    assert any(name == "rerank_activation_warning" for name, _ in events)
+    # The scores are NOT transformed — guessing an inverse sigmoid would be
+    # worse than a loud warning.
+    assert out[0].passage["rerank_score"] == pytest.approx(0.97)
+
+
+def test_warning_fires_only_once():
+    events = []
+
+    class FakeTracer:
+        def note(self, name, **kw):
+            events.append(name)
+
+    r = reranker(FakeCrossEncoder(scores=[0.97, 0.96, 0.95, 0.9, 0.88]),
+                 tracer=FakeTracer())
+    for _ in range(3):
+        r.rerank("q", [result(f"P{i}", "x") for i in range(5)], top_k=5)
+    assert events.count("rerank_activation_warning") == 1
+
+
+def test_the_measured_cost_of_the_bug():
+    """What this actually cost, from a real C17 run: f3 came out at 0.08
+    because scores above ~0.95 compress into a few thousandths. The
+    sufficiency model would have been fit on a feature that cannot
+    distinguish strong evidence from marginally stronger evidence."""
+    squashed = reranker(FakeCrossEncoder(
+        scores=[0.969, 0.965, 0.961, 0.955, 0.889]
+    )).rerank("q", [result(f"P{i}", "x") for i in range(5)], top_k=5)
+    raw = reranker(FakeCrossEncoder(
+        scores=[9.0, 8.5, 8.0, 7.0, 2.5]
+    )).rerank("q", [result(f"P{i}", "x") for i in range(5)], top_k=5)
+
+    assert rerank_features(squashed)["f3_score_gap"] < 0.1
+    assert rerank_features(raw)["f3_score_gap"] > 6.0

@@ -69,6 +69,7 @@ class Reranker:
         self.batch_size = int(section.get("batch_size", 16))
         self.tracer = tracer
         self._model = model
+        self._warned_about_activation = False
 
     @property
     def model(self) -> Any:
@@ -76,10 +77,65 @@ class Reranker:
             from sentence_transformers import CrossEncoder
 
             log.info("loading reranker %s", self.model_name)
-            self._model = CrossEncoder(self.model_name)
+            # activation_fn=Identity is MANDATORY, not a preference.
+            #
+            # sentence-transformers defaults activation_fn to nn.Sigmoid()
+            # whenever num_labels == 1, which bge-reranker-base is. Left at
+            # the default, predict() returns probabilities, and the decision
+            # this module exists to make — persist logits, never sigmoids —
+            # is silently reversed with no error anywhere.
+            #
+            # Measured cost when this was wrong: feature f3 (the gap between
+            # rank 1 and rank 5) came out at 0.08 on a real plan, because
+            # scores above ~0.95 are all compressed into a few thousandths.
+            # The sufficiency model would have been fit on a feature that
+            # cannot distinguish strong evidence from marginally stronger
+            # evidence.
+            try:
+                import torch
+
+                self._model = CrossEncoder(
+                    self.model_name, activation_fn=torch.nn.Identity()
+                )
+            except TypeError:
+                # Older sentence-transformers spelled it differently.
+                self._model = CrossEncoder(
+                    self.model_name,
+                    default_activation_function=__import__("torch").nn.Identity(),
+                )
         return self._model
 
     # -- reranking ----------------------------------------------------------
+
+    def _assert_logits(self, scores: Any) -> None:
+        """Fail loudly if the activation function slipped back on.
+
+        This is the one failure in the retrieval layer with no symptom: the
+        ranking is unchanged (sigmoid is monotonic), nothing errors, and only
+        f3 quietly stops carrying information. A warning on every batch is
+        the cheapest way to make it visible.
+        """
+        if self._warned_about_activation:
+            return
+        try:
+            values = [float(s) for s in scores]
+        except TypeError:
+            return
+        if looks_like_probabilities(values):
+            self._warned_about_activation = True
+            log.error(
+                "reranker is returning values in [0,1] (max %.4f) — this "
+                "looks like sigmoid output, not raw logits. Feature f3 (the "
+                "rank-1 to rank-5 gap) saturates and stops discriminating. "
+                "Check that CrossEncoder was constructed with "
+                "activation_fn=torch.nn.Identity().",
+                max(values),
+            )
+            if self.tracer is not None:
+                self.tracer.note(
+                    "rerank_activation_warning",
+                    max_score=max(values), min_score=min(values),
+                )
 
     def rerank(
         self,
@@ -106,6 +162,7 @@ class Reranker:
 
         try:
             scores = self.model.predict(pairs, batch_size=self.batch_size)
+            self._assert_logits(scores)
         except Exception as exc:  # noqa: BLE001
             # Degrade to fusion order rather than failing retrieval. A worse
             # ordering is recoverable; a crashed run is not.
@@ -141,6 +198,21 @@ class Reranker:
                 top_logit=round(out[0].passage["rerank_score"], 4) if out else None,
             )
         return out
+
+
+def looks_like_probabilities(scores: Sequence[float]) -> bool:
+    """Heuristic: are these sigmoid outputs rather than raw logits?
+
+    Not exact — a logit can legitimately fall in [0,1] — so this only fires
+    when EVERY score sits in that range and several cluster near the top,
+    which is the saturation signature. Used to warn, never to transform.
+    """
+    values = [float(s) for s in scores]
+    if len(values) < 3:
+        return False
+    if not all(0.0 <= v <= 1.0 for v in values):
+        return False
+    return sum(1 for v in values if v > 0.9) >= 2
 
 
 # ---------------------------------------------------------------------------

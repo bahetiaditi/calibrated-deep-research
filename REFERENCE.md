@@ -1710,3 +1710,48 @@ is to keep the mapping separately rather than to stop deduplicating.
 
 `smoke_c17.py` records the baseline numbers — passages found, independent
 sources, f1/f2/f3 — that C21 has to improve on.
+
+**2026-09-06 — C17 live result: the reranker was returning sigmoids. Fixed.**
+
+The C17 smoke run reported `max_rerank` of 0.96, 0.89 and 0.97, and
+**f3 = 0.080**. Those are probabilities, not logits — C11's decision to
+persist raw logits had been silently reversed since C11 itself.
+
+**Cause.** `sentence-transformers` defaults `activation_fn` to
+`nn.Sigmoid()` whenever `num_labels == 1`, which `bge-reranker-base` is. The
+documentation is explicit about it; we constructed `CrossEncoder(model_name)`
+with no activation argument and got sigmoid output.
+
+**Why nothing caught it.** Sigmoid is monotonic, so the *ranking* is
+identical — every retrieval test still passed, the smoke tests still passed,
+and the reranker still improved nDCG and MRR at C13. The only casualty is f3,
+the rank-1-to-rank-5 gap, which exists precisely to distinguish "sharp peak"
+from "flat mush". Above ~0.95 the sigmoid compresses everything into a few
+thousandths: the measured 0.080 would be roughly 6-9 in logit space. **The
+sufficiency model would have been fit at C33 on a feature that cannot
+distinguish strong evidence from marginally stronger evidence**, and the
+resulting coefficient would have read as "f3 does not predict answerability"
+— a false negative about the project's own design.
+
+**Fix.** `CrossEncoder(..., activation_fn=torch.nn.Identity())`, with a
+comment stating it is mandatory rather than preferred. Plus
+`_assert_logits()`, which inspects each batch and logs an error (once) if the
+scores carry the saturation signature: all within [0,1] with several above
+0.9. It **warns and does not transform** — guessing an inverse sigmoid would
+replace a visible bug with an invisible one.
+
+**This is the fifth silent-degradation trap in the retrieval layer**, after
+the bge query prefix (C9), bm25s dropping version numbers (C10), NLI label
+ordering (C12), and sigmoid-vs-logit persistence (C11, which this one
+reversed). The common shape is worth stating in the writeup: *every one of
+them left the system working, produced plausible numbers, and would have
+been reported as a finding.* None was caught by a unit test; four were caught
+by deliberately inspecting real output, and this one by reading a number in
+a smoke report that looked wrong for its units.
+
+**Action required before C33:** any rerank scores already persisted — the
+C13 evaluation corpus included — were produced under sigmoid. Re-running
+`scripts.retrieval_labels evaluate` is not necessary (ranking is unchanged,
+so nDCG/recall/MRR are unaffected), but **no f1/f2/f3 values recorded before
+this fix may be used**, and the C17 baseline numbers must be regenerated
+before C21 compares against them.

@@ -1755,3 +1755,55 @@ C13 evaluation corpus included — were produced under sigmoid. Re-running
 so nDCG/recall/MRR are unaffected), but **no f1/f2/f3 values recorded before
 this fix may be used**, and the C17 baseline numbers must be regenerated
 before C21 compares against them.
+
+**2026-09-06 — C18. Synthesizer.**
+
+`src/nodes/synthesizer.py`, plus `synthesizer.txt` and
+`synthesizer_partial.txt`.
+
+**The label map, as promised at C6.** Passage ids are content-addressed
+(`Pa3f9c2b1d004`), which is right for storage and wrong to ask a model to
+transcribe. A slip of one hex character produces a citation that does not
+resolve — and **a citation that does not resolve is indistinguishable from a
+fabricated one**. Both are a claim the critic cannot verify, so the system
+would report a transcription error as a hallucination and the headline metric
+would absorb it. The prompt therefore uses `P01`…`P24` and this module maps
+them back; the real id never reaches the model.
+
+**Invented labels are stripped, not kept.** When the model cites `[P47]` with
+19 passages available, the marker is removed and the claim survives uncited.
+That is deliberate: an uncited claim is marked UNSUPPORTED by the critic,
+which is correct and visible, whereas a dangling citation either crashes the
+critic's lookup or is silently skipped — and **a claim that looks cited but
+was never checked is the exact failure this project exists to measure.** The
+count is recorded, because a model inventing labels is a signal about prompt
+quality.
+
+**Evidence is grouped by sub-question, not sorted globally.** A global sort
+by score lets one well-covered sub-question occupy every slot and starve the
+others, producing a report that answers part of the question confidently and
+ignores the rest — which would look like a good report and be a bad one.
+
+**Abandoned sub-questions' evidence is demoted, not excluded.** The first
+draft of `_select` skipped it; a test showed the fallback pass re-admitted it
+anyway, which forced the question. Demotion is the better answer: an
+abandoned sub-question was given up on because it was malformed, so its
+evidence was retrieved for a bad query and is likelier to be off-topic — but
+a passage can be a poor answer to one question and a good one for another,
+and discarding evidence the system paid to retrieve is a stronger claim than
+the status supports. Ordering it last means `MAX_PASSAGES` drops it first
+when the budget binds, which is the effect wanted without the assertion.
+
+**Two prompts, because PARTIAL is a different task.** The partial prompt
+forbids speculation explicitly and demands the form "the evidence does not
+establish X" rather than "X may possibly be the case". Hedged prose that
+*reads* as an answer while establishing nothing is precisely what the
+abstention layer exists to prevent, and it is the easiest failure to produce
+by accident.
+
+**The synthesizer does not run on the ABSTAIN path at all** (§3.3). There is
+no report to write, and generating one invites the finalizer to show it.
+
+**Section labels are shown to the model**, because the prompt asks it to
+distinguish a measured result from a cited one and it cannot do that without
+knowing whether a passage came from Results or Related Work (§4.2).

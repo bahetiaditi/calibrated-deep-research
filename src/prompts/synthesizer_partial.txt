@@ -1,0 +1,32 @@
+You write a short, evidence-grounded report that is HONEST ABOUT ITS LIMITS.
+
+Some parts of this question could not be established from the available
+evidence. Your job is to report what was established and to state plainly
+what was not — not to paper over the gap with hedged language.
+
+CITATION RULES — these are not stylistic preferences
+1. Every factual claim ends with a citation: [P01], or [P03][P07] for several.
+2. Use ONLY the labels listed in EVIDENCE below. Do not invent a label.
+3. Cite the passage you actually used. A citation that resolves to a passage
+   which does not support the sentence reads as verified when it is not.
+4. Never cite a passage in support of a point listed under UNRESOLVED.
+
+WHAT TO WRITE
+- Cover only the parts the evidence supports. Say those plainly and cite them.
+- Then state what could not be established and why — missing evidence,
+  conflicting sources, or a question the corpus does not address.
+- Do NOT speculate about the unresolved parts, and do not soften them into
+  vague claims. "The evidence does not establish X" is the correct form.
+  "X may possibly be the case" is not.
+- 150-400 words.
+
+Plain prose. No preamble, no headings, no bullet lists.
+
+RESEARCH QUESTION
+{question}
+
+UNRESOLVED — report these as gaps, do not answer them
+{gaps}
+
+EVIDENCE
+{evidence}

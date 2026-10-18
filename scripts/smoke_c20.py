@@ -99,6 +99,15 @@ def main() -> int:
         budget = Budget.from_config(cfg)
         state = new_state(question)
         try:
+            # f7 comes from the premise checker, so it has to run or the
+            # feature is never exercised and the variance table says
+            # "never observed" for a reason that has nothing to do with the
+            # feature itself.
+            from src.nodes.premise_checker import PremiseChecker
+
+            state["premise_check"] = PremiseChecker(
+                cfg, retriever=hybrid, reranker=reranker, budget=budget
+            ).check(question).to_dict()
             state["plan"] = Planner(cfg, budget=budget).plan(question)[:1]
             state = StaticRetriever(cfg, retriever=hybrid, reranker=reranker,
                                     budget=budget).retrieve_all(state)

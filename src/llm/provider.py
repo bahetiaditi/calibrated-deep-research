@@ -277,7 +277,10 @@ def classify(exc: Exception, retry_statuses: list[int]) -> str:
                                          "failed to validate json")):
         return "retry_plain"
     if status == 400 and _mentions(exc, _RETRYABLE_400_MARKERS):
-        return "switch"
+        # Another model may have a larger context window, but this model's
+        # quota is untouched — hence retry_plain's "move on without
+        # exhausting" path rather than switch's.
+        return "retry_plain"
     if status == 429:
         # Our ledger thought there was room and the provider disagreed.
         # Trust the provider: stop using this model today.
@@ -474,9 +477,21 @@ class LLMProvider:
                             "provider-side enforcement", spec.model,
                         )
                         continue
-                    if action in ("switch", "retry_plain"):
-                        # Provider says the quota is gone. Burn the local
-                        # day budget so we stop choosing this model.
+                    if action == "retry_plain":
+                        # Enforcement is already off and it still failed, so
+                        # move on — but do NOT mark the model spent. A JSON
+                        # validation failure says nothing about quota, and
+                        # conflating the two burned three models' entire
+                        # daily budgets in five questions on a live run.
+                        log.warning(
+                            "%s could not produce usable JSON — switching "
+                            "model (quota untouched)", spec.model,
+                        )
+                        break
+                    if action == "switch":
+                        # A genuine 429: the provider says the quota is gone,
+                        # so burn the local day budget and stop choosing this
+                        # model. This is the ONLY path that exhausts a model.
                         self._exhaust_locally(spec)
                         log.warning("429 on %s — switching model", spec.model)
                         break

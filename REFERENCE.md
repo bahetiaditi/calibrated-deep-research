@@ -2041,3 +2041,45 @@ already written, and the bug slipped in through a default that made missing
 
 `smoke_c20.py` now survives a failed question rather than discarding nine
 good vectors with the tenth.
+
+**2026-09-06 — C20 second run: a self-inflicted quota bug, and a useful
+finding about f8/f9.**
+
+**The bug was in the fix.** Folding `retry_plain` into the `switch` branch
+meant a JSON validation failure reached `_exhaust_locally()`, which records
+the model's *entire remaining daily token budget* as spent. So one
+badly-formatted response burned a model for the day in the local ledger, the
+chain fell through to the next, and three models were dead after five
+questions with almost nothing actually consumed.
+
+The failure mode is worth naming: **the ledger became wrong in the
+conservative direction**, which looks like prudence and is not. Nothing
+errored, no quota was really lost, and the symptom was "the eval mysteriously
+stopped" — exactly the shape a quota ledger exists to prevent. A genuine 429
+is now the *only* path that exhausts a model; JSON failures and
+`context_length` move on with the model's quota untouched. Four regression
+tests pin this, including one asserting a format failure on question one does
+not starve question two.
+
+**f8 and f9 are constant, and that is the most useful line in the table.**
+
+| feature | C20 (static) | what makes it vary |
+|---|---|---|
+| f8 rounds consumed | 1.00, stdev 0 | D3 deciding to go deeper |
+| f9 route escalation | 0.50, stdev 0 | D2 escalating to another route |
+
+These two features **can only vary if the retriever is adaptive**. Under the
+static policy every sub-question gets exactly one round on one route, so
+both are constants by construction. That makes them a second, independent
+check on the agency claim alongside C35's trace counts: if f8 and f9 are
+still constant after C21, D2 and D3 changed nothing, and no ablation is
+needed to know it. Worth stating in the writeup — a feature that only moves
+when the agent is adaptive is a direct measurement of adaptivity.
+
+The five features that do vary (f1 6.91-8.64, f2 3.94-7.77, f3 2.58-5.99,
+f4 4-7, f10 0.33-0.64) carry real spread across only five questions, which
+is the encouraging part.
+
+**f7 was "never observed" for a script reason, not a feature reason** — the
+smoke test ran the planner without the premise checker. Fixed; it now runs
+the checker so f7 is exercised.

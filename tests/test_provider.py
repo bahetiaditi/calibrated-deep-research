@@ -493,15 +493,16 @@ def test_json_failure_without_enforcement_switches_model(tmp_path):
     assert resp.model == "secondary"
 
 
-def test_context_length_400_switches_rather_than_failing(tmp_path):
-    """A different model may have a larger context window."""
+def test_context_length_400_moves_on_without_exhausting(tmp_path):
+    """A different model may have a larger context window — but this one's
+    quota is untouched, so it must not be marked spent."""
     class TooLong(Exception):
         status_code = 400
 
         def __init__(self):
             super().__init__("400 context_length_exceeded")
 
-    assert classify(TooLong(), [500]) == "switch"
+    assert classify(TooLong(), [500]) == "retry_plain"
 
 
 def test_genuine_bad_request_is_still_fatal():
@@ -523,3 +524,55 @@ def test_complete_json_survives_a_validation_failure(tmp_path):
     provider, backend, _, _ = build(tmp_path, backend=backend)
     parsed, _ = provider.complete_json("s", "u")
     assert parsed == {"sub_questions": ["a"]}
+
+
+# --- exhaustion must mean exhaustion (regression, C20) ---------------------
+
+
+def test_json_failure_does_not_mark_the_model_spent(tmp_path):
+    """The bug this guards against burned three models' entire daily budgets
+    in five questions. A JSON validation failure says nothing about quota,
+    and folding it into the 429 path made the ledger believe otherwise."""
+    backend = FakeBackend(script=[
+        JsonValidateError(), JsonValidateError(),   # primary gives up
+        '{"ok": true}',                             # secondary answers
+    ])
+    provider, backend, ledger, _ = build(tmp_path, backend=backend)
+    provider.complete("s", "u", json_mode=True)
+
+    # The primary must still be usable: it failed to format, not to have quota.
+    assert ledger.check("primary", 100, now=T0).allowed
+
+
+def test_a_real_429_still_exhausts_the_model(tmp_path):
+    backend = FakeBackend(script=[FakeStatusError(429), '{"ok": true}'])
+    provider, backend, ledger, _ = build(tmp_path, backend=backend)
+    provider.complete("s", "u")
+    assert not ledger.check("primary", 100, now=T0).allowed
+
+
+def test_context_length_400_does_not_exhaust_either(tmp_path):
+    class TooLong(Exception):
+        status_code = 400
+
+        def __init__(self):
+            super().__init__("400 context_length_exceeded")
+
+    backend = FakeBackend(script=[TooLong(), '{"ok": true}'])
+    provider, backend, ledger, _ = build(tmp_path, backend=backend)
+    resp = provider.complete("s", "u")
+    assert resp.model == "secondary"
+    assert ledger.check("primary", 100, now=T0).allowed
+
+
+def test_a_json_failure_on_one_question_does_not_starve_the_next(tmp_path):
+    """The live symptom: five questions in, every model reported out of
+    quota though almost nothing had been spent."""
+    backend = FakeBackend(script=[
+        JsonValidateError(), JsonValidateError(), '{"ok": 1}',   # q1
+        '{"ok": 2}',                                             # q2
+    ])
+    provider, backend, ledger, _ = build(tmp_path, backend=backend)
+    provider.complete("s", "u1", json_mode=True)
+    second = provider.complete("s", "u2", json_mode=True)
+    assert second.model == "primary"        # back to the preferred model

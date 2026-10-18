@@ -110,6 +110,18 @@ class SubQuestion(TypedDict):
     sufficiency: float | None      # from §5
     sufficiency_features: dict[str, Any]   # raw feature vector, logged for analysis
     parent_id: str | None          # set when the planner splits one (D1)
+    # Passage ids retrieved FOR this sub-question, in rerank order.
+    #
+    # Added at C17 to close a gap. `evidence` is deduplicated by passage id
+    # (merge_evidence), so when two sub-questions retrieve the same passage
+    # only the first copy survives and it carries the first sub-question's
+    # `sub_question_id`. Filtering state evidence by that field would then
+    # silently hide shared evidence from the second sub-question — and shared
+    # evidence is common, since sibling sub-questions are about one topic.
+    # This list is the authoritative mapping; Passage.sub_question_id records
+    # only which sub-question found a passage first.
+    evidence_ids: list[str]
+    suggested_route: Route | None  # the planner's guess (C16); D2 may override
 
 
 class ClaimVerification(TypedDict):
@@ -242,6 +254,8 @@ def new_sub_question(
         sufficiency=None,
         sufficiency_features={},
         parent_id=parent_id,
+        evidence_ids=[],
+        suggested_route=None,
     )
 
 
@@ -296,8 +310,19 @@ def all_terminal(state: ResearchState) -> bool:
 
 
 def evidence_for(state: ResearchState, sub_question_id: str) -> list[Passage]:
+    """Passages retrieved for a sub-question, in the order they were ranked.
+
+    Reads `SubQuestion.evidence_ids` rather than filtering on
+    `Passage.sub_question_id` — see the note on that field. Falls back to the
+    old filter for sub-questions written before C17.
+    """
+    evidence = {p["id"]: p for p in (state.get("evidence") or [])}
+    sub_question = find_sub_question(state, sub_question_id)
+    ids = (sub_question or {}).get("evidence_ids") or []
+    if ids:
+        return [evidence[pid] for pid in ids if pid in evidence]
     return [
-        p for p in (state.get("evidence") or [])
+        p for p in evidence.values()
         if p.get("sub_question_id") == sub_question_id
     ]
 

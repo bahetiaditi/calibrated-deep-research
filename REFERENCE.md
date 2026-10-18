@@ -1661,3 +1661,52 @@ template's placeholders with `string.Formatter` rather than a hand-maintained
 field list, after the C16 prompt broke a hard-coded one. Undoubled braces in
 a JSON example otherwise raise at call time, mid-run, after retrieval has
 already been paid for.
+
+**2026-09-06 — C17. Retriever, static version. D2 and D3 deliberately off.**
+
+`src/nodes/retriever.py`.
+
+**This file is the A2/A3 baseline, not a placeholder.** §6.5 restores exactly
+this policy for those ablations, so it has to be a *fair* opponent. A
+deliberately weak baseline would make C21's adaptive retriever look good for
+the wrong reason and leave the agency claim unfalsifiable — which is what
+§2.1 exists to prevent. So the static policy is the sensible one a competent
+engineer would write without an agent: fixed route from
+`agency.static.route_rule`, the sub-question verbatim as the query, one round
+at a fixed top-k, always stop.
+
+What C21 adds is **conditioning**: route chosen from what previous attempts
+returned, query reformulated after a miss, and a stop/deeper/wider judgment.
+If those three changes do not beat this file, D2 and D3 were decorative.
+
+**Decisions are traced even when frozen**, with `was_adaptive=False`. An
+A2/A3 trace must be structurally comparable to a full run, or C35 cannot
+distinguish a frozen decision from a missing one — and a missing decision
+surface would silently pass the ablation check.
+
+**Status still depends on what was found.** Marking everything `sufficient`
+would be simpler and would hide from D5 that a sub-question retrieved
+nothing. That is deterministic bookkeeping rather than a judgment, so it does
+not smuggle D3 back in.
+
+**One sub-question per node invocation.** The controller (C19) re-enters the
+retriever and chooses which sub-question to work on next — that choice is
+D4's, and processing the whole plan inside the node would take it away.
+`retrieve_all()` exists for use before the graph is assembled.
+
+**Schema gap closed: `SubQuestion.evidence_ids`.** `merge_evidence` dedupes
+by passage id, so when two sub-questions retrieve the same passage only the
+first copy survives, carrying the first sub-question's `sub_question_id`.
+Filtering state evidence by that field would then **silently hide shared
+evidence from the second sub-question** — and sibling sub-questions share
+evidence constantly, since they are about one topic. `evidence_ids` is now
+the authoritative mapping (in rerank order); `Passage.sub_question_id`
+records only which sub-question found a passage first. `evidence_for()` reads
+the list and falls back to the old filter for pre-C17 state.
+
+This is the same class of bug as the C14 reducer and the C8 ingestion dedup:
+deduplication is correct for storage and wrong for attribution, and the fix
+is to keep the mapping separately rather than to stop deduplicating.
+
+`smoke_c17.py` records the baseline numbers — passages found, independent
+sources, f1/f2/f3 — that C21 has to improve on.

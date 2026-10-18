@@ -150,6 +150,11 @@ class Tracer:
         self._lock = threading.RLock()
         self._closed = False
         self._node_stack: list[str] = []
+        # The controller runs on a conditional edge, i.e. AFTER the node has
+        # exited, so the stack is empty by the time route() is called.
+        # Without this the origin of every routing decision reads as START
+        # and the trace cannot show the path the run actually took.
+        self._last_node: str | None = None
 
         self.dir = Path(trace_dir)
         self.path = self.dir / f"{self.trace_id}.jsonl"
@@ -208,6 +213,7 @@ class Tracer:
             yield self
         except Exception as exc:
             self._node_stack.pop()
+            self._last_node = name
             self.emit(
                 EventType.ERROR,
                 name,
@@ -218,6 +224,7 @@ class Tracer:
             raise
         else:
             self._node_stack.pop()
+            self._last_node = name
             self.emit(
                 EventType.NODE_EXIT,
                 name,
@@ -242,7 +249,11 @@ class Tracer:
         self.emit(
             EventType.ROUTE,
             to_node,
-            from_node=from_node or (self._node_stack[-1] if self._node_stack else None),
+            from_node=(
+                from_node
+                or (self._node_stack[-1] if self._node_stack else None)
+                or self._last_node
+            ),
             reason=reason,
             state=state_summary or {},
         )

@@ -248,3 +248,45 @@ def test_summary_shape(tracer):
     assert s["trace_id"] == "t1"
     assert s["nodes"] == ["planner"]
     assert s["decisions"]["D1_plan_revision"] == 1
+
+
+# --- route origin (the C19 gap) --------------------------------------------
+
+
+def test_route_origin_uses_the_last_completed_node(tracer):
+    """The controller runs on a conditional edge, AFTER the node exits, so
+    the node stack is empty when route() is called. Without remembering the
+    last completed node, every routing decision reads as originating at
+    START and the trace cannot show the path the run took."""
+    with tracer.node("planner"):
+        pass
+    tracer.route("retriever", reason="plan exists")
+    tracer.close()
+    frm, to, _ = read(tracer).routes()[0]
+    assert (frm, to) == ("planner", "retriever")
+
+
+def test_first_route_has_no_origin(tracer):
+    tracer.route("premise_checker", reason="premise check not run")
+    tracer.close()
+    assert read(tracer).routes()[0][0] is None
+
+
+def test_origin_updates_after_each_node(tracer):
+    with tracer.node("planner"):
+        pass
+    tracer.route("retriever", reason="a")
+    with tracer.node("retriever"):
+        pass
+    tracer.route("synthesizer", reason="b")
+    tracer.close()
+    assert [frm for frm, _, _ in read(tracer).routes()] == ["planner", "retriever"]
+
+
+def test_a_failed_node_still_becomes_the_origin(tracer):
+    with pytest.raises(ValueError):
+        with tracer.node("retriever"):
+            raise ValueError("boom")
+    tracer.route("synthesizer", reason="after failure")
+    tracer.close()
+    assert read(tracer).routes()[0][0] == "retriever"

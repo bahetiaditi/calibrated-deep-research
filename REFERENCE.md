@@ -1904,3 +1904,39 @@ day's quota before the recursion limit fired.
 every node, and resumes in a fresh process. Everything after this makes it
 agentic (C20-C22) and calibrated (C26-C27) rather than building new
 machinery.
+
+**2026-09-06 — C19 live result: node spans were never wired. Fixed.**
+
+The first end-to-end run succeeded — premise check, plan of 3, three
+retrieval rounds, 22 passages, a 2898-character cited draft, correct routing
+with reasons, and a clean resume from checkpoint. The Groq fallback also
+fired live (`429 on openai/gpt-oss-120b — switching model`), which is the
+first confirmation of C2's chain under real load.
+
+Two smoke checks failed, and both were the script misreading the trace rather
+than the system misbehaving — but they exposed a genuine gap.
+
+**C4 built the `tracer.node()` span machinery and nothing ever used it.**
+Nodes emitted no NODE_ENTER or NODE_EXIT events, so:
+- `TraceReader.nodes_visited()` returned empty, and the trace recorded
+  *routing* without recording what ran between routes — no node durations at
+  all;
+- every routing decision appeared to originate at START, because
+  `route()` reads the node stack and the stack was always empty.
+
+Both matter for C38. "Which node was slow" and "what ran before this
+decision" are among the first questions a failure annotation asks, and
+neither was answerable.
+
+**Fix.** `build_graph` now wraps every registered node in `tracer.node(name)`,
+so entries, exits and durations are recorded. And the tracer remembers the
+last completed node: the controller runs on a *conditional edge*, i.e. after
+the node has exited, so the stack is legitimately empty by then and the
+origin has to come from somewhere else.
+
+Worth noting the shape of this one. It is not a logic error — every unit test
+passed, the system did the right thing, and the only symptom was a blank line
+in a report. **The trace was quietly less useful than it appeared**, and the
+cost would have landed at C38 with the test split already spent. That is the
+sixth instance of the same pattern recorded in this document, and the first
+outside the retrieval layer.

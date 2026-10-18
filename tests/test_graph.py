@@ -251,3 +251,46 @@ def test_recursion_limit_catches_a_routing_loop():
     graph = build_graph(components(spy, retriever=never_finishes), config=CFG)
     with pytest.raises(GraphRecursionError):
         graph.invoke(new_state("q"), {"recursion_limit": 8})
+
+
+# --- node spans reach the trace (the C19 gap) ------------------------------
+
+
+def test_nodes_are_traced_with_entry_exit_and_duration(tmp_path):
+    """C4 built the span machinery; until C19 nothing used it, so traces
+    recorded routing but not what ran between routes."""
+    from src.tracing.tracer import TraceReader, Tracer
+
+    spy = Spy()
+    tracer = Tracer(tmp_path / "traces", trace_id="g1", question="q")
+    graph = build_graph(components(spy), config=CFG, tracer=tracer)
+    graph.invoke(new_state("q"))
+    tracer.close()
+
+    reader = TraceReader.load(tracer.path)
+    assert reader.nodes_visited() == spy.visits
+    exits = reader.of_type(__import__(
+        "src.tracing.tracer", fromlist=["EventType"]).EventType.NODE_EXIT)
+    assert exits and all(e["duration_ms"] >= 0 for e in exits)
+
+
+def test_routing_origin_is_recorded_after_the_first_node(tmp_path):
+    from src.tracing.tracer import TraceReader, Tracer
+
+    spy = Spy()
+    tracer = Tracer(tmp_path / "traces", trace_id="g2", question="q")
+    build_graph(components(spy), config=CFG, tracer=tracer).invoke(new_state("q"))
+    tracer.close()
+
+    origins = [frm for frm, _, _ in TraceReader.load(tracer.path).routes()]
+    # One routing decision per node plus the entry edge: the entry has no
+    # origin, and each later decision names the node that just finished —
+    # including the final one that routes to END.
+    assert origins[0] is None
+    assert origins[1:] == spy.visits
+
+
+def test_graph_runs_without_a_tracer(tmp_path):
+    """Tracing is optional; the unit tests run without one."""
+    spy = Spy()
+    assert build_graph(components(spy), config=CFG).invoke(new_state("q"))

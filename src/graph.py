@@ -105,7 +105,7 @@ def build_graph(
     )
     builder = StateGraph(ResearchState)
     for name, action in nodes.items():
-        builder.add_node(name, action)
+        builder.add_node(name, _traced(name, action, tracer))
 
     # Every node, and the entry point, routes through the controller.
     path_map = {name: name for name in nodes}
@@ -115,6 +115,27 @@ def build_graph(
         builder.add_conditional_edges(name, controller.route, path_map)
 
     return builder.compile(checkpointer=checkpointer)
+
+
+def _traced(name: str, action: Any, tracer: Any) -> Any:
+    """Wrap a node so its entry, exit and duration reach the trace.
+
+    C4 built the span machinery; until now nothing used it, so traces
+    recorded routing but not what ran between routes — no node durations, and
+    every routing decision appeared to originate at START because the node
+    stack was always empty. C38 replays failed runs from these traces, and
+    "which node was slow" and "what ran before this decision" are among the
+    first questions it asks.
+    """
+    if tracer is None:
+        return action
+
+    def wrapped(state: dict) -> dict:
+        with tracer.node(name):
+            return action(state)
+
+    wrapped.__name__ = name
+    return wrapped
 
 
 def _checkpointer(cfg: Config, enabled: bool) -> Iterator[Any]:

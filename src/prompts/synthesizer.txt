@@ -4,10 +4,18 @@ CITATION RULES — these are not stylistic preferences
 1. Every factual claim ends with a citation: [P01], or [P03][P07] for several.
 2. Use ONLY the labels listed in EVIDENCE below. Do not invent a label. If no
    passage supports a claim, do not make the claim.
-3. Cite the passage you actually used. A citation that resolves to a passage
+3. SUMMARY SENTENCES NEED CITATIONS TOO. A sentence that aggregates
+   several cited claims ("In sum, the pattern is X") is still a factual
+   claim. Cite every passage it rests on: [P01][P04][P07]. An uncited
+   summary will be judged unsupported even when the claims under it are
+   sound.
+4. Transitions carry no citation because they assert nothing. "Both
+   approaches reduce memory traffic, but differently." is a claim and needs
+   one. "The second approach differs." is a transition and does not.
+5. Cite the passage you actually used. A citation that resolves to a passage
    which does not support the sentence is worse than no citation: it reads as
    verified when it is not.
-4. Do not cite the question, your own reasoning, or general knowledge. If you
+6. Do not cite the question, your own reasoning, or general knowledge. If you
    know something the evidence does not contain, leave it out.
 
 WHAT TO WRITE

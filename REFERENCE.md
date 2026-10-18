@@ -1807,3 +1807,46 @@ no report to write, and generating one invites the finalizer to show it.
 **Section labels are shown to the model**, because the prompt asks it to
 distinguish a measured result from a cited one and it cannot do that without
 knowing whether a passage came from Results or Related Work (§4.2).
+
+**2026-09-06 — C18 live result: uncited summary sentences. Prompt fixed;
+constraint recorded for C23.**
+
+The first real draft cited 8 markers across 7 of 19 offered passages, all
+resolving, with no invented labels. But **4 substantial sentences carried no
+citation**, and inspecting them showed they were not hallucinations — they
+were *synthesis* sentences aggregating claims cited immediately above, e.g.
+"In sum, FlashAttention-2's pattern is a tightly-coupled block-tiling scheme
+that keeps data movement local to the GPU's fast memory hierarchy."
+
+**Why this matters more than it looks.** The critic marks an uncited claim
+UNSUPPORTED, and §5.5 counts unsupported claims toward the hallucination
+rate. A correct, well-grounded summary of three cited claims would therefore
+be scored as a hallucination. The headline metric would be measuring the
+synthesizer's citation habits rather than the system's grounding, and it
+would do so in the direction that makes the system look worse than it is —
+which is less dangerous than the reverse but still wrong.
+
+**Fix applied here:** both synthesizer prompts now state explicitly that a
+summary sentence is a factual claim and must carry the citations of
+everything it rests on, and distinguish a summary from a transition ("The
+second approach differs" asserts nothing; "Both reduce memory traffic, but
+differently" is a claim).
+
+**Constraint for C23.** The prompt fix reduces the problem but cannot
+eliminate it, so the critic must handle the residue. When segmenting claims
+it needs to distinguish three cases, not two:
+- a cited factual claim — verify against the cited passage;
+- an **uncited** factual claim — UNSUPPORTED, correctly;
+- a transition or discourse sentence — not a claim at all, and excluded from
+  the denominator rather than counted as unsupported.
+
+Counting discourse sentences in the denominator would depress every
+grounding metric uniformly across the agent and all four baselines. It would
+not change which system wins, but it would make the absolute numbers
+meaningless and uncomparable to published citation-grounding figures.
+
+**Secondary observation worth tracking:** only 7 of 19 retrieved passages
+were cited (37%). That is a usable proxy for retrieval precision — if C21's
+adaptive retriever is genuinely better, the citation rate should rise, since
+fewer retrieved passages will be irrelevant. Recorded alongside the C17
+baseline.

@@ -1940,3 +1940,60 @@ in a report. **The trace was quietly less useful than it appeared**, and the
 cost would have landed at C38 with the test split already spent. That is the
 sixth instance of the same pattern recorded in this document, and the first
 outside the retrieval layer.
+
+**2026-09-06 — C20. Sufficiency features.**
+
+`src/sufficiency/features.py`, wired into the retriever so f1-f10 are
+recomputed every round.
+
+**Missing is not zero, and the distinction is the main design decision.**
+At C20, f5 (contradiction rate) and f6 (entailment strength) are genuinely
+unavailable — contradiction scanning is not wired into the retriever and the
+critic lands at C23. They return `None`. `to_vector()` then emits a neutral
+imputation **and an explicit `_missing` indicator** for every feature.
+
+Imputing 0.0 for f5 without the indicator would tell the model "no
+contradictions were found" when the truth is "nobody looked" — two very
+different states collapsed into one, and the coefficient fit at C33 would be
+meaningless. With the indicator the model can also learn that missingness
+itself predicts something, which it plausibly does: a sub-question whose
+critic never ran is one the system gave up on.
+
+**Dimensional consistency is a hard requirement**, not a nicety.
+`FEATURE_NAMES` fixes the order and every extraction returns every key. A
+vector whose width depends on what happened cannot be stacked into a design
+matrix, and that failure would surface at C33 as a shape error with the eval
+already paid for.
+
+**Units are deliberately left unscaled.** f1-f3 are logits (unbounded),
+f4/f8 are counts, the rest are in [0,1]. Standardisation belongs in the model
+pipeline at C26 — scaling at extraction time would make a stored feature
+depend on the batch it was extracted with, so a feature logged during a run
+could not be compared with one logged a week later.
+
+**Two places where None beats a number**, both inherited from earlier
+decisions: f3 is None below five results (a zero gap asserts "uniformly
+flat", which four passages do not license — C11), and f4 is None with no
+evidence at all ("no sources" and "zero independent among those found" are
+the same number but not the same situation).
+
+**r2_min_sufficiency is reported alongside the mean** because a report
+resting on one unsupported sub-question is unsafe however well the others
+went, and averaging hides precisely that.
+
+**Documented deviation from §5.2 — f10.** The spec describes "gap between the
+question's implied timeframe and source dates". Extracting an implied
+timeframe costs an LLM call per question, and the premise checker already
+costs two; the guard would start costing more than the research. f10 measures
+**evidence recency** instead (median publication date against an 8-year
+horizon), which is a proxy. It still carries the Tier D4 signal — a question
+whose answer has moved retrieves old evidence — but it will **not** catch a
+recent question answered with recent but superseded evidence. This belongs in
+the writeup's limitations, stated plainly rather than implying the full
+version was built.
+
+**Features are recomputed every round, not only at the end.** D3 reads them
+at C21 to decide whether to stop, so they must exist while a sub-question is
+still in flight; and per-round logging means the trace shows whether a second
+round actually improved the evidence, which is what separates a useful
+re-retrieval from a retry.

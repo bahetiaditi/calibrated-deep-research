@@ -167,7 +167,23 @@ class StaticRetriever:
         )
         updated["status"] = self.decide_next(sub_question, outcome)
 
-        self._trace(sub_question, route, query, outcome, updated["status"])
+        # Features are recomputed every round, not only at the end. D3 reads
+        # them at C21 to decide whether to stop, so they have to exist while
+        # the sub-question is still in flight; and recording them per round
+        # means the trace shows how the evidence improved (or did not),
+        # which is what distinguishes a useful second round from a retry.
+        from src.sufficiency.features import extract_features
+
+        updated["sufficiency_features"] = extract_features(
+            updated,
+            outcome.passages,
+            contradictions=state.get("contradictions"),
+            premise_check=state.get("premise_check"),
+            critic_findings=state.get("critic_findings") or None,
+        )
+
+        self._trace(sub_question, route, query, outcome, updated["status"],
+                    features=updated["sufficiency_features"])
 
         plan = [
             updated if sq["id"] == sub_question_id else sq
@@ -252,6 +268,7 @@ class StaticRetriever:
         query: str,
         outcome: RetrievalOutcome,
         status: str,
+        features: dict | None = None,
     ) -> None:
         if self.tracer is None:
             return
@@ -291,6 +308,7 @@ class StaticRetriever:
             latency_s=outcome.latency_s,
             sub_question_id=sub_question["id"],
             error=outcome.error,
+            features=features,
         )
 
 

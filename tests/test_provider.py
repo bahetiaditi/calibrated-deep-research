@@ -447,3 +447,79 @@ def test_provider_works_without_a_tracer(tmp_path):
     provider, backend, _, _ = build(tmp_path)
     assert provider.tracer is None
     assert provider.complete("s", "u").text
+
+
+# --- provider-side JSON enforcement (found live at C20) --------------------
+
+
+class JsonValidateError(Exception):
+    """Mirrors groq.BadRequestError for json_validate_failed."""
+
+    status_code = 400
+
+    def __init__(self):
+        super().__init__(
+            "Error code: 400 - {'error': {'message': \"Failed to validate "
+            "JSON. Please adjust your prompt. See 'failed_generation' for "
+            "more details.\", 'code': 'json_validate_failed'}}"
+        )
+
+
+def test_json_validate_failure_is_not_fatal():
+    """Groq validates response_format server side and returns 400 rather
+    than the text. Treating that as fatal killed a real run; the model
+    merely failed to produce parseable JSON on one attempt."""
+    assert classify(JsonValidateError(), [500]) == "retry_plain"
+
+
+def test_json_validate_failure_retries_without_enforcement(tmp_path):
+    """The provider is stricter than our parser: slightly malformed output
+    is discarded before the C2 repair layer sees it. Retrying without
+    enforcement recovers a response we can fix."""
+    backend = FakeBackend(script=[JsonValidateError(), '{"ok": true}'])
+    provider, backend, _, _ = build(tmp_path, backend=backend)
+    resp = provider.complete("s", "u", json_mode=True)
+
+    assert resp.model == "primary"          # same model, not a fallback
+    assert backend.calls[0]["json_mode"] is True
+    assert backend.calls[1]["json_mode"] is False
+
+
+def test_json_failure_without_enforcement_switches_model(tmp_path):
+    backend = FakeBackend(script=[JsonValidateError(), JsonValidateError(),
+                                  '{"ok": true}'])
+    provider, backend, _, _ = build(tmp_path, backend=backend)
+    resp = provider.complete("s", "u", json_mode=True)
+    assert resp.model == "secondary"
+
+
+def test_context_length_400_switches_rather_than_failing(tmp_path):
+    """A different model may have a larger context window."""
+    class TooLong(Exception):
+        status_code = 400
+
+        def __init__(self):
+            super().__init__("400 context_length_exceeded")
+
+    assert classify(TooLong(), [500]) == "switch"
+
+
+def test_genuine_bad_request_is_still_fatal():
+    """A malformed request is a code bug; retrying it wastes quota."""
+    class BadRequest(Exception):
+        status_code = 400
+
+        def __init__(self):
+            super().__init__("400 - unknown parameter 'temperatrue'")
+
+    assert classify(BadRequest(), [500]) == "fatal"
+
+
+def test_complete_json_survives_a_validation_failure(tmp_path):
+    backend = FakeBackend(script=[
+        JsonValidateError(),
+        '```json\n{"sub_questions": ["a"]}\n```',   # repairable, not strict
+    ])
+    provider, backend, _, _ = build(tmp_path, backend=backend)
+    parsed, _ = provider.complete_json("s", "u")
+    assert parsed == {"sub_questions": ["a"]}

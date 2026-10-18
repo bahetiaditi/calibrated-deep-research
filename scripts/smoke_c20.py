@@ -94,12 +94,21 @@ def main() -> int:
     collected: list[dict] = []
     lengths: set[int] = set()
 
+    skipped: list[str] = []
     for question in QUESTIONS:
         budget = Budget.from_config(cfg)
         state = new_state(question)
-        state["plan"] = Planner(cfg, budget=budget).plan(question)[:1]
-        state = StaticRetriever(cfg, retriever=hybrid, reranker=reranker,
-                                budget=budget).retrieve_all(state)
+        try:
+            state["plan"] = Planner(cfg, budget=budget).plan(question)[:1]
+            state = StaticRetriever(cfg, retriever=hybrid, reranker=reranker,
+                                    budget=budget).retrieve_all(state)
+        except Exception as exc:  # noqa: BLE001
+            # One question failing must not discard nine good feature
+            # vectors — the variance table is the point of this script.
+            print(f"{YELLOW}  SKIP{RESET} {question[:52]}")
+            print(f"{DIM}       {type(exc).__name__}: {str(exc)[:88]}{RESET}")
+            skipped.append(question)
+            continue
 
         sq = state["plan"][0]
         features = features_for_sub_question(state, sq["id"])
@@ -113,6 +122,14 @@ def main() -> int:
         )
         print(f"{DIM}  {question[:52]:<54}{RESET}")
         print(f"{DIM}     {shown}  ({completeness(features):.0%} observed){RESET}")
+
+    if skipped:
+        print(f"\n{YELLOW}{len(skipped)} question(s) skipped after an "
+              f"error; {len(collected)} vectors collected.{RESET}")
+
+    if not collected:
+        print(f"{RED}no feature vectors collected{RESET}")
+        return 1
 
     print(f"\n{BOLD}Dimensional consistency{RESET}")
     if len(lengths) == 1 and lengths.pop() == feature_vector_length():
@@ -142,7 +159,7 @@ def main() -> int:
             continue
         spread = statistics.pstdev(observed) if len(observed) > 1 else 0.0
         flag = f"{YELLOW}  constant{RESET}" if spread < 1e-9 else ""
-        print(f"  {name:<26}{f'{len(observed)}/10':>9}{min(observed):>8.2f}"
+        print(f"  {name:<26}{f'{len(observed)}/{len(collected)}':>9}{min(observed):>8.2f}"
               f"{max(observed):>8.2f}{spread:>8.3f}{flag}")
         if spread < 1e-9:
             dead.append(name)

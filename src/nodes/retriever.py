@@ -178,6 +178,10 @@ class StaticRetriever:
             updated,
             outcome.passages,
             contradictions=state.get("contradictions"),
+            # Nothing wires the C12 detector into the graph yet, so a clean
+            # list means "not scanned", not "no disagreement". C21 flips this
+            # where the scan actually runs.
+            contradictions_scanned=False,
             premise_check=state.get("premise_check"),
             critic_findings=state.get("critic_findings") or None,
         )

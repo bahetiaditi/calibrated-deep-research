@@ -1997,3 +1997,47 @@ at C21 to decide whether to stop, so they must exist while a sub-question is
 still in flight; and per-round logging means the trace shows whether a second
 round actually improved the evidence, which is what separates a useful
 re-retrieval from a retry.
+
+**2026-09-06 — C20 live result: two bugs, one loud and one silent.**
+
+The feature vectors came out well — f1 ranging 6.9-8.6, f3 2.6-6.0, f4 4-7 —
+so the signal is there. But the run surfaced two defects.
+
+**Loud: a 400 from Groq killed the run outright.** `json_validate_failed`
+with an empty `failed_generation` — the model failed to produce parseable
+JSON under `response_format: json_object`, and Groq validates that *server
+side*, returning 400 instead of the text. C2's `classify()` treated every 400
+as fatal, so one transient generation failure ended a ten-question run on
+question six.
+
+Worse than the crash: **the provider is stricter than our parser.** C2 built
+a repair layer for fences, trailing commas and truncation, and server-side
+enforcement discards exactly the responses it was built to fix, before we
+ever see them. `classify()` now returns `retry_plain` for this case — same
+model, enforcement off, repair layer in play — and escalates to the next
+model only if that also fails. `context_length` and similar 400s now
+`switch` rather than die; a genuinely malformed request is still fatal,
+because retrying a code bug only wastes quota.
+
+**Silent, and the more dangerous one: f5 read 0.00 on all ten questions.**
+Contradiction scanning has never been wired into the graph. `ResearchState`
+initialises `contradictions` to `[]`, so an unscanned run and a
+scanned-and-clean run are **indistinguishable from the data alone** — and
+`_contradiction_rate` read the empty list as "scanned, no disagreement
+found".
+
+The feature was asserting agreement that nothing had checked. At C33 the
+model would have been fit on a constant mislabelled as an observation, and
+the resulting coefficient would have read as "cross-source disagreement does
+not predict answerability" — a false negative about one of the project's own
+design claims, produced by a default value. Fixed with an explicit
+`contradictions_scanned` flag, defaulting to False, which C21 flips where the
+scan actually runs.
+
+This is the seventh instance of the recorded pattern, and the sharpest
+illustration of why C20 insists that **missing is not zero**: the rule was
+already written, and the bug slipped in through a default that made missing
+*look* observed.
+
+`smoke_c20.py` now survives a failed question rather than discarding nine
+good vectors with the tenth.

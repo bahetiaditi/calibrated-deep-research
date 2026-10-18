@@ -244,9 +244,40 @@ def _status_code(exc: Exception) -> int | None:
     return None
 
 
+# A 400 whose body names one of these is about the GENERATION, not the
+# request, and is therefore worth another attempt. Defaulting every 400 to
+# fatal was wrong: Groq's `json_validate_failed` is a transient failure of
+# the model to produce parseable JSON, and it killed a real run outright.
+_RETRYABLE_400_MARKERS = (
+    "json_validate_failed",
+    "failed to validate json",
+    "context_length",
+    "too large",
+    "overloaded",
+)
+
+
+def _mentions(exc: Exception, markers: tuple[str, ...]) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in markers)
+
+
 def classify(exc: Exception, retry_statuses: list[int]) -> str:
-    """-> 'retry' (same model), 'switch' (next model), or 'fatal'."""
+    """-> 'retry', 'retry_plain', 'switch', or 'fatal'.
+
+    'retry_plain' means: try again on the same model but WITHOUT
+    provider-side JSON enforcement. Groq validates
+    `response_format: json_object` server side and returns 400 instead of
+    the text, so slightly malformed output is discarded before our repair
+    layer (C2) ever sees it. The provider is stricter than our parser, and
+    we lose a response we could have fixed.
+    """
     status = _status_code(exc)
+    if status == 400 and _mentions(exc, ("json_validate_failed",
+                                         "failed to validate json")):
+        return "retry_plain"
+    if status == 400 and _mentions(exc, _RETRYABLE_400_MARKERS):
+        return "switch"
     if status == 429:
         # Our ledger thought there was room and the provider disagreed.
         # Trust the provider: stop using this model today.
@@ -419,10 +450,11 @@ class LLMProvider:
                 continue
 
             backoff = self.initial_backoff
+            enforce_json = json_mode
             for attempt in range(1, self.max_attempts + 1):
                 try:
                     text, prompt_tok, completion_tok = self._backend(spec.provider).complete(
-                        spec, system, user, temperature, budget, json_mode
+                        spec, system, user, temperature, budget, enforce_json
                     )
                 except Exception as exc:  # noqa: BLE001 - classified below
                     action = classify(exc, self.retry_statuses)
@@ -431,7 +463,18 @@ class LLMProvider:
                         raise ProviderError(
                             f"unrecoverable error from {spec.model}: {exc}"
                         ) from exc
-                    if action == "switch":
+                    if action == "retry_plain" and enforce_json:
+                        # Drop server-side JSON enforcement and let the
+                        # structured-output repair layer handle whatever
+                        # comes back; it already copes with fences, trailing
+                        # commas and truncation.
+                        enforce_json = False
+                        log.info(
+                            "%s rejected its own JSON; retrying without "
+                            "provider-side enforcement", spec.model,
+                        )
+                        continue
+                    if action in ("switch", "retry_plain"):
                         # Provider says the quota is gone. Burn the local
                         # day budget so we stop choosing this model.
                         self._exhaust_locally(spec)
@@ -465,7 +508,7 @@ class LLMProvider:
                             user=user,
                             temperature=temperature,
                             max_output_tokens=budget,
-                            json_mode=json_mode and spec.supports_json_mode,
+                            json_mode=enforce_json and spec.supports_json_mode,
                         ),
                         CachedResponse(
                             text=text,

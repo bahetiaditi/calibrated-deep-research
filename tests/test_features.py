@@ -55,7 +55,8 @@ def test_vector_length_is_constant():
     long = to_vector(extract_features(
         sub_question(rounds=3, attempted_routes=["arxiv_fulltext"]),
         [passage(f"P{i}", score=9 - i) for i in range(8)],
-        contradictions=[], premise_check={"ran": True, "grounding_score": 1.0},
+        contradictions=[], contradictions_scanned=True,
+        premise_check={"ran": True, "grounding_score": 1.0},
     ))[0]
     assert len(short) == len(long) == feature_vector_length()
 
@@ -85,13 +86,24 @@ def test_unavailable_features_are_none_not_zero():
 def test_contradiction_rate_zero_differs_from_none():
     with_scan = extract_features(
         sub_question(), [passage("P1"), passage("P2", source="paperB")],
-        contradictions=[],
+        contradictions=[], contradictions_scanned=True,
     )
     without = extract_features(
         sub_question(), [passage("P1"), passage("P2", source="paperB")]
     )
     assert with_scan["f5_contradiction_rate"] == 0.0
     assert without["f5_contradiction_rate"] is None
+
+
+def test_empty_list_without_the_scanned_flag_is_still_none():
+    """ResearchState initialises contradictions to [], so an unscanned run
+    and a scanned-and-clean run look identical from the data alone. A live
+    C20 run reported f5 = 0.00 on all ten questions for exactly this reason:
+    the feature asserted agreement that nothing had checked."""
+    f = extract_features(sub_question(),
+                         [passage("P1"), passage("P2", source="B")],
+                         contradictions=[])
+    assert f["f5_contradiction_rate"] is None
 
 
 def test_missing_indicator_is_emitted():
@@ -124,7 +136,8 @@ def test_completeness_reports_observation_rate():
     full = extract_features(
         sub_question(rounds=1, attempted_routes=["web"]),
         [passage(f"P{i}", score=9 - i) for i in range(6)],
-        contradictions=[], premise_check={"ran": True, "grounding_score": 0.9},
+        contradictions=[], contradictions_scanned=True,
+        premise_check={"ran": True, "grounding_score": 0.9},
         critic_findings=[{"sub_question_id": "sq1", "verdict": "SUPPORTED"}],
     )
     assert completeness(full) == 1.0
@@ -202,13 +215,14 @@ def test_f5_counts_only_pairs_among_these_passages():
     f = extract_features(
         sub_question(),
         [passage("P1"), passage("P2", source="B"), passage("P3", source="C")],
-        contradictions=contradictions,
+        contradictions=contradictions, contradictions_scanned=True,
     )
     assert f["f5_contradiction_rate"] == pytest.approx(1 / 3)
 
 
 def test_f5_zero_with_a_single_passage():
-    f = extract_features(sub_question(), [passage("P1")], contradictions=[])
+    f = extract_features(sub_question(), [passage("P1")], contradictions=[],
+                         contradictions_scanned=True)
     assert f["f5_contradiction_rate"] == 0.0
 
 

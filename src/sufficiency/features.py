@@ -110,11 +110,17 @@ def extract_features(
     passages: Sequence[Passage],
     *,
     contradictions: Sequence[dict[str, Any]] | None = None,
+    contradictions_scanned: bool = False,
     premise_check: dict[str, Any] | None = None,
     critic_findings: Sequence[dict[str, Any]] | None = None,
     today: date | None = None,
 ) -> dict[str, float | None]:
-    """f1-f10 for one sub-question. Always returns every key."""
+    """f1-f10 for one sub-question. Always returns every key.
+
+    `contradictions_scanned` defaults to False: nothing wires the C12
+    detector into the graph yet, so claiming a clean scan would be a lie.
+    C21 flips it where the scan actually runs.
+    """
     scores = sorted(
         (
             float(p["rerank_score"])
@@ -134,7 +140,9 @@ def extract_features(
         # license. Established at C11 and preserved here.
         "f3_score_gap": (scores[0] - scores[4]) if len(scores) >= 5 else None,
         "f4_independent_sources": _independent_sources(passages),
-        "f5_contradiction_rate": _contradiction_rate(passages, contradictions),
+        "f5_contradiction_rate": _contradiction_rate(
+            passages, contradictions, scanned=contradictions_scanned
+        ),
         "f6_entailment_strength": _entailment_strength(
             sub_question, critic_findings
         ),
@@ -160,13 +168,23 @@ def _independent_sources(passages: Sequence[Passage]) -> float | None:
 def _contradiction_rate(
     passages: Sequence[Passage],
     contradictions: Sequence[dict[str, Any]] | None,
+    *,
+    scanned: bool = True,
 ) -> float | None:
     """f5. Fraction of scorable passage pairs found to contradict.
 
-    `None` when contradiction scanning has not run — distinct from 0.0,
-    which asserts that sources agree.
+    `None` when scanning has not run — distinct from 0.0, which asserts that
+    sources agree.
+
+    `scanned` exists because the two states are indistinguishable from the
+    data alone: `ResearchState` initialises `contradictions` to `[]`, so an
+    unscanned run and a scanned-and-clean run both present an empty list.
+    A live C20 run reported f5 = 0.00 on all ten questions for exactly this
+    reason — the feature was asserting agreement that nothing had checked,
+    and at C33 the model would have been fit on a constant mislabelled as an
+    observation.
     """
-    if contradictions is None:
+    if contradictions is None or not scanned:
         return None
     ids = {p["id"] for p in passages}
     if len(ids) < 2:
@@ -350,7 +368,11 @@ def completeness(features: dict[str, float | None]) -> float:
 
 
 def features_for_sub_question(
-    state: ResearchState, sub_question_id: str, *, today: date | None = None
+    state: ResearchState,
+    sub_question_id: str,
+    *,
+    contradictions_scanned: bool = False,
+    today: date | None = None,
 ) -> dict[str, float | None]:
     """Extract features from state for one sub-question."""
     from src.state import find_sub_question
@@ -363,6 +385,7 @@ def features_for_sub_question(
         sub_question,
         evidence_for(state, sub_question_id),
         contradictions=state.get("contradictions"),
+        contradictions_scanned=contradictions_scanned,
         premise_check=state.get("premise_check"),
         critic_findings=state.get("critic_findings") or None,
         today=today,

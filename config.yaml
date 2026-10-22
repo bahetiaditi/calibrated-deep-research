@@ -209,6 +209,14 @@ retrieval:
     # honest move is to declare the sub-question unresolved rather than
     # spend more budget on it — an admitted gap beats a confident guess.
     hopeless_max_rerank: 0.0
+    # Stop when a round stops helping. Without this the retriever escalates
+    # until it runs out of rounds whenever the corpus cannot clear the
+    # absolute bar: a live run spent 9 retrieval calls and 71s to reach the
+    # same f1 the static retriever reached in 3 calls and 8s, because no
+    # round after the first improved anything and nothing noticed. A fixed
+    # number of rounds with a threshold attached is a schedule, not a
+    # decision (2.4).
+    min_improvement: 0.5
     # The obvious cases are decided from features alone, free and auditable.
     # Only the ambiguous middle costs an LLM call to reformulate.
     reformulate_with_llm: true

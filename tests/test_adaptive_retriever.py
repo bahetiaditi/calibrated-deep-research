@@ -602,3 +602,59 @@ def test_full_text_is_still_reachable_by_escalation():
     sq["attempted_queries"] = ["q"]
     retriever.decide_next(sq, outcome([1.0], ["A"]))
     assert retriever.choose_route(sq) == "arxiv_fulltext"
+
+
+# --- marginal improvement (regression: C21 live run) -----------------------
+
+
+def test_a_round_that_does_not_help_stops_the_search():
+    """A live run spent 9 retrieval calls, 6 LLM calls and 71 seconds to
+    reach exactly the f1 the static retriever reached in 3 calls and 8
+    seconds — no round after the first improved anything and nothing
+    noticed. A fixed number of rounds with a threshold attached is a
+    schedule, not a decision."""
+    retriever = build()
+    sq = new_sub_question("q", sub_question_id="sq1")
+
+    assert retriever.decide_next(sq, outcome([2.5, 1.0], ["A", "B"])) == IN_PROGRESS
+    sq["rounds"] = 1
+    sq["attempted_routes"] = ["arxiv_meta"]
+    sq["attempted_queries"] = ["q"]
+
+    # Round two returns essentially the same quality.
+    assert retriever.decide_next(sq, outcome([2.6, 1.0], ["A", "B"])) == INSUFFICIENT
+
+
+def test_a_round_that_helps_keeps_going():
+    retriever = build()
+    sq = new_sub_question("q", sub_question_id="sq1")
+    retriever.decide_next(sq, outcome([1.0], ["A"]))
+    sq["rounds"] = 1
+    sq["attempted_routes"] = ["arxiv_meta"]
+    sq["attempted_queries"] = ["q"]
+    # A clear improvement, still short of the bar: keep trying.
+    assert retriever.decide_next(sq, outcome([3.0], ["A"])) == IN_PROGRESS
+
+
+def test_improvement_past_the_bar_stops_as_sufficient():
+    retriever = build()
+    sq = new_sub_question("q", sub_question_id="sq1")
+    retriever.decide_next(sq, outcome([1.0], ["A"]))
+    sq["rounds"] = 1
+    sq["attempted_routes"] = ["arxiv_meta"]
+    sq["attempted_queries"] = ["q"]
+    assert retriever.decide_next(sq, outcome([8.0, 7.0], ["A", "B"])) == SUFFICIENT
+
+
+def test_the_number_of_rounds_depends_on_the_evidence():
+    """The property that separates a decision from a schedule."""
+    easy = FakeRetriever(default=[passage("P1", 9.0, "A"),
+                                  passage("P2", 8.0, "B")])
+    stuck = FakeRetriever(default=[passage("P1", 2.0, "A"),
+                                   passage("P2", 1.9, "B")])
+    easy_final = build(retriever=easy).retrieve_all(state_with("q"))
+    stuck_final = build(retriever=stuck).retrieve_all(state_with("q"))
+
+    assert easy_final["plan"][0]["rounds"] == 1
+    assert stuck_final["plan"][0]["rounds"] == 2      # stops once it plateaus
+    assert stuck_final["plan"][0]["rounds"] < 3

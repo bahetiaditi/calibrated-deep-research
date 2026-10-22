@@ -106,8 +106,14 @@ class AdaptiveRetriever(StaticRetriever):
         self.d2_live = bool(self.cfg.get("agency.d2_adaptive_route_and_query", True))
         self.d3_live = bool(self.cfg.get("agency.d3_adaptive_depth_and_stopping", True))
 
+        self.min_improvement = float(
+            self.cfg.get("retrieval.adaptive.min_improvement", 0.5)
+        )
         self._provider = provider
         self._plan_decision: dict[str, dict[str, Any]] = {}
+        # Best f1 seen so far per sub-question, so a round can be compared
+        # with the one before it rather than only with a fixed threshold.
+        self._best_f1: dict[str, float] = {}
 
     @property
     def provider(self) -> Any:
@@ -179,7 +185,12 @@ class AdaptiveRetriever(StaticRetriever):
         f1 = features["f1"]
         sources = features["sources"]
 
-        verdict, rationale = self._judge(rounds, f1, sources)
+        sqid = sub_question["id"]
+        previous = self._best_f1.get(sqid)
+        if f1 is not None:
+            self._best_f1[sqid] = max(f1, previous if previous is not None else f1)
+
+        verdict, rationale = self._judge(rounds, f1, sources, previous)
 
         if verdict in (SUFFICIENT, ABANDONED, INSUFFICIENT):
             self._record_decision(sub_question, verdict, rationale, features, None)
@@ -202,9 +213,32 @@ class AdaptiveRetriever(StaticRetriever):
         # sub-question with the reformulated query recorded above.
         return IN_PROGRESS
 
-    def _judge(self, rounds: int, f1: float | None, sources: int) -> tuple[str, str]:
-        """The threshold policy. Deterministic given the evidence, and
-        therefore inspectable — which an LLM's "that seems enough" is not."""
+    def _judge(
+        self,
+        rounds: int,
+        f1: float | None,
+        sources: int,
+        previous_best: float | None = None,
+    ) -> tuple[str, str]:
+        """The stopping policy. Deterministic given the evidence, and
+        therefore inspectable — which an LLM's "that seems enough" is not.
+
+        Two tests, and the second matters more than the first.
+
+        The **absolute** test asks whether the evidence is good enough. The
+        **marginal** test asks whether the last round made it better. A
+        retriever with only the absolute test escalates until it runs out of
+        rounds whenever the corpus simply cannot clear the bar: a live C21
+        run spent 9 retrieval calls, 6 LLM calls and 71 seconds to reach
+        exactly the f1 the static retriever reached in 3 calls and 8 seconds,
+        because no round after the first improved anything and nothing
+        noticed.
+
+        That is not adaptivity, it is a fixed schedule with a threshold
+        attached — §2.4's "the loop counter is the only thing that changes
+        between iterations". Stopping when a round stops helping is what
+        makes the number of rounds depend on the evidence.
+        """
         if f1 is None:
             if rounds >= self.max_rounds:
                 return ABANDONED, f"nothing retrieved in {rounds} rounds"
@@ -214,6 +248,19 @@ class AdaptiveRetriever(StaticRetriever):
             return SUFFICIENT, (
                 f"f1={f1:.2f} >= {self.sufficient_min_rerank} across "
                 f"{sources} sources"
+            )
+
+        # Marginal test: did this round actually buy anything?
+        if previous_best is not None and f1 - previous_best < self.min_improvement:
+            # Another attempt is unlikely to help. Whether that is a success
+            # or a gap depends on the evidence we have, not on the fact that
+            # we stopped.
+            verdict = (
+                SUFFICIENT if f1 >= self.sufficient_min_rerank else INSUFFICIENT
+            )
+            return verdict, (
+                f"round {rounds} improved f1 by {f1 - previous_best:+.2f} "
+                f"(< {self.min_improvement}); further rounds unlikely to help"
             )
 
         if rounds >= self.max_rounds:

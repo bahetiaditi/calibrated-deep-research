@@ -213,16 +213,37 @@ def main() -> int:
         depths = [len(set(sq["attempted_routes"])) for sq in st["plan"]]
         print(f"{DIM}   {label:<9} rounds={rounds}  distinct routes={depths}{RESET}")
 
-    adaptive_rounds = {sq["rounds"] for sq in adaptive_state["plan"]}
-    adaptive_routes = {tuple(sq["attempted_routes"])
-                       for sq in adaptive_state["plan"]}
-    if len(adaptive_rounds) > 1 or len(adaptive_routes) > 1:
-        ok("f8/f9 now vary across sub-questions — D2 and D3 are doing "
-           "something measurable")
+    # The comparison that matters is static vs adaptive, not variance across
+    # sub-questions within one run. Three sub-questions of a single question
+    # are often genuinely similar, so expecting them to differ tests the
+    # question's shape rather than the retriever's behaviour.
+    static_rounds = [sq["rounds"] for sq in static_state["plan"]]
+    adaptive_rounds = [sq["rounds"] for sq in adaptive_state["plan"]]
+    static_depth = [len(set(sq["attempted_routes"]))
+                    for sq in static_state["plan"]]
+    adaptive_depth = [len(set(sq["attempted_routes"]))
+                      for sq in adaptive_state["plan"]]
+
+    if adaptive_rounds != static_rounds:
+        ok(f"f8 differs from the static baseline: {static_rounds} -> "
+           f"{adaptive_rounds}")
     else:
-        warn("f8 and f9 are still constant. Every sub-question took the same "
-             "path, so on this question the adaptive retriever behaved "
-             "identically to the static one.")
+        warn("f8 matches the static baseline exactly — D3 changed nothing "
+             "on this question")
+
+    if adaptive_depth != static_depth:
+        ok(f"f9 differs from the static baseline: {static_depth} -> "
+           f"{adaptive_depth}")
+    else:
+        warn("f9 matches the static baseline — D2 never escalated a route")
+
+    if len(set(adaptive_rounds)) > 1:
+        ok("round count varies BETWEEN sub-questions — the number of rounds "
+           "depends on the evidence, not on a schedule")
+    else:
+        warn(f"every sub-question took exactly {adaptive_rounds[0]} round(s). "
+             f"If that is the round limit, the retriever is running a "
+             f"schedule rather than deciding (§2.4).")
 
     print()
     if failures:

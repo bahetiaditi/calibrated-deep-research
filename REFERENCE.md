@@ -2296,3 +2296,46 @@ retrieval calls against 3. §6.7's framing applies: the comparison that
 matters is cost per *correctly-answered-or-correctly-abstained* question, not
 cost per question. sq3 ending `insufficient` after three honest rounds is
 part of what the extra cost bought.
+
+**2026-09-07 — C21 third run: f4 recovered, and a schedule masquerading as a
+decision.**
+
+Clamping the first attempt worked: independent sources back to 12, matching
+static. But the run exposed something more important.
+
+**Every sub-question ran exactly 3 rounds — the round limit — and reached
+f1 3.07, which is exactly what the static retriever reached in one round.**
+9 retrieval calls against 3, 6 LLM calls against 0, 71 seconds against 8, for
+an identical headline number.
+
+The cause: `sufficient_min_rerank: 4.0` was calibrated on the C20 run, where
+retrieval was *unfiltered* and well-covered questions scored f1 7-8.6. With
+route filters live the candidate pool is a slice of the corpus, so f1 is
+systematically lower — abstracts alone cannot score what the whole corpus
+could. **Thresholds calibrated before filtering do not transfer after it**,
+which is worth remembering at C33 when τ is chosen.
+
+But the threshold was the symptom. The defect was that the retriever had
+**only an absolute test**: is the evidence good enough? With nothing able to
+clear the bar it escalated until it ran out of rounds, every time, on every
+sub-question. That is §2.4's anti-pattern exactly — "the loop counter is the
+only thing that changes between iterations" — and it would have passed an
+ablation naively, because A3 (one round, always stop) really would have
+produced different numbers.
+
+**Fix: a marginal test alongside the absolute one.** If a round improves f1
+by less than `min_improvement` (0.5) over the best so far, stop — further
+rounds are unlikely to help. Whether that stop is `sufficient` or
+`insufficient` depends on the evidence held, not on the fact of stopping.
+
+This is what makes the number of rounds **depend on the evidence**: an easy
+sub-question stops at 1, a plateauing one at 2, and only a genuinely
+improving one runs to 3. A test asserts exactly that property.
+
+**The smoke check was also testing the wrong thing.** It compared f8/f9
+variance *across sub-questions within one run*; three sub-questions of a
+single question are often genuinely similar, so that measures the question's
+shape rather than the retriever's behaviour. It now compares adaptive against
+the static baseline — the comparison the ablations actually make — and
+separately flags the schedule signature (every sub-question hitting the round
+limit).

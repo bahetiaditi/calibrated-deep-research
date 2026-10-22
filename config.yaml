@@ -195,6 +195,24 @@ retrieval:
     input_candidates: 30
     output_top_k: 8
     batch_size: 16
+  # D2 and D3 thresholds (C21). These gate when the agent escalates.
+  #
+  # f1 (max rerank logit) is the primary signal: after the C17 activation
+  # fix it ranges roughly -2 to +9, and a live C20 run separated
+  # well-covered questions (mean 7.2) from corpus gaps (mean 0.0) cleanly.
+  # The thresholds sit in that gap.
+  adaptive:
+    # Good enough to stop: strong top passage AND more than one source.
+    sufficient_min_rerank: 4.0
+    min_independent_sources: 2
+    # Nothing retrieved comes close. Below this after a second attempt, the
+    # honest move is to declare the sub-question unresolved rather than
+    # spend more budget on it — an admitted gap beats a confident guess.
+    hopeless_max_rerank: 0.0
+    # The obvious cases are decided from features alone, free and auditable.
+    # Only the ambiguous middle costs an LLM call to reformulate.
+    reformulate_with_llm: true
+
   store:
     backend: qdrant
     path: data/qdrant

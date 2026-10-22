@@ -1,0 +1,370 @@
+"""Adaptive retriever — D2 and D3 live (C21).
+
+What changes from C17
+---------------------
+Three decisions stop being constants:
+
+  D3  stop / deeper / wider / give up, from the evidence actually retrieved
+  D2a which route to try next, conditioned on what has already been tried
+  D2b how to rephrase the query, conditioned on what came back
+
+Everything else — the retrieval mechanics, the bookkeeping, the feature
+extraction — is inherited from `StaticRetriever` unchanged. That is
+deliberate: §6.5's A2 and A3 ablations restore the static decisions while
+holding everything else fixed, and the comparison is only clean if the
+*only* difference is the decision.
+
+Where the LLM is, and where it is not
+-------------------------------------
+D3 is decided from features, not by a model. A sub-question whose best
+passage scores 8.6 is plainly answered; one scoring -1.9 plainly is not.
+Spending an LLM call to be told that would cost roughly 2,500 tokens per
+sub-question per round against a daily budget of 200,000, and it would make
+the decision less auditable rather than more — a threshold on f1 can be
+inspected, a model's "I think that's enough" cannot.
+
+This is still adaptive in the sense §2.1 requires: the decision is
+*conditioned on the evidence retrieved*, so freezing it changes behaviour,
+which is what A3 measures. "Adaptive" means the outcome depends on what
+happened, not that an LLM was involved.
+
+The LLM is used for the one part that genuinely needs language: writing a
+better query after a failure. A threshold cannot tell you that "what
+perplexity does the model reach" should become "WikiText-103 perplexity
+results table", and that rewrite is where the recovery actually comes from.
+
+**Cost: one LLM call per escalation, and none at all for a sub-question
+answered on the first attempt.** Round one needs no conditioning because
+there is no history to condition on, so the common case is free.
+
+Thresholds
+----------
+`sufficient_min_rerank: 4.0` sits in the gap a live C20 run measured:
+well-covered questions averaged f1 7.2, corpus gaps averaged 0.0, with the
+worst good question at 4.74 and the best bad one at 2.58. The threshold is
+fitted to observed data rather than guessed, and it is in config so C33 can
+revisit it once the calibration split exists.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from src.config import Config
+from src.nodes.retriever import RetrievalOutcome, StaticRetriever, _coerce_route
+from src.prompts import render
+from src.state import Route, SubQuestion
+
+log = logging.getLogger(__name__)
+
+# What "deeper" and "wider" mean as route moves. Deeper reads further into
+# material already found; wider looks somewhere else entirely.
+DEEPER_FROM: dict[str, Route] = {
+    "arxiv_meta": "arxiv_fulltext",
+    "web": "arxiv_fulltext",
+    "evidence_store": "arxiv_meta",
+    "arxiv_fulltext": "arxiv_fulltext",
+}
+WIDER_FROM: dict[str, Route] = {
+    "arxiv_meta": "web",
+    "arxiv_fulltext": "web",
+    "web": "arxiv_meta",
+    "evidence_store": "web",
+}
+
+SUFFICIENT = "sufficient"
+INSUFFICIENT = "insufficient"
+ABANDONED = "abandoned"
+
+
+class AdaptiveRetriever(StaticRetriever):
+    def __init__(self, config: Config | None = None, *, provider: Any = None, **kw):
+        super().__init__(config, **kw)
+        adaptive = self.cfg.section("retrieval.adaptive")
+        self.sufficient_min_rerank = float(adaptive.get("sufficient_min_rerank", 4.0))
+        self.min_sources = int(adaptive.get("min_independent_sources", 2))
+        self.hopeless_max_rerank = float(adaptive.get("hopeless_max_rerank", 0.0))
+        self.reformulate_with_llm = bool(adaptive.get("reformulate_with_llm", True))
+        self.max_rounds = int(
+            self.cfg.get("budget.max_rounds_per_subquestion", 3)
+        )
+
+        # Agency flags: these are what A2 and A3 flip.
+        self.d2_live = bool(self.cfg.get("agency.d2_adaptive_route_and_query", True))
+        self.d3_live = bool(self.cfg.get("agency.d3_adaptive_depth_and_stopping", True))
+
+        self._provider = provider
+        self._plan_decision: dict[str, dict[str, Any]] = {}
+
+    @property
+    def provider(self) -> Any:
+        if self._provider is None:
+            from src.llm.provider import LLMProvider
+
+            self._provider = LLMProvider(self.cfg, tracer=self.tracer)
+        return self._provider
+
+    # -- D2: route and query ------------------------------------------------
+
+    def choose_route(self, sub_question: SubQuestion) -> Route:
+        if not self.d2_live:
+            return super().choose_route(sub_question)
+
+        attempted = sub_question.get("attempted_routes") or []
+        if not attempted:
+            # First attempt: the planner's suggestion, which is the best
+            # information available before anything has been tried.
+            return _coerce_route(sub_question.get("suggested_route"))
+
+        decision = self._plan_decision.get(sub_question["id"]) or {}
+        route = decision.get("route")
+        if route:
+            return _coerce_route(route)
+
+        # No LLM decision recorded (reformulation disabled or it failed):
+        # escalate deterministically rather than repeating a failed route.
+        return self._escalate_route(attempted[-1], "wider")
+
+    def formulate_query(self, sub_question: SubQuestion) -> str:
+        if not self.d2_live:
+            return super().formulate_query(sub_question)
+
+        decision = self._plan_decision.get(sub_question["id"]) or {}
+        query = (decision.get("query") or "").strip()
+        attempted = sub_question.get("attempted_queries") or []
+        if query and query not in attempted:
+            return query
+        return sub_question["text"]
+
+    def _escalate_route(self, last: str, action: str) -> Route:
+        table = DEEPER_FROM if action == "deeper" else WIDER_FROM
+        return table.get(str(last), "web")  # type: ignore[return-value]
+
+    # -- D3: depth and stopping ---------------------------------------------
+
+    def decide_next(self, sub_question: SubQuestion, outcome: RetrievalOutcome) -> str:
+        if not self.d3_live:
+            return super().decide_next(sub_question, outcome)
+
+        rounds = int(sub_question.get("rounds", 0)) + 1
+        features = outcome_features(outcome)
+        f1 = features["f1"]
+        sources = features["sources"]
+
+        verdict, rationale = self._judge(rounds, f1, sources)
+
+        if verdict in (SUFFICIENT, ABANDONED):
+            self._record_decision(sub_question, verdict, rationale, features, None)
+            return verdict
+
+        # Escalating: this is where the LLM earns its call.
+        decision = self._reformulate(sub_question, outcome, features)
+        if decision is None or decision.get("action") == "give_up":
+            reason = (decision or {}).get("reasoning", "no viable reformulation")
+            self._record_decision(sub_question, ABANDONED, reason, features, decision)
+            return ABANDONED
+
+        self._plan_decision[sub_question["id"]] = decision
+        self._record_decision(
+            sub_question, INSUFFICIENT,
+            f"{decision.get('action')}: {decision.get('reasoning', '')}",
+            features, decision,
+        )
+        # INSUFFICIENT with rounds remaining is what tells the controller to
+        # come back to this sub-question.
+        return INSUFFICIENT
+
+    def _judge(self, rounds: int, f1: float | None, sources: int) -> tuple[str, str]:
+        """The threshold policy. Deterministic given the evidence, and
+        therefore inspectable — which an LLM's "that seems enough" is not."""
+        if f1 is None:
+            if rounds >= self.max_rounds:
+                return ABANDONED, f"nothing retrieved in {rounds} rounds"
+            return INSUFFICIENT, "nothing retrieved; trying another approach"
+
+        if f1 >= self.sufficient_min_rerank and sources >= self.min_sources:
+            return SUFFICIENT, (
+                f"f1={f1:.2f} >= {self.sufficient_min_rerank} across "
+                f"{sources} sources"
+            )
+
+        if rounds >= self.max_rounds:
+            # Out of rounds. Sufficient only if the evidence is actually
+            # good; otherwise the gap is reported rather than papered over.
+            if f1 >= self.sufficient_min_rerank:
+                return SUFFICIENT, f"f1={f1:.2f} but only {sources} source(s)"
+            return INSUFFICIENT, (
+                f"round limit reached with f1={f1:.2f}; reporting the gap"
+            )
+
+        if f1 <= self.hopeless_max_rerank and rounds >= 2:
+            return ABANDONED, (
+                f"f1={f1:.2f} after {rounds} rounds — no source appears to "
+                f"address this"
+            )
+
+        return INSUFFICIENT, f"f1={f1:.2f} below {self.sufficient_min_rerank}"
+
+    # -- reformulation (the LLM call) ---------------------------------------
+
+    def _reformulate(
+        self,
+        sub_question: SubQuestion,
+        outcome: RetrievalOutcome,
+        features: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        last_route = (sub_question.get("attempted_routes") or ["arxiv_meta"])[-1]
+
+        if not self.reformulate_with_llm or not self.d2_live:
+            return {
+                "action": "wider",
+                "route": self._escalate_route(last_route, "wider"),
+                "query": sub_question["text"],
+                "reasoning": "deterministic escalation (LLM reformulation off)",
+            }
+
+        if self.budget is not None and not self.budget.can_spend("llm"):
+            log.info("no LLM budget for reformulation; escalating route only")
+            return {
+                "action": "wider",
+                "route": self._escalate_route(last_route, "wider"),
+                "query": sub_question["text"],
+                "reasoning": "budget exhausted; route escalation only",
+            }
+
+        attempted = "\n".join(
+            f"- route={r}  query={q!r}"
+            for r, q in zip(
+                sub_question.get("attempted_routes") or [],
+                sub_question.get("attempted_queries") or [],
+            )
+        ) or "(nothing yet)"
+
+        summary = _summarise(outcome, features)
+
+        try:
+            parsed, _ = self.provider.complete_json(
+                system=render(
+                    "retriever_reformulate",
+                    sub_question=sub_question["text"],
+                    question=sub_question.get("rationale") or sub_question["text"],
+                    attempted=attempted,
+                    evidence_summary=summary,
+                ),
+                user="Decide how to retry.",
+                required_keys=["action"],
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Same contract as everywhere else: a failed decision degrades to
+            # a deterministic one rather than crashing the run.
+            log.warning("reformulation failed: %s", exc)
+            return {
+                "action": "wider",
+                "route": self._escalate_route(last_route, "wider"),
+                "query": sub_question["text"],
+                "reasoning": f"reformulation failed ({type(exc).__name__})",
+            }
+
+        if self.budget is not None and self.budget.can_spend("llm"):
+            self.budget.spend("llm", 1)
+
+        action = str(parsed.get("action") or "wider").lower()
+        if action not in ("deeper", "wider", "give_up"):
+            action = "wider"
+
+        route = parsed.get("route")
+        if not route:
+            route = self._escalate_route(last_route, action)
+
+        return {
+            "action": action,
+            "route": _coerce_route(route),
+            "query": str(parsed.get("query") or "").strip(),
+            "reasoning": str(parsed.get("reasoning") or "")[:300],
+        }
+
+    # -- tracing ------------------------------------------------------------
+
+    def _record_decision(
+        self,
+        sub_question: SubQuestion,
+        verdict: str,
+        rationale: str,
+        features: dict[str, Any],
+        decision: dict[str, Any] | None,
+    ) -> None:
+        if self.tracer is None:
+            return
+        from src.tracing.tracer import DecisionSurface
+
+        self.tracer.decision(
+            DecisionSurface.D3_DEPTH_AND_STOPPING,
+            chosen=verdict,
+            alternatives=[SUFFICIENT, INSUFFICIENT, ABANDONED],
+            rationale=rationale,
+            inputs={
+                "rounds": int(sub_question.get("rounds", 0)) + 1,
+                "f1_max_rerank": features.get("f1"),
+                "independent_sources": features.get("sources"),
+                "n_results": features.get("n_results"),
+            },
+            was_adaptive=self.d3_live,
+        )
+        if decision is not None:
+            self.tracer.decision(
+                DecisionSurface.D2_ROUTE_AND_QUERY,
+                chosen={"route": decision.get("route"),
+                        "query": decision.get("query")},
+                alternatives=[r for r in ("arxiv_meta", "arxiv_fulltext", "web")
+                              if r != decision.get("route")],
+                rationale=decision.get("reasoning", ""),
+                inputs={
+                    "attempted_routes": sub_question.get("attempted_routes", []),
+                    "attempted_queries": sub_question.get("attempted_queries", []),
+                    "action": decision.get("action"),
+                },
+                was_adaptive=self.d2_live,
+            )
+
+
+def outcome_features(outcome: RetrievalOutcome) -> dict[str, Any]:
+    """The subset of the feature vector D3 reads, from one round's results."""
+    scores = sorted(outcome.rerank_scores, reverse=True)
+    return {
+        "f1": scores[0] if scores else None,
+        "sources": len({
+            p.get("source_id") for p in outcome.passages if p.get("source_id")
+        }),
+        "n_results": len(outcome.passages),
+    }
+
+
+def _summarise(outcome: RetrievalOutcome, features: dict[str, Any]) -> str:
+    """What the reformulation prompt is shown.
+
+    Titles and sections rather than full text: the model needs to see what
+    *kind* of thing came back to judge whether the query found the wrong
+    topic or the wrong granularity, and full passages would cost thousands
+    of tokens to say the same thing.
+    """
+    if not outcome.passages:
+        return "Nothing was returned."
+
+    lines = [
+        f"{features['n_results']} passages from {features['sources']} "
+        f"source(s); best relevance score {features['f1']:.2f} "
+        f"(above ~4 means the passage answers the query)."
+    ]
+    for passage in outcome.passages[:5]:
+        section = passage.get("section") or "—"
+        lines.append(
+            f"- [{section}] {passage.get('source_id', '?')}: "
+            f"{(passage.get('text') or '')[:140]}"
+        )
+    return "\n".join(lines)
+
+
+def adaptive_retriever_node(retriever: AdaptiveRetriever):
+    from src.nodes.retriever import retriever_node
+
+    return retriever_node(retriever)

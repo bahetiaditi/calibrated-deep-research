@@ -223,15 +223,27 @@ def default_components(config: Config | None = None) -> Components:
     """
     cfg = config or get_config()
 
+    from src.nodes.adaptive_retriever import AdaptiveRetriever
     from src.nodes.planner import Planner, planner_node
     from src.nodes.premise_checker import PremiseChecker, premise_checker_node
     from src.nodes.retriever import StaticRetriever, retriever_node
     from src.nodes.synthesizer import Synthesizer, synthesizer_node
 
+    # Which retriever runs is decided by the agency flags, so the A2 and A3
+    # ablations are a config change rather than a code path. When BOTH are
+    # frozen the static class is used directly: the adaptive class with
+    # every decision disabled would behave identically, but running the
+    # original makes "the ablation restores C17" a fact rather than a claim.
+    d2 = bool(cfg.get("agency.d2_adaptive_route_and_query", True))
+    d3 = bool(cfg.get("agency.d3_adaptive_depth_and_stopping", True))
+    retriever = (
+        StaticRetriever(cfg) if not (d2 or d3) else AdaptiveRetriever(cfg)
+    )
+
     return Components(
         premise_checker=premise_checker_node(PremiseChecker(cfg)),
         planner=planner_node(Planner(cfg)),
-        retriever=retriever_node(StaticRetriever(cfg)),
+        retriever=retriever_node(retriever),
         synthesizer=synthesizer_node(Synthesizer(cfg)),
     )
 

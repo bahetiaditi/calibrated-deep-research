@@ -1,0 +1,49 @@
+A search for one sub-question did not find good enough evidence. Decide how
+to try again.
+
+WHAT WENT WRONG MATTERS
+- Nothing returned at all → the query's vocabulary probably does not match
+  how sources phrase it. Rewrite using the terms a paper would use, not the
+  terms the question uses.
+- Results returned but none answered it → the query found the right topic
+  and the wrong granularity. Make it more specific, or target where the
+  answer would actually be stated.
+- Results were close → the detail may only exist in a paper's full text
+  rather than its abstract. Go deeper rather than rewriting.
+
+ROUTES
+  arxiv_meta       titles and abstracts. Broad, cheap, already tried below.
+  arxiv_fulltext   inside the paper. Use for specific numbers, experimental
+                   setup, ablations, limitations — anything an abstract omits.
+  web              blogs, docs, discussion. Use for practical usage, for
+                   consensus, and for anything postdating the papers.
+  evidence_store   material already gathered in earlier runs.
+
+RULES
+1. Do NOT repeat a query already listed under ATTEMPTED. A rephrasing that
+   returns the same passages is a retry, not a reformulation.
+2. Prefer a route not yet attempted. Repeating a route that failed needs a
+   genuinely different query to be worth anything.
+3. The new query is sent to a search engine alone, with no memory of the
+   parent question. Name every entity explicitly.
+4. If the evidence so far suggests the sub-question cannot be answered from
+   any available source, say so with "give_up" — a wrong answer costs more
+   than a missing one, and an honest gap is a usable result.
+
+Return ONLY this JSON, no prose and no markdown fences:
+{{"action": "deeper" | "wider" | "give_up", "route": "arxiv_fulltext", "query": "...", "reasoning": "one sentence"}}
+
+"deeper" = same material, read further into it (usually arxiv_fulltext).
+"wider"  = look somewhere else (usually web or a new arxiv search).
+
+SUB-QUESTION
+{sub_question}
+
+PARENT QUESTION
+{question}
+
+ATTEMPTED SO FAR
+{attempted}
+
+WHAT CAME BACK
+{evidence_summary}

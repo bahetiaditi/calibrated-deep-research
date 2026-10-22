@@ -2139,3 +2139,57 @@ rather than being surprised by it then.
 under the static policy by construction, and they are the two features that
 can only move if D2 and D3 are live. They are the direct measurement of
 whether C21 does anything.
+
+**2026-09-07 — C21. Adaptive retriever. D2 and D3 live.**
+
+`src/nodes/adaptive_retriever.py`, subclassing `StaticRetriever` so the
+*only* difference between the two is the decision. A2 and A3 restore the
+static policy while everything else stays fixed, and that comparison is only
+clean if nothing else differs.
+
+**Where the LLM is, and where it deliberately is not.**
+
+D3 (stop / deeper / wider / give up) is decided from features, not by a
+model. A sub-question whose best passage scores 8.6 is plainly answered; one
+scoring -1.9 plainly is not. Asking a model costs ~2,500 tokens per
+sub-question per round against a 200,000-token daily budget, and it makes the
+decision *less* auditable — a threshold on f1 can be inspected, "I think
+that's enough" cannot.
+
+This is still adaptive in the sense §2.1 requires. The decision is
+**conditioned on the evidence retrieved**, so freezing it changes behaviour,
+which is exactly what A3 measures. Adaptive means the outcome depends on what
+happened, not that a language model was consulted. Stating this now matters,
+because "but it's only a threshold" is the obvious interview challenge and
+the answer is the falsifiable test, not the mechanism.
+
+D2's *query reformulation* does use the LLM, because it genuinely needs
+language: no threshold can know that "what perplexity does the model reach"
+should become "WikiText-103 perplexity results table", and that rewrite is
+where recovery actually comes from.
+
+**Cost: one LLM call per escalation, zero for a sub-question answered first
+time.** Round one has no history to condition on, so conditioning there would
+be vacuous — the common case is free, and only failure costs anything.
+
+**Thresholds fitted to measured data, not guessed.**
+`sufficient_min_rerank: 4.0` sits inside the gap the C20 run measured:
+well-covered questions averaged f1 7.17 (worst 4.74), corpus gaps averaged
+0.02 (best 2.58). `hopeless_max_rerank: 0.0` is the other side of it. Both
+live in config so C33 can revisit them once the calibration split exists.
+
+**Two guards against §2.4's anti-patterns.** A reformulated query identical
+to one already attempted is rejected and the sub-question falls back rather
+than looping — "if iteration 2 issues the same queries as iteration 1, you
+have a retry, not a re-plan". And when the LLM is unavailable, the route
+escalates deterministically rather than repeating a route that just failed.
+
+**The graph now chooses its retriever from the agency flags**, so A2 and A3
+are a config change rather than a code path. With both frozen it instantiates
+`StaticRetriever` directly — the adaptive class with every decision disabled
+would behave identically, but running the original makes "the ablation
+restores C17" a fact rather than a claim.
+
+**f8 and f9 are the acceptance test that matters.** They are constants under
+the static policy by construction, so if they are still constant after this
+commit, D2 and D3 changed nothing and no ablation is needed to know it.

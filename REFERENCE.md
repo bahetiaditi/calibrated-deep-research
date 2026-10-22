@@ -2339,3 +2339,57 @@ shape rather than the retriever's behaviour. It now compares adaptive against
 the static baseline — the comparison the ablations actually make — and
 separately flags the schedule signature (every sub-question hitting the round
 limit).
+
+**2026-09-07 — C21 complete. All criteria met; the honest reading of the
+numbers.**
+
+```
+STATIC    sq1 sufficient  r=1   sq2 sufficient  r=1   sq3 sufficient  r=1
+ADAPTIVE  sq1 insufficient r=2  sq2 sufficient  r=3   sq3 insufficient r=2
+```
+
+Rounds now vary with the evidence (2, 3, 2 against a flat 1), routes escalate,
+queries are reformulated, and cost fell from 71s to 18s once the marginal
+test was added.
+
+**The most important difference is not in the delta table.** Static marked
+every sub-question `sufficient`; adaptive marked two `insufficient`. Static
+never *checked* — one round, no evaluation, status assigned by whether
+anything came back at all. Adaptive examined the evidence and reported that
+two sub-questions did not reach the bar.
+
+Those two labels are what D5 reads. The difference between a system that
+answers everything and one that knows what it lacks is invisible to f1, f2
+and f3, and it is the thing this project is actually about. Any comparison
+table that reports only the evidence metrics understates the adaptive
+retriever in exactly the dimension that matters — worth stating when the
+ablation results are written up.
+
+**On the evidence metrics themselves, the result is modest and should be
+reported as modest:**
+
+| | static | adaptive | |
+|---|---|---|---|
+| f1 max rerank | 3.07 | 3.07 | unchanged |
+| f2 mean top-3 | 1.33 | **2.57** | better |
+| passages | 14 | **35** | more |
+| f3 | 7.86 | 1.54 | see below |
+| sources | 12 | 12 | unchanged |
+| cost | 3 retrieval, 0 LLM, 9s | 7 retrieval, 4 LLM, 18s | 2x |
+
+f1 being *identical* is informative rather than disappointing: both
+retrievers used `arxiv_meta` on round one and found the same best passage
+immediately. Escalation then added depth — f2 up, passages up — but could
+not improve on a peak the corpus had already yielded. **When the corpus has
+a ceiling, more rounds buy breadth, not a better top passage.** That is a
+real finding about when D3 helps and when it cannot.
+
+f3 falling from 7.86 to 1.54 is the joint-reading problem again: static's
+"sharp peak" was one acceptable passage among junk, adaptive's flat
+distribution is several decent ones. Reported alone, f3 says static won.
+
+**No further threshold tuning here.** Fitting `sufficient_min_rerank` to this
+one question would be overfitting to a single example, and whether D2 and D3
+earn their cost is C35's question across 24 benchmark questions, not C21's
+across one. The thresholds stay in config and are revisited at C33 with the
+calibration split.

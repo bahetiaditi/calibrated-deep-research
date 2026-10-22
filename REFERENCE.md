@@ -2083,3 +2083,59 @@ is the encouraging part.
 **f7 was "never observed" for a script reason, not a feature reason** — the
 smoke test ran the planner without the premise checker. Fixed; it now runs
 the checker so f7 is exercised.
+
+**2026-09-07 — C20 complete run. The first evidence that the feature vector
+separates answerable from unanswerable questions.**
+
+The ledger rolled over at midnight and cleared the poisoned state on its own;
+the reset tool confirmed it was already at 0/200000 rather than genuinely
+spent. All ten questions ran.
+
+**f1 now ranges -1.93 to 8.64 (stdev 3.85).** Negative logits mean the
+cross-encoder judges that nothing retrieved answers the query — a signal that
+did not exist at all while the reranker was returning sigmoids (C17 fix),
+where everything compressed into [0.89, 0.97].
+
+Grouping the ten questions by what the C13 labelling already told us about
+corpus coverage:
+
+| | f1 mean | f1 range |
+|---|---|---|
+| Well covered (≥3 fully-relevant passages in the C13 pool) | **7.17** | 4.74 to 8.64 |
+| Poorly covered (≤1) or false premise | **0.02** | -1.93 to 2.58 |
+
+| feature | worst good | best bad | separation |
+|---|---|---|---|
+| f1 max rerank | 4.74 | 2.58 | **clean** |
+| f2 mean top-3 | 3.94 | 1.47 | **clean** |
+| f3 score gap | 1.27 | 5.05 | overlaps |
+| f4 independent sources | 4.00 | 6.00 | overlaps |
+| f7 premise grounding | 0.83 | 1.00 | overlaps |
+| f10 recency | 0.33 | 0.93 | overlaps |
+
+The three questions the C13 labelling flagged as corpus gaps — rq20
+(perplexity, 1 grade-2), rq21 (limitations, 1), rq29 (RAG failure modes, 0) —
+land at f1 of 1.16, 2.58 and -1.75. The false-premise question lands at
+-1.93. **The features found the same questions the human labelling did**,
+without being told.
+
+**What this is and is not.** It is a signal check on ten hand-picked
+questions with no labels, not a result: n=10, no held-out split, and the
+grouping uses the C13 pool as a proxy for answerability. Claim 1 (§1.4) is
+tested at C33 by fitting the calibrated model and at C36 on the held-out 24,
+and nothing here substitutes for that. What it does establish is that the
+vector is worth fitting a model to — which before this run was an assumption.
+
+**f4 separates in the wrong direction**, and that is worth knowing early:
+poorly-covered questions averaged 5.25 independent sources against 5.67 for
+well-covered ones. Retrieval returns *something* from many sources regardless
+of whether any of it answers the question, so source count measures breadth,
+not sufficiency. On its own it may be near-useless; its value, if any, will
+be as an interaction with f1 — many sources AND high rerank is different from
+many sources and low rerank. Worth noting in the C33 coefficient discussion
+rather than being surprised by it then.
+
+**f8 and f9 remain at stdev 0**, exactly as predicted. They are constants
+under the static policy by construction, and they are the two features that
+can only move if D2 and D3 are live. They are the direct measurement of
+whether C21 does anything.

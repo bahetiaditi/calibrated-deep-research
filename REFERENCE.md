@@ -2193,3 +2193,47 @@ restores C17" a fact rather than a claim.
 **f8 and f9 are the acceptance test that matters.** They are constants under
 the static policy by construction, so if they are still constant after this
 commit, D2 and D3 changed nothing and no ablation is needed to know it.
+
+**2026-09-07 — C21 live run: D2 was decorative by construction. Two fixes.**
+
+The smoke test reported a **zero delta on every evidence metric** — f1, f2,
+f3, sources and passages all identical between static and adaptive — while
+costing 3 extra LLM calls and 4 seconds. The adaptive retriever was doing
+work and changing nothing. Two causes, and the first is the more serious.
+
+**1. The route was never used.** `_execute` called
+`self.retriever.retrieve(query, top_k=...)` with no filters. The route was
+written into `attempted_routes`, logged in the trace, shown in the smoke
+output — and then discarded. Escalating from `arxiv_meta` to
+`arxiv_fulltext` searched the identical corpus and returned byte-identical
+passages.
+
+This is **§2.4's first anti-pattern reached by omission**: "every LLM call is
+a text transformation... if no LLM output ever changes which node runs next,
+the graph is a straight line." Here the LLM output changed a field that
+nothing read. The trace showed an escalation; the system performed none.
+
+Worth sitting with, because it is the exact failure the project exists to
+detect, and it survived a full commit with 29 passing tests. The tests
+verified that the route was *recorded*, never that it *mattered* — and the
+smoke test caught it only because it compared against the static baseline
+rather than checking the adaptive path alone. **A test that the decision was
+made is not a test that the decision had an effect.**
+
+Routes now map to payload filters (C9's machinery): `arxiv_meta` to
+abstracts, `arxiv_fulltext` to paper bodies with abstracts excluded, `web` to
+web sources, `evidence_store` unfiltered. An empty slice falls back to an
+unfiltered search, because a route finding nothing is a fact about the corpus
+rather than about the query.
+
+**2. `insufficient` is terminal, and the adaptive retriever used it to mean
+"try again".** `TERMINAL_STATUSES` includes it, so `retrieve_all` stopped
+after round one on every sub-question. The reformulated query was computed,
+charged to the budget, stored — and never used. `in_progress`, already in the
+`Status` literal and already excluded from `TERMINAL_STATUSES`, is now the
+continuation state; `insufficient` keeps its original meaning of "finished,
+without enough evidence".
+
+Both fixes are covered by regression tests that assert the *effect* rather
+than the record: that filters reach the retriever, and that `retrieve_all`
+genuinely runs a second round.

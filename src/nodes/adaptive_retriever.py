@@ -73,6 +73,12 @@ WIDER_FROM: dict[str, Route] = {
 }
 
 SUFFICIENT = "sufficient"
+# "another round is wanted" and "finished, without enough evidence" are
+# different states and must not share a status. `insufficient` is in
+# TERMINAL_STATUSES, so returning it to mean "try again" stopped the loop
+# before any second round ever ran — the adaptive retriever behaved exactly
+# like the static one and the smoke test measured a zero delta.
+IN_PROGRESS = "in_progress"
 INSUFFICIENT = "insufficient"
 ABANDONED = "abandoned"
 
@@ -153,7 +159,7 @@ class AdaptiveRetriever(StaticRetriever):
 
         verdict, rationale = self._judge(rounds, f1, sources)
 
-        if verdict in (SUFFICIENT, ABANDONED):
+        if verdict in (SUFFICIENT, ABANDONED, INSUFFICIENT):
             self._record_decision(sub_question, verdict, rationale, features, None)
             return verdict
 
@@ -166,13 +172,13 @@ class AdaptiveRetriever(StaticRetriever):
 
         self._plan_decision[sub_question["id"]] = decision
         self._record_decision(
-            sub_question, INSUFFICIENT,
+            sub_question, IN_PROGRESS,
             f"{decision.get('action')}: {decision.get('reasoning', '')}",
             features, decision,
         )
-        # INSUFFICIENT with rounds remaining is what tells the controller to
-        # come back to this sub-question.
-        return INSUFFICIENT
+        # IN_PROGRESS is non-terminal, so the controller comes back to this
+        # sub-question with the reformulated query recorded above.
+        return IN_PROGRESS
 
     def _judge(self, rounds: int, f1: float | None, sources: int) -> tuple[str, str]:
         """The threshold policy. Deterministic given the evidence, and
@@ -180,7 +186,7 @@ class AdaptiveRetriever(StaticRetriever):
         if f1 is None:
             if rounds >= self.max_rounds:
                 return ABANDONED, f"nothing retrieved in {rounds} rounds"
-            return INSUFFICIENT, "nothing retrieved; trying another approach"
+            return IN_PROGRESS, "nothing retrieved; trying another approach"
 
         if f1 >= self.sufficient_min_rerank and sources >= self.min_sources:
             return SUFFICIENT, (
@@ -193,6 +199,8 @@ class AdaptiveRetriever(StaticRetriever):
             # good; otherwise the gap is reported rather than papered over.
             if f1 >= self.sufficient_min_rerank:
                 return SUFFICIENT, f"f1={f1:.2f} but only {sources} source(s)"
+            # Out of rounds and the evidence is weak: this IS terminal, and
+            # the gap gets reported rather than papered over.
             return INSUFFICIENT, (
                 f"round limit reached with f1={f1:.2f}; reporting the gap"
             )
@@ -203,7 +211,7 @@ class AdaptiveRetriever(StaticRetriever):
                 f"address this"
             )
 
-        return INSUFFICIENT, f"f1={f1:.2f} below {self.sufficient_min_rerank}"
+        return IN_PROGRESS, f"f1={f1:.2f} below {self.sufficient_min_rerank}"
 
     # -- reformulation (the LLM call) ---------------------------------------
 
@@ -300,7 +308,7 @@ class AdaptiveRetriever(StaticRetriever):
         self.tracer.decision(
             DecisionSurface.D3_DEPTH_AND_STOPPING,
             chosen=verdict,
-            alternatives=[SUFFICIENT, INSUFFICIENT, ABANDONED],
+            alternatives=[SUFFICIENT, IN_PROGRESS, INSUFFICIENT, ABANDONED],
             rationale=rationale,
             inputs={
                 "rounds": int(sub_question.get("rounds", 0)) + 1,

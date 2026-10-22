@@ -10,6 +10,7 @@ import pytest
 from src.config import Config
 from src.nodes.adaptive_retriever import (
     ABANDONED,
+    IN_PROGRESS,
     INSUFFICIENT,
     SUFFICIENT,
     AdaptiveRetriever,
@@ -127,12 +128,12 @@ def test_weak_evidence_escalates():
     sq = new_sub_question("q", sub_question_id="sq1")
     sq["attempted_routes"] = ["arxiv_meta"]
     sq["attempted_queries"] = ["q"]
-    assert build().decide_next(sq, outcome([2.0, 1.0], ["A", "B"])) == INSUFFICIENT
+    assert build().decide_next(sq, outcome([2.0, 1.0], ["A", "B"])) == IN_PROGRESS
 
 
 def test_nothing_retrieved_escalates():
     sq = new_sub_question("q", sub_question_id="sq1")
-    assert build().decide_next(sq, outcome([])) == INSUFFICIENT
+    assert build().decide_next(sq, outcome([])) == IN_PROGRESS
 
 
 def test_hopeless_evidence_is_abandoned_after_a_second_attempt():
@@ -147,7 +148,7 @@ def test_hopeless_evidence_is_abandoned_after_a_second_attempt():
 
 def test_hopeless_on_the_first_round_still_gets_a_second_chance():
     sq = new_sub_question("q", sub_question_id="sq1")
-    assert build().decide_next(sq, outcome([-1.9], ["A"])) == INSUFFICIENT
+    assert build().decide_next(sq, outcome([-1.9], ["A"])) == IN_PROGRESS
 
 
 def test_round_limit_reports_the_gap_rather_than_claiming_success():
@@ -299,7 +300,7 @@ def test_no_llm_budget_falls_back_to_route_escalation():
     sq = new_sub_question("q", sub_question_id="sq1")
     sq["attempted_routes"] = ["arxiv_meta"]
     sq["attempted_queries"] = ["q"]
-    assert retriever.decide_next(sq, outcome([1.0], ["A"])) == INSUFFICIENT
+    assert retriever.decide_next(sq, outcome([1.0], ["A"])) == IN_PROGRESS
     assert provider.calls == []
     assert retriever.choose_route(sq) == "web"
 
@@ -309,7 +310,7 @@ def test_reformulation_failure_degrades_to_escalation():
     sq = new_sub_question("q", sub_question_id="sq1")
     sq["attempted_routes"] = ["arxiv_meta"]
     sq["attempted_queries"] = ["q"]
-    assert build(provider=provider).decide_next(sq, outcome([1.0], ["A"])) == INSUFFICIENT
+    assert build(provider=provider).decide_next(sq, outcome([1.0], ["A"])) == IN_PROGRESS
 
 
 # --- the ablation switches -------------------------------------------------
@@ -433,7 +434,9 @@ def test_a_hard_sub_question_escalates_route_and_rewrites_the_query():
 
     update = retriever.retrieve_one(state, "sq1")
     state["plan"] = update["plan"]
-    assert state["plan"][0]["status"] == INSUFFICIENT
+    # in_progress, NOT insufficient: the latter is terminal, and returning
+    # it to mean "try again" stopped the loop before any second round.
+    assert state["plan"][0]["status"] == IN_PROGRESS
 
     update = retriever.retrieve_one(state, "sq1")
     sq = update["plan"][0]
@@ -456,8 +459,8 @@ def test_f8_and_f9_become_variable():
     state = state_with("easy", "hard")
 
     for _ in range(4):
-        pending = [sq for sq in state["plan"] if sq["status"] == "pending"
-                   or sq["status"] == INSUFFICIENT]
+        pending = [sq for sq in state["plan"]
+                   if sq["status"] in ("pending", IN_PROGRESS)]
         if not pending:
             break
         state["plan"] = retriever.retrieve_one(state, pending[0]["id"])["plan"]
@@ -471,3 +474,85 @@ def test_f8_and_f9_become_variable():
 def test_outcome_features_shape():
     f = outcome_features(outcome([5.0, 3.0], ["A", "A"]))
     assert f == {"f1": 5.0, "sources": 1, "n_results": 2}
+
+
+# --- the status machine (regression: C21 live run) -------------------------
+
+
+def test_in_progress_is_not_terminal():
+    """`insufficient` is in TERMINAL_STATUSES, so using it to mean 'try
+    again' made retrieve_all stop after one round — the adaptive retriever
+    behaved exactly like the static one and the smoke test measured a zero
+    delta across every metric."""
+    from src.state import TERMINAL_STATUSES
+
+    assert IN_PROGRESS not in TERMINAL_STATUSES
+    assert INSUFFICIENT in TERMINAL_STATUSES
+
+
+def test_retrieve_all_actually_runs_a_second_round():
+    retriever_impl = FakeRetriever(
+        by_query={"hard": [], "rewritten": [passage("P1", 9.0, "A"),
+                                            passage("P2", 8.0, "B")]},
+        default=[],
+    )
+    provider = FakeProvider([{
+        "action": "wider", "route": "web", "query": "rewritten", "reasoning": "r",
+    }])
+    final = build(retriever=retriever_impl,
+                  provider=provider).retrieve_all(state_with("hard"))
+    assert final["plan"][0]["rounds"] == 2
+    assert final["plan"][0]["status"] == SUFFICIENT
+
+
+# --- routes must change what is retrieved ----------------------------------
+
+
+def test_each_route_maps_to_different_filters():
+    """Until this was added the route was recorded and then ignored:
+    `_execute` searched the whole corpus regardless, so escalating from
+    arxiv_meta to arxiv_fulltext returned byte-identical passages. The trace
+    showed an escalation that changed nothing."""
+    r = build()
+    assert r.route_filters("arxiv_meta") == {
+        "source_type": "arxiv", "section": "Abstract"}
+    assert r.route_filters("arxiv_fulltext") == {
+        "source_type": "arxiv", "exclude_sections": ["Abstract"]}
+    assert r.route_filters("web") == {"source_type": "web"}
+    assert r.route_filters("evidence_store") == {}
+
+
+def test_filters_reach_the_retriever():
+    class RecordingRetriever(FakeRetriever):
+        def __init__(self):
+            super().__init__()
+            self.kwargs = []
+
+        def retrieve(self, query, *, top_k, **kw):
+            self.kwargs.append(kw)
+            return super().retrieve(query, top_k=top_k)
+
+    impl = RecordingRetriever()
+    state = state_with("q", route="arxiv_fulltext")
+    build(retriever=impl).retrieve_one(state, "sq1")
+    assert impl.kwargs[0]["source_type"] == "arxiv"
+    assert impl.kwargs[0]["exclude_sections"] == ["Abstract"]
+
+
+def test_an_empty_route_slice_falls_back_unfiltered():
+    """A route whose slice is empty is a fact about the corpus, not the
+    query — a thin corpus must not look like a failed query."""
+    calls = []
+
+    class EmptyThenFull(FakeRetriever):
+        def retrieve(self, query, *, top_k, **kw):
+            calls.append(kw)
+            if kw:
+                return []
+            return [FakeResult(passage("P1", 9.0, "A")),
+                    FakeResult(passage("P2", 8.0, "B"))]
+
+    state = state_with("q")
+    update = build(retriever=EmptyThenFull()).retrieve_one(state, "sq1")
+    assert len(update["evidence"]) == 2
+    assert calls[0] and not calls[1]

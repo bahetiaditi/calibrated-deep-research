@@ -223,12 +223,52 @@ class StaticRetriever:
 
     # -- the actual retrieval ----------------------------------------------
 
+    def route_filters(self, route: Route) -> dict[str, Any]:
+        """Turn a route into payload filters.
+
+        **This method is why D2 is a decision at all.** Until C21 the route
+        was recorded in `attempted_routes` and then ignored — `_execute`
+        retrieved over the whole corpus regardless, so escalating from
+        `arxiv_meta` to `arxiv_fulltext` returned byte-identical passages.
+        The trace showed an escalation that changed nothing, which is
+        §2.4's first anti-pattern ("every LLM call is a text
+        transformation") reached by omission.
+
+        The routes are genuinely different slices of the corpus:
+
+          arxiv_meta      paper abstracts — broad, cheap, good for finding
+                          which paper is relevant at all
+          arxiv_fulltext  inside papers, abstracts excluded — where a
+                          specific number or experimental detail lives
+          web             pages and posts — practical usage, consensus,
+                          anything postdating the papers
+          evidence_store  everything already gathered, unfiltered
+        """
+        if route == "arxiv_meta":
+            return {"source_type": "arxiv", "section": "Abstract"}
+        if route == "arxiv_fulltext":
+            return {"source_type": "arxiv", "exclude_sections": ["Abstract"]}
+        if route == "web":
+            return {"source_type": "web"}
+        return {}      # evidence_store: the whole corpus
+
     def _execute(
         self, sub_question_id: str, route: Route, query: str
     ) -> RetrievalOutcome:
         started = self._now()
+        filters = self.route_filters(route)
         try:
-            results = self.retriever.retrieve(query, top_k=self.candidates)
+            results = self.retriever.retrieve(
+                query, top_k=self.candidates, **filters
+            )
+            if not results and filters:
+                # A route whose slice is empty is a fact about the corpus,
+                # not about the query. Falling back unfiltered keeps a thin
+                # corpus from looking like a failed query — and the trace
+                # records that the fallback happened.
+                log.info("route %s returned nothing; retrying unfiltered",
+                         route)
+                results = self.retriever.retrieve(query, top_k=self.candidates)
             results = self.reranker.rerank(query, results, top_k=self.top_k)
         except Exception as exc:  # noqa: BLE001
             # Same contract as C6/C7: a retrieval failure is information the

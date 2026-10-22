@@ -2237,3 +2237,62 @@ without enough evidence".
 Both fixes are covered by regression tests that assert the *effect* rather
 than the record: that filters reach the retriever, and that `retrieve_all`
 genuinely runs a second round.
+
+**2026-09-07 — C21 working. First real evidence that D2 and D3 do something.**
+
+With routes actually filtering and `in_progress` non-terminal, the adaptive
+retriever recovered a question the static one could not:
+
+```
+round 1  [arxiv_meta]      "what proportion of the chip's arithmetic
+                            capability does the improved attention kernel
+                            actually manage to use"          -> f1 -2.04
+round 2  [arxiv_fulltext]  "FlashAttention-2 chip arithmetic utilization
+                            percentage of arithmetic capacity"
+round 3  [arxiv_fulltext]  "FlashAttention-2 chip arithmetic utilization
+                            72% model FLOPs"                 -> f1  6.01
+```
+
+Vernacular phrasing to technical vocabulary to the specific number, with the
+route escalating from abstracts into paper bodies. **This is the case study
+for §6.5 and the interview answer to "is it actually agentic?"** — a static
+retriever issues the first query and stops at f1 -2.04.
+
+**The comparison on the C17 question is mixed, and the mixture is
+informative:**
+
+| metric | static | adaptive | |
+|---|---|---|---|
+| f1 max rerank | 3.07 | **4.79** | better |
+| f2 mean top-3 | 1.33 | **3.10** | better |
+| passages | 14 | **27** | more |
+| f3 score gap | 7.86 | 2.92 | worse |
+| f4 independent sources | **12** | 2 | much worse |
+| cost | 3 retrieval, 0 LLM, 10s | 8 retrieval, 5 LLM, 52s | 5x slower |
+
+**f4 collapsing 12 → 2 was a real defect, now fixed.** The planner suggested
+`arxiv_fulltext` for all three sub-questions, so every one started inside
+paper bodies. Full-text chunks concentrate in the handful of ingested papers;
+abstracts span every paper a search returns. Depth bought precision and cost
+breadth — a bad trade to make *before the cheap route has even been tried*.
+
+§3.3 already said so: the reader is "invoked only when the retriever decides
+depth is needed (D3), which makes depth an **earned** cost rather than a
+default". A planner suggesting full text up front bypasses D3 entirely. The
+first attempt is now clamped to a cheap route; escalation still reaches full
+text, but only after a shallow attempt has failed.
+
+**f3 must be read jointly with f1, not alone.** Static scored f3 7.86 with f1
+3.07 — a "sharp peak" where the peak itself is mediocre and ranks 2-5 are
+terrible. Adaptive scored f3 2.92 with f1 4.79: several decent passages
+rather than one acceptable one among junk. A high gap over a low maximum is
+not evidence quality, and the C33 model must have both features available to
+disentangle them. Worth watching whether the fitted coefficients reflect
+that; if f3 gets a large positive weight on its own, the model has learned
+something misleading.
+
+**The cost is real and must be reported.** 5x wall clock, 5 LLM calls, 8
+retrieval calls against 3. §6.7's framing applies: the comparison that
+matters is cost per *correctly-answered-or-correctly-abstained* question, not
+cost per question. sq3 ending `insufficient` after three honest rounds is
+part of what the extra cost bought.

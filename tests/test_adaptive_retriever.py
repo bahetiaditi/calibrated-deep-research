@@ -178,9 +178,11 @@ def test_stopping_decision_depends_on_the_scores_not_the_round():
 
 
 def test_first_attempt_uses_the_planners_route():
+    """Honoured for cheap routes; the expensive one is clamped — see
+    test_the_first_attempt_never_starts_at_full_text."""
     sq = new_sub_question("q", sub_question_id="sq1")
-    sq["suggested_route"] = "arxiv_fulltext"
-    assert build().choose_route(sq) == "arxiv_fulltext"
+    sq["suggested_route"] = "web"
+    assert build().choose_route(sq) == "web"
 
 
 def test_first_attempt_uses_the_sub_question_verbatim():
@@ -533,10 +535,15 @@ def test_filters_reach_the_retriever():
             return super().retrieve(query, top_k=top_k)
 
     impl = RecordingRetriever()
-    state = state_with("q", route="arxiv_fulltext")
+    state = state_with("q", route="arxiv_meta")
     build(retriever=impl).retrieve_one(state, "sq1")
     assert impl.kwargs[0]["source_type"] == "arxiv"
-    assert impl.kwargs[0]["exclude_sections"] == ["Abstract"]
+    assert impl.kwargs[0]["section"] == "Abstract"
+
+    impl2 = RecordingRetriever()
+    state2 = state_with("q", route="web")
+    build(retriever=impl2).retrieve_one(state2, "sq1")
+    assert impl2.kwargs[0]["source_type"] == "web"
 
 
 def test_an_empty_route_slice_falls_back_unfiltered():
@@ -556,3 +563,42 @@ def test_an_empty_route_slice_falls_back_unfiltered():
     update = build(retriever=EmptyThenFull()).retrieve_one(state, "sq1")
     assert len(update["evidence"]) == 2
     assert calls[0] and not calls[1]
+
+
+# --- depth must be earned (regression: C21 live run) -----------------------
+
+
+def test_the_first_attempt_never_starts_at_full_text():
+    """3.3: the reader is 'invoked only when the retriever decides depth is
+    needed (D3), which makes depth an EARNED cost rather than a default'.
+    A planner suggesting arxiv_fulltext up front bypasses that.
+
+    Measured: the planner suggested fulltext for all three sub-questions and
+    independent sources fell 12 -> 2 against the static baseline, because
+    full-text chunks concentrate in the few ingested papers while abstracts
+    span every paper the search returns."""
+    sq = new_sub_question("q", sub_question_id="sq1")
+    sq["suggested_route"] = "arxiv_fulltext"
+    assert build().choose_route(sq) == "arxiv_meta"
+
+
+def test_cheap_suggestions_are_honoured():
+    for route in ("arxiv_meta", "web", "evidence_store"):
+        sq = new_sub_question("q", sub_question_id="sq1")
+        sq["suggested_route"] = route
+        assert build().choose_route(sq) == route
+
+
+def test_full_text_is_still_reachable_by_escalation():
+    """Clamping the first attempt must not make depth unreachable — it must
+    make it earned."""
+    provider = FakeProvider([{
+        "action": "deeper", "route": "arxiv_fulltext",
+        "query": "a more specific query", "reasoning": "abstract lacked it",
+    }])
+    retriever = build(provider=provider)
+    sq = new_sub_question("q", sub_question_id="sq1")
+    sq["attempted_routes"] = ["arxiv_meta"]
+    sq["attempted_queries"] = ["q"]
+    retriever.decide_next(sq, outcome([1.0], ["A"]))
+    assert retriever.choose_route(sq) == "arxiv_fulltext"

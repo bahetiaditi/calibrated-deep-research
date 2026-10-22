@@ -65,6 +65,13 @@ DEEPER_FROM: dict[str, Route] = {
     "evidence_store": "arxiv_meta",
     "arxiv_fulltext": "arxiv_fulltext",
 }
+# Depth is earned, never assumed. A first attempt starts shallow even when
+# the planner asked for the expensive route; D3 escalates if the shallow
+# attempt is not good enough, which is the point of having D3 at all.
+CHEAP_FIRST: dict[str, Route] = {
+    "arxiv_fulltext": "arxiv_meta",
+}
+
 WIDER_FROM: dict[str, Route] = {
     "arxiv_meta": "web",
     "arxiv_fulltext": "web",
@@ -118,9 +125,24 @@ class AdaptiveRetriever(StaticRetriever):
 
         attempted = sub_question.get("attempted_routes") or []
         if not attempted:
-            # First attempt: the planner's suggestion, which is the best
-            # information available before anything has been tried.
-            return _coerce_route(sub_question.get("suggested_route"))
+            # First attempt: the planner's suggestion, but **clamped to a
+            # cheap route**. §3.3 is explicit that the reader is "invoked
+            # only when the retriever decides depth is needed (D3), which
+            # makes depth an EARNED cost rather than a default" — and a
+            # planner that suggests `arxiv_fulltext` up front bypasses that
+            # entirely.
+            #
+            # Measured consequence, from the first working C21 run: the
+            # planner suggested arxiv_fulltext for all three sub-questions,
+            # so every one started inside paper bodies. Independent sources
+            # fell from 12 to 2 against the static baseline, because
+            # full-text chunks concentrate in the few papers already
+            # ingested while abstracts span every paper the search returns.
+            # Depth bought precision (f1 3.07 -> 4.79) and cost breadth
+            # (f4 12 -> 2), which is a bad trade to make before the cheap
+            # route has even been tried.
+            suggested = _coerce_route(sub_question.get("suggested_route"))
+            return CHEAP_FIRST.get(suggested, suggested)
 
         decision = self._plan_decision.get(sub_question["id"]) or {}
         route = decision.get("route")

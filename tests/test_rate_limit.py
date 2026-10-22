@@ -129,3 +129,35 @@ def test_snapshot_shape(ledger):
     ledger.record("m", 10, now=T0)
     snap = ledger.snapshot(now=T0 + 1)["m"]
     assert snap["rpm"] == [1, 2] and snap["tpd"] == [10, 5000]
+
+
+# --- repair (C20: the ledger can be wrong conservatively) ------------------
+
+
+def test_clearing_a_model_restores_its_budget(tmp_path):
+    """The ledger is a local PREDICTION, not a record the provider keeps, so
+    it can be wrong in a direction the provider cannot correct. A C20 bug
+    wrote each model's whole daily cap on a formatting failure; without a
+    reset path the only remedy is waiting out a day that never needed to
+    pass."""
+    path = tmp_path / "quota.json"
+    led = QuotaLedger(path, {"m": TINY})
+    led.record("m", 5000, now=T0)
+    assert not led.check("m", 100, now=T0).allowed
+
+    with led._lock:
+        led._states.pop("m", None)
+        led._save()
+
+    assert led.check("m", 100, now=T0).allowed
+
+
+def test_reset_persists_to_disk(tmp_path):
+    path = tmp_path / "quota.json"
+    led = QuotaLedger(path, {"m": TINY})
+    led.record("m", 5000, now=T0)
+    with led._lock:
+        led._states.pop("m", None)
+        led._save()
+
+    assert QuotaLedger(path, {"m": TINY}).check("m", 100, now=T0).allowed

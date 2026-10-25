@@ -64,6 +64,7 @@ class Components:
     sufficiency_scorer: Any = None
     synthesizer: Any = None
     critic: Any = None
+    critic_router: Any = None
     decider: Any = None
     finalizer: Any = None
 
@@ -224,6 +225,8 @@ def default_components(config: Config | None = None) -> Components:
     cfg = config or get_config()
 
     from src.nodes.adaptive_retriever import AdaptiveRetriever
+    from src.nodes.critic import Critic, critic_node
+    from src.nodes.critic_router import CriticRouter, critic_router_node
     from src.nodes.planner import Planner, planner_node
     from src.nodes.premise_checker import PremiseChecker, premise_checker_node
     from src.nodes.retriever import StaticRetriever, retriever_node
@@ -247,6 +250,8 @@ def default_components(config: Config | None = None) -> Components:
         planner=planner_node(Planner(cfg)),
         retriever=retriever_node(retriever, get_allocator(cfg)),
         synthesizer=synthesizer_node(Synthesizer(cfg)),
+        critic=critic_node(Critic(cfg)),
+        critic_router=critic_router_node(CriticRouter(cfg)),
     )
 
 

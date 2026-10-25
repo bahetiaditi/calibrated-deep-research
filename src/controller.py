@@ -43,13 +43,14 @@ RETRIEVER = "retriever"
 SUFFICIENCY_SCORER = "sufficiency_scorer"   # C20/C26
 SYNTHESIZER = "synthesizer"
 CRITIC = "critic"                           # C23
+CRITIC_ROUTER = "critic_router"              # C24
 DECIDER = "decider"                         # C27
 FINALIZER = "finalizer"                     # C28
 FINISH = "__end__"
 
 ALL_NODES = (
     PREMISE_CHECKER, PLANNER, RETRIEVER, SUFFICIENCY_SCORER,
-    SYNTHESIZER, CRITIC, DECIDER, FINALIZER,
+    SYNTHESIZER, CRITIC, CRITIC_ROUTER, DECIDER, FINALIZER,
 )
 
 
@@ -167,6 +168,15 @@ class Controller:
             and not state.get("critic_findings")
         ):
             return CRITIC, "draft written, critic not run"
+
+        if (
+            self._enabled(CRITIC_ROUTER)
+            and state.get("critic_findings")
+            and not any(
+                f.get("action_taken") for f in state["critic_findings"]
+            )
+        ):
+            return CRITIC_ROUTER, "critic findings need routing (§2.3)"
 
         if self._enabled(DECIDER) and state.get("terminal_decision") is None:
             return DECIDER, reason

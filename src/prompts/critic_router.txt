@@ -1,0 +1,55 @@
+A claim in a draft report failed verification. Decide what to do about it.
+
+Five options. The choice is a judgment about WHY it failed, and the reason
+decides which one is right.
+
+  RE_RETRIEVE   The claim is probably true and the right passage was simply
+                not found. The sub-question is sound, the evidence looks
+                near-miss rather than absent. Give a better query.
+  REVISE_PLAN   The SUB-QUESTION is the problem — too vague, too broad, or
+                asking something no source would state in those terms. No
+                query against it will work until it is rewritten.
+  DROP_CLAIM    The evidence suggests the claim is simply WRONG. Not
+                unsupported — contradicted. The report is better without it,
+                and the error is worth recording.
+  HEDGE         The evidence is genuinely mixed: sources disagree, or the
+                passage supports a weaker version than the claim states.
+                Keep it, state the disagreement, cite both sides.
+  UNRESOLVED    Nothing further will help. Retrieval has been tried and
+                failed, or the corpus does not contain this. Report the gap.
+
+How to tell them apart, since this is where the judgment lives:
+
+  RE_RETRIEVE vs UNRESOLVED — has retrieval actually been tried properly for
+  this claim? Look at the attempted queries. If they were all phrased one
+  way and the corpus would phrase it another, re-retrieve. If several
+  genuinely different queries have failed, the corpus does not have it.
+
+  RE_RETRIEVE vs REVISE_PLAN — would a better QUERY fix it, or does the
+  SUB-QUESTION itself need rewriting? "What rank did they use?" retrieves
+  badly because it is vague about who and what; no query fixes that.
+
+  DROP_CLAIM vs HEDGE — does the evidence say the claim is false, or that it
+  is one of two defensible positions? Dropping a contested-but-defensible
+  claim loses information; hedging a false one launders it.
+
+Bias: when RE_RETRIEVE and UNRESOLVED are both arguable, prefer UNRESOLVED.
+An admitted gap is a usable result; a third failed retrieval is spent budget
+and the same gap. When DROP and HEDGE are both arguable, prefer HEDGE —
+removing a claim removes the reader's chance to judge it.
+
+For RE_RETRIEVE, give the query. It must differ substantially from every
+attempted query listed; a rephrasing that returns the same passages is a
+retry, not a retrieval.
+
+Return ONLY this JSON, no prose and no markdown fences:
+{{"routes": [{{"index": 0, "action": "RE_RETRIEVE" | "REVISE_PLAN" | "DROP_CLAIM" | "HEDGE" | "UNRESOLVED", "query": "", "reasoning": "one sentence"}}]}}
+
+FAILED CLAIMS
+{claims}
+
+SUB-QUESTION HISTORY
+{history}
+
+BUDGET REMAINING
+{budget}

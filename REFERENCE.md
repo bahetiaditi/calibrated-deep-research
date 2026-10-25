@@ -2615,3 +2615,47 @@ knowledge is not the evidence under test); a Related Work passage describes
 however accurate the number; and numbers must match in the direction that
 matters ("about 70%" from a passage saying 73% is fine, "73%" from "about
 half" is not).
+
+**2026-09-07 — C24. Five-way critic routing (§2.3).**
+
+`src/nodes/critic_router.py` and `src/prompts/critic_router.txt`, registered
+in the controller as a node after the critic.
+
+**Why it is not an `if` statement.** The naive version routes on the verdict:
+`UNSUPPORTED → re-retrieve`, everything else → finalize. But **four of the
+five outcomes can follow a single UNSUPPORTED verdict**, and which is right
+depends on *why* it failed — whether the queries tried were phrased the way
+sources phrase it, whether the sub-question is answerable as asked, whether
+the evidence is silent or contradictory. None of that is in the verdict. A
+test fires all five from the same verdict, which is the clearest statement of
+the point available.
+
+**Gates are facts; the rest is judgment.** Two things are decided without the
+model: a route needing budget that does not exist is unavailable, and a
+sub-question at its revision ceiling cannot be revised. Offering the model an
+option it cannot have invites it to pick one and have the code silently
+substitute something else — which makes **the trace a record of a decision
+that was never taken**, the exact defect C21's unused route turned out to be.
+When the model picks an unavailable route the fallback is recorded as
+"RE_RETRIEVE unavailable", not quietly rewritten.
+
+**Two biases, both toward honesty**, stated in the prompt. RE_RETRIEVE vs
+UNRESOLVED resolves to UNRESOLVED: an admitted gap is a usable result, a
+third failed retrieval is spent budget and the same gap. DROP vs HEDGE
+resolves to HEDGE: removing a claim removes the reader's chance to judge it.
+
+**The decisions change control flow, not just records.** RE_RETRIEVE reopens
+the sub-question (`in_progress`), so the controller routes back to the
+retriever; REVISE_PLAN marks it `insufficient` for the planner; UNRESOLVED
+writes a gap that feeds D5. DROP_CLAIM and HEDGE change the report rather
+than the research and are applied by the finalizer at C28.
+
+The node **clears the draft** when further work is chosen. Leaving it would
+let a stale draft reach the decider as though it reflected evidence gathered
+afterwards — a quiet way to report a verified conclusion that was verified
+against different evidence.
+
+**A5's static counterpart is binary routing**: everything unsupported is
+re-retrieved if budget allows, otherwise left alone. That is precisely the
+conditional edge §2.3 describes as "not a decision", and it costs **zero**
+LLM calls — so A5 measures the value of the judgment, not of the extra call.

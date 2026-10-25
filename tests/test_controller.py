@@ -318,3 +318,44 @@ def test_route_is_traced_with_its_reason():
     assert to_node == RETRIEVER
     assert "pending" in reason
     assert summary["plan_size"] == 2
+
+
+# --- critic routing (C24) --------------------------------------------------
+
+
+def test_findings_without_actions_route_to_the_critic_router():
+    from src.controller import CRITIC_ROUTER
+
+    full = Controller(CFG, available={PLANNER, RETRIEVER, SYNTHESIZER,
+                                      CRITIC, CRITIC_ROUTER})
+    s = planned(1, status="sufficient")
+    s["draft"] = "a report"
+    s["critic_findings"] = [{"claim": "x", "verdict": "UNSUPPORTED",
+                             "action_taken": ""}]
+    assert full.route(s) == CRITIC_ROUTER
+
+
+def test_routed_findings_move_on():
+    from src.controller import CRITIC_ROUTER
+
+    full = Controller(CFG, available={PLANNER, RETRIEVER, SYNTHESIZER,
+                                      CRITIC, CRITIC_ROUTER})
+    s = planned(1, status="sufficient")
+    s["draft"] = "a report"
+    s["critic_findings"] = [{"claim": "x", "verdict": "UNSUPPORTED",
+                             "action_taken": "UNRESOLVED"}]
+    assert full.route(s) == FINISH
+
+
+def test_a_cleared_draft_sends_the_run_back_through_synthesis():
+    """RE_RETRIEVE clears the draft so the decider cannot see a stale report
+    as though it reflected the new evidence."""
+    from src.controller import CRITIC_ROUTER
+
+    full = Controller(CFG, available={PLANNER, RETRIEVER, SYNTHESIZER,
+                                      CRITIC, CRITIC_ROUTER})
+    s = planned(1, status="in_progress")
+    s["draft"] = ""
+    s["critic_findings"] = [{"claim": "x", "verdict": "UNSUPPORTED",
+                             "action_taken": "RE_RETRIEVE"}]
+    assert full.route(s) == RETRIEVER

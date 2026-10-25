@@ -2519,3 +2519,39 @@ This also tidied a real inconsistency: the hopeless check and the marginal
 check were asking the same question from two sides and could disagree, so a
 stagnant sub-question below zero was being labelled `insufficient` by
 whichever test happened to fire first. They are now one branch.
+
+**2026-09-07 — C22 verified. Where D4's value actually shows.**
+
+With both fixes in, the per-round trace reads correctly:
+
+```
+round 1  D4 chose sq1   sq1 sufficient f1 7.01 (value 0.000)
+                        sq2 pending              (value 1.000)
+round 2  D4 chose sq2   sq2 in_progress f1 -4.21 (value 0.050)
+round 3  D4 chose sq2   sq2 in_progress f1 -0.29 (value 0.050)
+```
+
+sq1 is chosen first on the tie (plan order), finishes in one round, and
+drops to value 0.000. sq2 climbs from -4.21 to -0.29 and is **not**
+abandoned, because it is still improving.
+
+**The D4 win is measured against the uniform baseline, not between
+sub-questions.** The final allocation table makes it concrete:
+
+| | uniform (A4) | marginal (D4) |
+|---|---|---|
+| sq1 (finished in round 1) | 10 | **0** |
+| sq2 (still open) | 10 | **20** |
+
+Uniform would commit half the remaining budget to a sub-question that was
+already answered. That is where the saving lives, and it is invisible if the
+check only asks whether the answerable sub-question got more than the
+hopeless one — the comparison the smoke test originally made, and the reason
+it reported a spurious warning on a correct run.
+
+Worth carrying into §6.5's reporting: **A4's effect is a cost difference, not
+an evidence-quality difference.** Freezing D4 does not make the evidence
+worse, it makes the same evidence more expensive — so an ablation table
+reporting only nDCG-style quality metrics would score A4 as having no effect
+while it burns half the budget. §6.7's cost-per-correctly-resolved-question
+framing is what catches it.

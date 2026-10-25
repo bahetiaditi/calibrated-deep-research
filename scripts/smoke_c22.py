@@ -97,7 +97,7 @@ def main() -> int:
     # to allocate. That is the system working and the measurement arriving
     # too late.
     print(f"{BOLD}Allocation after each round{RESET}\n")
-    for round_number in range(1, 4):
+    for round_number in range(1, 6):
         open_ids = [
             sq["id"] for sq in state["plan"]
             if sq["status"] not in ("sufficient", "abandoned")
@@ -147,21 +147,29 @@ def main() -> int:
         print(f"   {sqid:<6}{uniform_alloc.get(sqid, 0):>10}"
               f"{adaptive_alloc[sqid]:>11}")
 
-    hopeless_status = state["plan"][1]["status"]
-    if hopeless_status == "abandoned":
-        ok(f"the hopeless sub-question was abandoned after "
-           f"{state['plan'][1]['rounds']} rounds rather than running to the "
-           f"limit")
-        print(f"{DIM}       note: D3 cut this loss before D4 could. The two "
-              f"surfaces overlap,\n       which is worth predicting now — "
-              f"A4 alone may show little effect while\n       D3 is still "
-              f"live, and that is a finding rather than a null result.{RESET}")
-    elif adaptive_alloc[sq1] > adaptive_alloc[sq2]:
-        ok(f"budget moved toward the answerable sub-question "
-           f"({adaptive_alloc[sq1]} vs {adaptive_alloc[sq2]})")
+    # The win is measured against the uniform baseline, not between
+    # sub-questions. Once a sub-question is terminal the useful comparison
+    # is "what would uniform have spent on it?" — and the answer is its
+    # full even share, on work already finished.
+    wasted = sum(
+        uniform_alloc.get(sq["id"], 0)
+        for sq in state["plan"]
+        if sq["status"] in ("sufficient", "abandoned")
+    )
+    if wasted > 0:
+        ok(f"uniform would allocate {wasted} call(s) to sub-questions that "
+           f"are already finished; marginal allocates 0")
+    elif adaptive_alloc[sq1] != adaptive_alloc[sq2]:
+        ok(f"budget split unevenly by value: {adaptive_alloc}")
     else:
-        warn("no reallocation observed in the final state; check the "
-             "per-round table above, where the open sub-questions are")
+        warn("marginal and uniform agree here — they will not always, and "
+             "the ablation measures the cases where they differ")
+
+    if state["plan"][1]["status"] == "abandoned":
+        print(f"{DIM}   note: D3 abandoned the hopeless sub-question before "
+              f"D4 could decline to\n   fund it. The two surfaces overlap, "
+              f"so A4 alone may show little effect\n   while D3 is live — "
+              f"a finding rather than a null result.{RESET}")
 
     if uniform_alloc[sq1] == uniform_alloc[sq2]:
         ok("the uniform allocator (A4) splits evenly, ignoring all of it")

@@ -244,43 +244,45 @@ class AdaptiveRetriever(StaticRetriever):
                 return ABANDONED, f"nothing retrieved in {rounds} rounds"
             return IN_PROGRESS, "nothing retrieved; trying another approach"
 
+        # 1. Good enough, corroborated. Stop.
         if f1 >= self.sufficient_min_rerank and sources >= self.min_sources:
             return SUFFICIENT, (
                 f"f1={f1:.2f} >= {self.sufficient_min_rerank} across "
                 f"{sources} sources"
             )
 
-        # Marginal test: did this round actually buy anything?
-        if previous_best is not None and f1 - previous_best < self.min_improvement:
-            # Another attempt is unlikely to help. Whether that is a success
-            # or a gap depends on the evidence we have, not on the fact that
-            # we stopped.
-            verdict = (
-                SUFFICIENT if f1 >= self.sufficient_min_rerank else INSUFFICIENT
-            )
-            return verdict, (
+        # 2. Out of rounds, or this round stopped helping. Either way no
+        #    further work is coming, and the LEVEL of the evidence decides
+        #    what to call it.
+        plateaued = (
+            previous_best is not None
+            and f1 - previous_best < self.min_improvement
+        )
+        exhausted = rounds >= self.max_rounds
+
+        if plateaued or exhausted:
+            why = (
                 f"round {rounds} improved f1 by {f1 - previous_best:+.2f} "
-                f"(< {self.min_improvement}); further rounds unlikely to help"
+                f"(< {self.min_improvement})"
+                if plateaued else f"round limit reached"
             )
+            return self._label(f1), f"{why}; f1={f1:.2f}"
 
-        if rounds >= self.max_rounds:
-            # Out of rounds. Sufficient only if the evidence is actually
-            # good; otherwise the gap is reported rather than papered over.
-            if f1 >= self.sufficient_min_rerank:
-                return SUFFICIENT, f"f1={f1:.2f} but only {sources} source(s)"
-            # Out of rounds and the evidence is weak: this IS terminal, and
-            # the gap gets reported rather than papered over.
-            return INSUFFICIENT, (
-                f"round limit reached with f1={f1:.2f}; reporting the gap"
-            )
-
-        if f1 <= self.hopeless_max_rerank and rounds >= 2:
-            return ABANDONED, (
-                f"f1={f1:.2f} after {rounds} rounds — no source appears to "
-                f"address this"
-            )
-
+        # 3. Still improving and rounds remain. Keep going — including from
+        #    deep below the bar. A live run abandoned a sub-question that
+        #    had gone from f1 -4.21 to -0.29, eight times `min_improvement`,
+        #    purely for still being below zero. The absolute level says
+        #    where the evidence IS; the improvement says where it is GOING,
+        #    and only the second justifies stopping early.
         return IN_PROGRESS, f"f1={f1:.2f} below {self.sufficient_min_rerank}"
+
+    def _label(self, f1: float) -> str:
+        """What to call a sub-question no further work will improve."""
+        if f1 >= self.sufficient_min_rerank:
+            return SUFFICIENT
+        if f1 <= self.hopeless_max_rerank:
+            return ABANDONED
+        return INSUFFICIENT
 
     # -- reformulation (the LLM call) ---------------------------------------
 

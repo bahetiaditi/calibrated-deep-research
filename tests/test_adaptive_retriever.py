@@ -136,14 +136,19 @@ def test_nothing_retrieved_escalates():
     assert build().decide_next(sq, outcome([])) == IN_PROGRESS
 
 
-def test_hopeless_evidence_is_abandoned_after_a_second_attempt():
-    """An admitted gap beats a confident guess; spending a third round on
-    evidence scoring below zero buys nothing."""
+def test_hopeless_evidence_is_abandoned_once_it_stops_improving():
+    """An admitted gap beats a confident guess. But the stop is triggered by
+    the lack of improvement, not by the level alone — a sub-question still
+    climbing from deep below the bar gets its remaining rounds."""
+    retriever = build()
     sq = new_sub_question("q", sub_question_id="sq1")
+    retriever.decide_next(sq, outcome([-2.0], ["A"]))      # round 1
     sq["rounds"] = 1
     sq["attempted_routes"] = ["arxiv_meta"]
     sq["attempted_queries"] = ["q"]
-    assert build().decide_next(sq, outcome([-1.9, -2.5], ["A", "B"])) == ABANDONED
+    # Round 2 barely moves: no further work is coming, and the level says
+    # this is a gap rather than a thin answer.
+    assert retriever.decide_next(sq, outcome([-1.9, -2.5], ["A", "B"])) == ABANDONED
 
 
 def test_hopeless_on_the_first_round_still_gets_a_second_chance():
@@ -658,3 +663,31 @@ def test_the_number_of_rounds_depends_on_the_evidence():
     assert easy_final["plan"][0]["rounds"] == 1
     assert stuck_final["plan"][0]["rounds"] == 2      # stops once it plateaus
     assert stuck_final["plan"][0]["rounds"] < 3
+
+
+# --- convergence overrides the hopeless rule (regression: C22 live run) ----
+
+
+def test_a_converging_sub_question_is_not_abandoned():
+    """A live run abandoned a sub-question that had gone from f1 -4.21 to
+    -0.29 — an improvement of 3.9, eight times min_improvement — on the
+    strength of still being below zero. At that rate the next round would
+    have cleared the bar. The absolute level says where the evidence IS; the
+    improvement says where it is GOING."""
+    retriever = build()
+    sq = new_sub_question("q", sub_question_id="sq1")
+    retriever.decide_next(sq, outcome([-4.21], ["A"]))
+    sq["rounds"] = 1
+    sq["attempted_routes"] = ["arxiv_meta"]
+    sq["attempted_queries"] = ["q"]
+    assert retriever.decide_next(sq, outcome([-0.29], ["A"])) == IN_PROGRESS
+
+
+def test_a_stagnant_low_sub_question_is_still_abandoned():
+    retriever = build()
+    sq = new_sub_question("q", sub_question_id="sq1")
+    retriever.decide_next(sq, outcome([-1.9], ["A"]))
+    sq["rounds"] = 1
+    sq["attempted_routes"] = ["arxiv_meta"]
+    sq["attempted_queries"] = ["q"]
+    assert retriever.decide_next(sq, outcome([-1.8], ["A"])) == ABANDONED

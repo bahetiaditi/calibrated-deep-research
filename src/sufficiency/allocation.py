@@ -181,14 +181,19 @@ class MarginalValueAllocator:
         order, and D4's allocation is a number nobody reads.
         """
         scored = [
-            (self.value(sq), _sq_id(sq))
-            for sq in sub_questions
+            (self.value(sq), position, _sq_id(sq))
+            for position, sq in enumerate(sub_questions)
             if isinstance(sq, dict) and self.value(sq) > 0.0
         ]
         if not scored:
             return None
-        # Ties break on id so ordering is deterministic across runs.
-        return max(scored, key=lambda pair: (pair[0], pair[1]))[1]
+        # Ties break toward PLAN ORDER, not lexical id order. Every untried
+        # sub-question scores exactly 1.0, so the first choice of a run is
+        # always a tie — and sorting on id meant a live run opened by
+        # retrieving for "sq2", the hopeless one, purely because "sq2" sorts
+        # after "sq1". Plan order carries the planner's reasoning about
+        # sequence; id order carries nothing.
+        return min(scored, key=lambda item: (-item[0], item[1]))[2]
 
     # -- tracing ------------------------------------------------------------
 

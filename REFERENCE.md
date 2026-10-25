@@ -2480,3 +2480,42 @@ If A4 does come out flat, the informative follow-up is an A3+A4 pair: freeze
 both and see whether the combined effect exceeds the sum of the individual
 ones. That is outside §6.5's one-surface-at-a-time design, so it would be an
 addition to report separately rather than a change to the ablation table.
+
+**2026-09-07 — C22 per-round trace: two bugs the aggregate view hid.**
+
+Sampling allocation during the run rather than after it made both visible
+immediately.
+
+**1. The first choice of every run was backwards.** Every untried
+sub-question scores exactly 1.0, so the opening choice is always a tie, and
+`max(scored, key=(value, id))` resolved it lexically — so the run opened by
+retrieving for `sq2`, the hopeless one, purely because "sq2" sorts after
+"sq1". Ties now break toward **plan order**, which carries the planner's
+reasoning about sequence; id order carries nothing.
+
+**2. A converging sub-question was abandoned.** sq2 went from f1 **-4.21 to
+-0.29** between rounds — an improvement of 3.9, eight times
+`min_improvement` — and was abandoned for still being below zero. At that
+rate the next round would have cleared the bar.
+
+The fix changed the shape of the stopping decision rather than patching a
+threshold. `_judge` now asks two questions in order:
+
+1. Is the evidence good enough *and* corroborated? → stop, `sufficient`.
+2. Is any further work coming — has it plateaued, or are the rounds gone?
+   If so, the **level** decides the label: above the bar `sufficient`, at or
+   below `hopeless_max_rerank` `abandoned`, in between `insufficient`.
+3. Otherwise keep going, **including from deep below the bar**, as long as
+   it is still climbing.
+
+The principle, worth stating in the writeup because it generalises: **the
+absolute level says where the evidence is; the improvement says where it is
+going, and only the second justifies stopping early.** Abandoning on level
+alone discards sub-questions that are converging, which is the opposite of
+cutting losses — it cuts the ones about to pay off and keeps funding the
+ones that have flatlined at a mediocre score.
+
+This also tidied a real inconsistency: the hopeless check and the marginal
+check were asking the same question from two sides and could disagree, so a
+stagnant sub-question below zero was being labelled `insufficient` by
+whichever test happened to fire first. They are now one branch.

@@ -300,3 +300,27 @@ def test_retriever_node_without_an_allocator_takes_plan_order():
     ]}
     retriever_node(FakeRetrieverImpl())(state)
     assert asked["id"] == "first"
+
+
+# --- tie-breaking (regression: C22 live run) -------------------------------
+
+
+def test_ties_break_toward_plan_order_not_id_order():
+    """Every untried sub-question scores exactly 1.0, so the FIRST choice of
+    a run is always a tie. Sorting on id meant a live run opened by
+    retrieving for the hopeless sub-question, purely because 'sq2' sorts
+    after 'sq1'. Plan order carries the planner's reasoning about sequence;
+    id order carries nothing."""
+    assert allocator().next_sub_question([sq("sq1"), sq("sq2")]) == "sq1"
+
+
+def test_plan_order_wins_even_with_unhelpful_ids():
+    assert allocator().next_sub_question([sq("zeta"), sq("alpha")]) == "zeta"
+
+
+def test_value_still_beats_plan_order():
+    chosen = allocator().next_sub_question([
+        sq("first", status="in_progress", rounds=3, f1=-2.0),
+        sq("second"),
+    ])
+    assert chosen == "second"

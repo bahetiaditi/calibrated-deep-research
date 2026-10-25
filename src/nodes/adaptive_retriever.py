@@ -441,7 +441,7 @@ def _summarise(outcome: RetrievalOutcome, features: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def adaptive_retriever_node(retriever: AdaptiveRetriever):
+def adaptive_retriever_node(retriever: AdaptiveRetriever, allocator: Any = None):
     from src.nodes.retriever import retriever_node
 
-    return retriever_node(retriever)
+    return retriever_node(retriever, allocator)

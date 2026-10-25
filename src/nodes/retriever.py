@@ -32,7 +32,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any, Iterable, Sequence
 
 from src.config import Config, get_config
 from src.state import (
@@ -356,19 +356,27 @@ class StaticRetriever:
         )
 
 
-def retriever_node(retriever: StaticRetriever):
-    """LangGraph node: retrieve for the next pending sub-question.
+def retriever_node(retriever: StaticRetriever, allocator: Any = None):
+    """LangGraph node: retrieve for ONE sub-question per invocation.
 
-    One sub-question per invocation, because the controller (C19) re-enters
-    this node and chooses which sub-question to work on next — that choice is
-    D4's, and doing the whole plan here would take it away.
+    Which one is D4's decision. Without an allocator the node takes the
+    first pending sub-question in plan order — which is the static policy,
+    and also what A4 restores. With one, the highest-value open
+    sub-question is chosen, so the allocation is a decision rather than a
+    number nobody reads.
     """
 
     def node(state: dict) -> dict:
         pending = pending_sub_questions(state)  # type: ignore[arg-type]
         if not pending:
             return {}
-        return retriever.retrieve_one(state, pending[0]["id"])  # type: ignore[arg-type]
+
+        chosen = None
+        if allocator is not None and hasattr(allocator, "next_sub_question"):
+            chosen = allocator.next_sub_question(pending)
+        if chosen is None:
+            chosen = pending[0]["id"]
+        return retriever.retrieve_one(state, chosen)  # type: ignore[arg-type]
 
     return node
 

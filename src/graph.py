@@ -240,10 +240,12 @@ def default_components(config: Config | None = None) -> Components:
         StaticRetriever(cfg) if not (d2 or d3) else AdaptiveRetriever(cfg)
     )
 
+    from src.sufficiency.allocation import get_allocator
+
     return Components(
         premise_checker=premise_checker_node(PremiseChecker(cfg)),
         planner=planner_node(Planner(cfg)),
-        retriever=retriever_node(retriever),
+        retriever=retriever_node(retriever, get_allocator(cfg)),
         synthesizer=synthesizer_node(Synthesizer(cfg)),
     )
 

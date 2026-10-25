@@ -2555,3 +2555,63 @@ worse, it makes the same evidence more expensive — so an ablation table
 reporting only nDCG-style quality metrics would score A4 as having no effect
 while it burns half the budget. §6.7's cost-per-correctly-resolved-question
 framing is what catches it.
+
+---
+
+## Phase 3 — verification and decision
+
+**2026-09-07 — C23. Critic with entailment judgment.**
+
+`src/nodes/critic.py` and `src/prompts/critic.txt`. Five-way routing on what
+to *do* about a verdict is C24; this node decides only what is true.
+
+**Three categories, not two** — the C18 constraint, implemented. A draft
+contains cited claims, uncited claims, and sentences that assert nothing.
+`NOT_A_CLAIM` sentences are excluded from the denominator entirely. Counting
+them would depress every grounding metric uniformly across the agent and all
+four baselines: not changing which wins, but making the absolute numbers
+meaningless and incomparable to published citation-grounding figures.
+
+The classification is deliberately biased toward CLAIM when the model is
+unsure. Judging a transition is harmless; excusing a claim is not.
+
+**Two bugs found while testing, both about conflating distinct things.**
+
+*Segmentation.* A citation written after the full stop — "…reaches 73%.
+[P1a2b…]" — was split onto the *following* sentence, crediting the wrong
+claim and leaving the real one uncited. Models produce both orders. Leading
+citations are now re-attached to the sentence they actually support.
+
+*Uncited sentences.* The first version skipped them entirely, on the
+reasoning that a claim with no citation is UNSUPPORTED by definition and
+asking the model costs tokens. That conflated **"no citation"** with **"not
+a claim"**, and the gap was papered over with a length heuristic — which
+cannot tell "The second approach differs" (28 characters, pure discourse)
+from "FlashAttention-2 reaches 73% of peak" (also short, a claim). Both land
+in the hallucination rate if guessed wrong, in opposite directions.
+
+Now every substantial sentence is classified, cited or not. A cited sentence
+needs two judgments — is it a claim, and does its citation support it. An
+uncited one needs only the first; the **absence of a citation** then decides
+the verdict, whatever the model says about support it could not have checked.
+
+**One call for the whole draft** (§7.1). Per-claim calls would be 8-10 per
+question against a budget of roughly 9, so the critic alone would exceed the
+run. Batching also reduces variance: one judge seeing all claims together
+applies a more consistent standard than ten independent calls.
+
+**An unparseable verdict defaults to UNSUPPORTED.** Claiming support the
+critic never gave is the one error the grounding metric cannot survive, so
+every ambiguity resolves against the claim.
+
+**Contradiction findings are incorporated** (§4.6): a passage in a
+cross-source disagreement is flagged in the prompt, and a claim that picks
+one side without acknowledging it is PARTIAL at best.
+
+The prompt names three traps explicitly, because each produces a confident
+wrong verdict: a claim can be **true and unsupported** (the model's own
+knowledge is not the evidence under test); a Related Work passage describes
+**someone else's** work, so attributing it to this paper is unsupported
+however accurate the number; and numbers must match in the direction that
+matters ("about 70%" from a passage saying 73% is fine, "73%" from "about
+half" is not).

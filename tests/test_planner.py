@@ -295,3 +295,246 @@ def test_node_passes_premise_check_through():
                             "presuppositions": [
                                 {"text": "X exists", "verdict": "SUPPORTED"}]}})
     assert "X exists" in provider.calls[0]["system"]
+
+
+# --- revision mode (D1, C25) -----------------------------------------------
+
+from src.nodes.planner import ABANDON, MERGE, REVISION_ACTIONS, REWRITE, SPLIT
+from src.state import new_sub_question
+
+
+def failing(text="What rank did they use?", **over):
+    sq = new_sub_question(text, sub_question_id="sq1",
+                          rationale="needed to pin down the number")
+    sq.update({
+        "status": "insufficient", "rounds": 2,
+        "attempted_routes": ["arxiv_meta", "web"],
+        "attempted_queries": [text, "rank used in experiments"],
+        "sufficiency_features": {"f1_max_rerank": 1.2},
+    })
+    sq.update(over)
+    return sq
+
+
+def revision_state(*sub_questions, question="What rank does LoRA use?"):
+    return {"question": question, "plan": list(sub_questions)}
+
+
+def reviser(response):
+    return Planner(CFG, provider=FakeProvider(response))
+
+
+def test_rewrite_replaces_the_text():
+    update = reviser({
+        "action": REWRITE,
+        "text": "What LoRA rank did the authors use in their GPT-3 experiments?",
+        "reasoning": "vague about which model and which experiment",
+    }).revise(revision_state(failing()), "sq1")
+    assert update["plan"][0]["text"].startswith("What LoRA rank")
+    assert update["plan"][0]["status"] == "pending"
+
+
+def test_a_rewrite_resets_rounds_but_keeps_attempted_queries():
+    """A rewritten sub-question is a different question in substance, so it
+    gets a fresh round counter — leaving it at the limit would make revision
+    useless exactly when it is needed. The queries survive so D2 cannot
+    reissue a failure."""
+    update = reviser({
+        "action": REWRITE,
+        "text": "What LoRA rank did the authors use in their GPT-3 experiments?",
+        "reasoning": "r",
+    }).revise(revision_state(failing()), "sq1")
+    revised = update["plan"][0]
+    assert revised["rounds"] == 0
+    assert len(revised["attempted_queries"]) == 2
+
+
+def test_the_rationale_survives_a_rewrite():
+    """C16 recorded the purpose precisely so revision could use it; losing
+    it on the first revision would defeat that."""
+    update = reviser({
+        "action": REWRITE,
+        "text": "What LoRA rank did the authors use in their GPT-3 experiments?",
+        "reasoning": "vague about which model",
+    }).revise(revision_state(failing()), "sq1")
+    rationale = update["plan"][0]["rationale"]
+    assert "pin down the number" in rationale
+    assert "vague about which model" in rationale
+
+
+def test_a_rewrite_that_is_not_a_rewrite_abandons_instead():
+    """Consuming a revision and changing nothing is §2.4's anti-pattern."""
+    update = reviser({
+        "action": REWRITE, "text": "What rank did they use?", "reasoning": "r",
+    }).revise(revision_state(failing()), "sq1")
+    assert update["plan"][0]["status"] == "abandoned"
+    assert update["unresolved_gaps"]
+
+
+def test_split_creates_children_with_parent_lineage():
+    update = reviser({
+        "action": SPLIT,
+        "parts": ["What LoRA rank did the authors use for GPT-3?",
+                  "What LoRA rank did the authors use for RoBERTa?"],
+        "reasoning": "two models, two answers",
+    }).revise(revision_state(failing()), "sq1")
+    assert len(update["plan"]) == 2
+    assert all(sq["parent_id"] == "sq1" for sq in update["plan"])
+    assert all(sq["status"] == "pending" for sq in update["plan"])
+    assert [sq["id"] for sq in update["plan"]] == ["sq1.1", "sq1.2"]
+
+
+def test_split_is_capped():
+    update = reviser({
+        "action": SPLIT,
+        "parts": [f"A sufficiently long sub-question number {i}?"
+                  for i in range(8)],
+        "reasoning": "r",
+    }).revise(revision_state(failing()), "sq1")
+    assert len(update["plan"]) == 3
+
+
+def test_a_split_producing_one_part_abandons():
+    update = reviser({
+        "action": SPLIT,
+        "parts": ["Only one sufficiently long part here?"],
+        "reasoning": "r",
+    }).revise(revision_state(failing()), "sq1")
+    assert update["plan"][0]["status"] == "abandoned"
+
+
+def test_merge_abandons_the_duplicate_and_records_what_covers_it():
+    sibling = new_sub_question("What rank is used across experiments?",
+                               sub_question_id="sq2")
+    update = reviser({
+        "action": MERGE, "merge_into": "sq2",
+        "reasoning": "sq2 already retrieves this",
+    }).revise(revision_state(failing(), sibling), "sq1")
+    merged = next(sq for sq in update["plan"] if sq["id"] == "sq1")
+    assert merged["status"] == "abandoned"
+    assert "covered by sq2" in merged["rationale"]
+    assert "unresolved_gaps" not in update     # not a gap: a sibling has it
+
+
+def test_merge_into_a_nonexistent_sibling_becomes_a_gap():
+    update = reviser({
+        "action": MERGE, "merge_into": "sq9", "reasoning": "r",
+    }).revise(revision_state(failing()), "sq1")
+    assert update["plan"][0]["status"] == "abandoned"
+    assert update["unresolved_gaps"]
+
+
+def test_merge_does_not_modify_the_sibling():
+    """Broadening a sibling would invalidate the retrieval it has already
+    completed."""
+    sibling = new_sub_question("original sibling text", sub_question_id="sq2")
+    sibling["status"] = "sufficient"
+    update = reviser({
+        "action": MERGE, "merge_into": "sq2", "reasoning": "r",
+    }).revise(revision_state(failing(), sibling), "sq1")
+    kept = next(sq for sq in update["plan"] if sq["id"] == "sq2")
+    assert kept["text"] == "original sibling text"
+    assert kept["status"] == "sufficient"
+
+
+def test_abandon_records_a_gap():
+    update = reviser({
+        "action": ABANDON, "reasoning": "the corpus does not discuss this",
+    }).revise(revision_state(failing()), "sq1")
+    assert update["plan"][0]["status"] == "abandoned"
+    assert "could not establish" in update["unresolved_gaps"][0]
+
+
+def test_an_unknown_action_abandons():
+    update = reviser({"action": "PONDER", "reasoning": "r"}).revise(
+        revision_state(failing()), "sq1"
+    )
+    assert update["plan"][0]["status"] == "abandoned"
+
+
+def test_revision_failure_abandons_rather_than_stranding():
+    """A failed revision must not leave the sub-question non-terminal, or
+    the controller routes back here forever."""
+    p = Planner(CFG, provider=FakeProvider(error=RuntimeError("down")))
+    update = p.revise(revision_state(failing()), "sq1")
+    assert update["plan"][0]["status"] == "abandoned"
+
+
+def test_revising_an_unknown_sub_question_is_a_no_op():
+    assert reviser({"action": ABANDON}).revise(
+        revision_state(failing()), "nope"
+    ) == {}
+
+
+def test_the_prompt_shows_the_purpose_and_the_history():
+    """The purpose line is what distinguishes rewrite from split from
+    merge; without it every failure looks the same."""
+    provider = FakeProvider({"action": ABANDON, "reasoning": "r"})
+    Planner(CFG, provider=provider).revise(revision_state(failing()), "sq1")
+    system = provider.calls[0]["system"]
+    assert "pin down the number" in system
+    assert "rank used in experiments" in system
+    assert "1.20" in system
+
+
+def test_revision_is_traced_as_adaptive():
+    """Unlike initial decomposition, which happens in every configuration
+    including the A1 ablation."""
+    from src.tracing.tracer import DecisionSurface
+
+    events = []
+
+    class FakeTracer:
+        def decision(self, surface, **kw):
+            events.append((surface, kw))
+
+    Planner(CFG, provider=FakeProvider({"action": ABANDON, "reasoning": "r"}),
+            tracer=FakeTracer()).revise(revision_state(failing()), "sq1")
+    surface, payload = events[0]
+    assert surface is DecisionSurface.D1_PLAN_REVISION
+    assert payload["was_adaptive"] is True
+    assert payload["chosen"] == ABANDON
+
+
+def test_all_four_actions_are_reachable():
+    assert set(REVISION_ACTIONS) == {REWRITE, SPLIT, MERGE, ABANDON}
+
+
+# --- the node chooses its mode --------------------------------------------
+
+
+def test_node_decomposes_when_there_is_no_plan():
+    update = planner_node(planner())({"question": QUESTION})
+    assert len(update["plan"]) == 3
+
+
+def test_node_revises_when_a_sub_question_is_failing():
+    node = planner_node(reviser({"action": ABANDON, "reasoning": "r"}))
+    update = node(revision_state(failing()))
+    assert update["plan"][0]["status"] == "abandoned"
+
+
+def test_node_increments_the_revision_counter():
+    """The revision ceiling is what bounds D1, not the round counter — a
+    rewrite resets rounds deliberately, so without this the controller would
+    route back here indefinitely."""
+    node = planner_node(reviser({"action": ABANDON, "reasoning": "r"}))
+    state = revision_state(failing())
+    state["plan_revisions"] = 1
+    assert node(state)["plan_revisions"] == 2
+
+
+def test_node_charges_the_budget_ceiling():
+    from src.budget import Budget
+
+    budget = Budget(llm_calls_max=25, retrieval_calls_max=20,
+                    wall_clock_max_s=900, max_plan_revisions=2)
+    node = planner_node(reviser({"action": ABANDON, "reasoning": "r"}), budget)
+    node(revision_state(failing()))
+    assert budget.plan_revisions == 1
+
+
+def test_node_is_a_no_op_when_nothing_is_failing():
+    healthy = new_sub_question("fine", sub_question_id="sq1")
+    healthy["status"] = "sufficient"
+    assert planner_node(planner())(revision_state(healthy)) == {}

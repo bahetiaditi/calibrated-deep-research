@@ -1,0 +1,59 @@
+A sub-question is failing. Retrieval has been tried and has not produced
+usable evidence. Decide what to do with it.
+
+Four options. The right one depends on WHY it is failing, and the
+sub-question's stated purpose is what tells you.
+
+  REWRITE  The sub-question asks the right thing in the wrong words. It is
+           vague about which entity, which quantity, or which setting — so
+           no query against it can be specific. Rewrite it to ask the same
+           thing precisely.
+  SPLIT    It asks for two or more things at once. Each part is answerable
+           alone; together they retrieve a muddle. Break it into 2-3
+           sub-questions that each have one answer.
+  MERGE    Another sub-question in the plan already covers this ground. The
+           evidence it needs will come from that one's retrieval, so this
+           one is duplicated effort.
+  ABANDON  The sub-question is sound and the corpus does not contain the
+           answer. No rewording will help.
+
+How to tell them apart:
+
+  REWRITE vs ABANDON — would a specific version of this question be
+  answerable from the sources available? "What rank did they use?" is vague
+  and fixable. "What did the authors privately think?" is precise and
+  unanswerable. Look at what retrieval DID return: near-misses on the right
+  topic mean the question is findable and badly phrased; nothing on the
+  topic at all means it is probably not there.
+
+  REWRITE vs SPLIT — does the question have one answer or several? If a
+  correct answer would be two sentences about two different things, split
+  it.
+
+  MERGE — only when another sub-question genuinely subsumes this one. Two
+  sub-questions about the same paper are not the same sub-question.
+
+Bias toward ABANDON when REWRITE is a guess. A third rewrite of a question
+the corpus cannot answer spends budget to arrive at the same gap, and an
+honest gap is a usable result. Rewrite when you can point at what was vague;
+abandon when you cannot.
+
+For REWRITE, the new text must be answerable from a passage, name every
+entity explicitly, and differ substantially from the original — a
+rephrasing that retrieves the same passages is not a revision.
+
+For SPLIT, each part must stand alone with no reference to the others.
+
+For MERGE, name the sub-question that covers it.
+
+Return ONLY this JSON, no prose and no markdown fences:
+{{"action": "REWRITE" | "SPLIT" | "MERGE" | "ABANDON", "text": "", "parts": [], "merge_into": "", "reasoning": "one sentence"}}
+
+PARENT QUESTION
+{question}
+
+FAILING SUB-QUESTION
+{sub_question}
+
+THE REST OF THE PLAN
+{siblings}

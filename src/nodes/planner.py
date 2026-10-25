@@ -1,13 +1,13 @@
-"""Planner — initial decomposition (D1, first half).
+"""Planner — initial decomposition and revision (D1).
 
-Revision mode lands at C25. This commit produces the first plan; what makes
-D1 a *decision surface* rather than a preprocessing step is that the plan can
-later be rewritten, and that only works if this node records enough for the
-reviser to act on.
+Initial mode produces the first plan. Revision mode (C25) is what makes D1 a
+*decision surface* rather than a preprocessing step: the plan can be
+rewritten when it is failing, and the four ways of rewriting it are a
+judgment rather than a retry.
 
 Why `rationale` is not decoration
 ---------------------------------
-When a sub-question fails to retrieve anything, C25 must choose between
+When a sub-question fails to retrieve anything, revision must choose between
 rewriting it, splitting it, merging it with another, or abandoning it as
 unanswerable. That choice depends on *what the sub-question was for*. A
 sub-question that exists to pin down a number can be rewritten with
@@ -16,6 +16,16 @@ split; one whose contribution is already covered by a sibling should be
 merged. Without the rationale, the reviser can only see that retrieval
 failed, and every failure looks the same — which collapses four options into
 "try again", and D1 becomes a retry loop.
+
+What a rewrite resets, and what it does not
+-------------------------------------------
+A rewritten sub-question gets a **fresh round counter**: it is a different
+question in substance, and leaving it at its round limit would make revision
+useless exactly when it is needed. But it **keeps `attempted_queries`**, so
+D2 cannot reissue a query that already failed, and it **spends a plan
+revision**, which has its own ceiling. The budget that bounds revision is
+`max_plan_revisions`, not the round counter — otherwise the two ceilings
+interact and a late rewrite silently does nothing.
 
 Why the suggested route is a suggestion
 ---------------------------------------
@@ -45,6 +55,14 @@ from src.prompts import render
 from src.state import Route, SubQuestion, new_sub_question
 
 log = logging.getLogger(__name__)
+
+REWRITE = "REWRITE"
+SPLIT = "SPLIT"
+MERGE = "MERGE"
+ABANDON = "ABANDON"
+REVISION_ACTIONS = (REWRITE, SPLIT, MERGE, ABANDON)
+
+MAX_SPLIT_PARTS = 3
 
 VALID_ROUTES: tuple[Route, ...] = (
     "arxiv_meta", "arxiv_fulltext", "web", "evidence_store",
@@ -101,6 +119,165 @@ class Planner:
         sub_questions = self._parse(parsed, question)
         self._trace(question, sub_questions)
         return sub_questions
+
+    # -- revision (D1) ------------------------------------------------------
+
+    def revise(
+        self, state: dict[str, Any], sub_question_id: str
+    ) -> dict[str, Any]:
+        """Rewrite, split, merge or abandon a failing sub-question.
+
+        Returns a state update containing the new plan. The caller is
+        responsible for charging the revision against the budget ceiling.
+        """
+        plan = list(state.get("plan") or [])
+        target = next((sq for sq in plan if sq["id"] == sub_question_id), None)
+        if target is None:
+            return {}
+
+        siblings = [sq for sq in plan if sq["id"] != sub_question_id]
+        try:
+            parsed, _ = self.provider.complete_json(
+                system=render(
+                    "planner_revise",
+                    question=state.get("question", ""),
+                    sub_question=_describe(target),
+                    siblings=_describe_siblings(siblings),
+                ),
+                user="Decide what to do with this sub-question.",
+                role=Role.JUDGMENT,
+                required_keys=["action"],
+            )
+            self._charge()
+        except Exception as exc:  # noqa: BLE001
+            # A failed revision must not strand the sub-question in a
+            # non-terminal state, or the controller will route back here
+            # forever. Abandoning is the honest fallback: we tried, we
+            # could not decide how to fix it, and the gap gets reported.
+            log.warning("plan revision failed for %s: %s", sub_question_id, exc)
+            return self._apply(
+                plan, target, ABANDON, {},
+                f"revision failed ({type(exc).__name__})",
+            )
+
+        action = str(parsed.get("action") or "").upper().strip()
+        if action not in REVISION_ACTIONS:
+            action = ABANDON
+        return self._apply(
+            plan, target, action, parsed,
+            str(parsed.get("reasoning") or "")[:300],
+        )
+
+    def _apply(
+        self,
+        plan: list[SubQuestion],
+        target: SubQuestion,
+        action: str,
+        parsed: dict[str, Any],
+        reasoning: str,
+    ) -> dict[str, Any]:
+        new_plan: list[SubQuestion] = []
+        gaps: list[str] = []
+
+        for sub_question in plan:
+            if sub_question["id"] != target["id"]:
+                new_plan.append(sub_question)
+                continue
+
+            if action == REWRITE:
+                text = _text_of(parsed)
+                if len(text) < MIN_TEXT_CHARS or _normalise(text) == _normalise(
+                    target["text"]
+                ):
+                    # A rewrite that is not a rewrite would consume a
+                    # revision and change nothing — §2.4's "the loop counter
+                    # is the only thing that changes between iterations".
+                    new_plan.append(_abandoned(
+                        target, "rewrite was not substantially different"
+                    ))
+                    gaps.append(_gap(target))
+                    continue
+                revised = dict(target)
+                revised["text"] = text
+                revised["status"] = "pending"
+                # Fresh rounds (a different question in substance), but the
+                # attempted queries survive so D2 cannot reissue a failure.
+                revised["rounds"] = 0
+                revised["rationale"] = (
+                    f"{target.get('rationale', '')} | revised: {reasoning}"
+                ).strip(" |")[:300]
+                new_plan.append(revised)  # type: ignore[arg-type]
+
+            elif action == SPLIT:
+                parts = [
+                    p for p in (parsed.get("parts") or [])
+                    if isinstance(p, str) and len(p.strip()) >= MIN_TEXT_CHARS
+                ][:MAX_SPLIT_PARTS]
+                if len(parts) < 2:
+                    new_plan.append(_abandoned(
+                        target, "split produced fewer than two usable parts"
+                    ))
+                    gaps.append(_gap(target))
+                    continue
+                for index, part in enumerate(parts):
+                    child = new_sub_question(
+                        " ".join(part.split()),
+                        sub_question_id=f"{target['id']}.{index + 1}",
+                        rationale=f"split from {target['id']}: {reasoning}",
+                        parent_id=target["id"],
+                    )
+                    child["suggested_route"] = target.get("suggested_route")
+                    new_plan.append(child)
+
+            elif action == MERGE:
+                into = str(parsed.get("merge_into") or "").strip()
+                covered = any(sq["id"] == into for sq in plan)
+                new_plan.append(_abandoned(
+                    target,
+                    f"covered by {into}: {reasoning}" if covered
+                    else f"merge target {into!r} not in the plan; abandoned",
+                ))
+                if not covered:
+                    gaps.append(_gap(target))
+
+            else:   # ABANDON
+                new_plan.append(_abandoned(target, reasoning))
+                gaps.append(_gap(target))
+
+        self._trace_revision(target, action, reasoning, new_plan)
+        update: dict[str, Any] = {"plan": new_plan}
+        if gaps:
+            update["unresolved_gaps"] = gaps
+        return update
+
+    def _trace_revision(
+        self,
+        target: SubQuestion,
+        action: str,
+        reasoning: str,
+        new_plan: list[SubQuestion],
+    ) -> None:
+        if self.tracer is None:
+            return
+        from src.tracing.tracer import DecisionSurface
+
+        self.tracer.decision(
+            DecisionSurface.D1_PLAN_REVISION,
+            chosen=action,
+            alternatives=[a for a in REVISION_ACTIONS if a != action],
+            rationale=reasoning,
+            inputs={
+                "sub_question_id": target["id"],
+                "text": target["text"][:160],
+                "rounds": target.get("rounds", 0),
+                "attempted_queries": target.get("attempted_queries", []),
+                "plan_size_after": len(new_plan),
+            },
+            # Revision IS the adaptive half of D1 — unlike initial
+            # decomposition, which happens in every configuration including
+            # the A1 ablation.
+            was_adaptive=True,
+        )
 
     # -- parsing ------------------------------------------------------------
 
@@ -177,15 +354,39 @@ class Planner:
         )
 
 
-def planner_node(planner: Planner):
-    """LangGraph node: question -> state['plan']."""
+def planner_node(planner: Planner, budget: Any = None):
+    """LangGraph node: initial decomposition, or revision if a plan exists.
+
+    One node, two modes. The controller routes here both when the plan is
+    empty and when a sub-question is failing, and which is meant is visible
+    from the state — a plan that exists cannot be decomposed again.
+    """
 
     def node(state: dict) -> dict:
-        plan = planner.plan(
-            state.get("question", ""),
-            premise_check=state.get("premise_check"),
+        if not state.get("plan"):
+            return {"plan": planner.plan(
+                state.get("question", ""),
+                premise_check=state.get("premise_check"),
+            )}
+
+        failing = next(
+            (sq for sq in state["plan"]
+             if sq.get("status") == "insufficient"
+             and int(sq.get("rounds", 0)) >= 1),
+            None,
         )
-        return {"plan": plan}
+        if failing is None:
+            return {}
+
+        update = planner.revise(state, failing["id"])
+        if update:
+            # The revision counter is what bounds D1, not the round counter
+            # — a rewrite resets rounds deliberately, so without this the
+            # controller would route back here indefinitely.
+            update["plan_revisions"] = int(state.get("plan_revisions", 0)) + 1
+            if budget is not None:
+                budget.record_plan_revision()
+        return update
 
     return node
 
@@ -255,3 +456,42 @@ def _premise_note(premise_check: dict[str, Any] | None) -> str:
               "false premise."
         )
     return ("\n\n" + "\n\n".join(lines)) if lines else ""
+
+
+def _abandoned(target: SubQuestion, reasoning: str) -> SubQuestion:
+    out = dict(target)
+    out["status"] = "abandoned"
+    out["rationale"] = f"{target.get('rationale', '')} | {reasoning}".strip(" |")[:300]
+    return out  # type: ignore[return-value]
+
+
+def _gap(target: SubQuestion) -> str:
+    return f"could not establish: {target['text'][:160].rstrip(' .')}"
+
+
+def _describe(sub_question: SubQuestion) -> str:
+    """What the reviser sees. The purpose line is the one that decides."""
+    features = sub_question.get("sufficiency_features") or {}
+    f1 = features.get("f1_max_rerank")
+    queries = sub_question.get("attempted_queries") or []
+    return (
+        f"id: {sub_question['id']}\n"
+        f"text: {sub_question['text']}\n"
+        f"why it exists: {sub_question.get('rationale') or '(not recorded)'}\n"
+        f"rounds spent: {sub_question.get('rounds', 0)}\n"
+        f"routes tried: {', '.join(sub_question.get('attempted_routes') or []) or '(none)'}\n"
+        f"queries tried:\n"
+        + ("\n".join(f"   - {q[:100]!r}" for q in queries) or "   (none)")
+        + f"\nbest relevance score: "
+        + ("(nothing retrieved)" if f1 is None else f"{f1:.2f}")
+        + "   (above ~4 means a passage answered the query)"
+    )
+
+
+def _describe_siblings(siblings: list[SubQuestion]) -> str:
+    if not siblings:
+        return "(this is the only sub-question)"
+    return "\n".join(
+        f"{sq['id']}  status={sq.get('status')}  {sq['text'][:110]}"
+        for sq in siblings
+    )

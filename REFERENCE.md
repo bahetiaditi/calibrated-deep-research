@@ -2659,3 +2659,50 @@ against different evidence.
 re-retrieved if budget allows, otherwise left alone. That is precisely the
 conditional edge §2.3 describes as "not a decision", and it costs **zero**
 LLM calls — so A5 measures the value of the judgment, not of the extra call.
+
+**2026-09-07 — C25. Planner revision mode (D1).**
+
+`Planner.revise()` and `src/prompts/planner_revise.txt`. One node, two modes:
+the controller routes to the planner both when the plan is empty and when a
+sub-question is failing, and which is meant is visible from the state — a
+plan that exists cannot be decomposed again.
+
+**C16's `rationale` field is what makes four options possible.** The prompt
+shows the reviser *why the sub-question exists*, alongside its attempted
+queries, routes and best relevance score. Without the purpose line every
+failure looks identical and the four actions collapse into "try again" —
+which is §2.4's second anti-pattern, and the reason the field was recorded
+nine commits before anything read it.
+
+**What a rewrite resets, and what it does not.** A rewritten sub-question
+gets a **fresh round counter**, because it is a different question in
+substance and leaving it at its round limit would make revision useless
+exactly when it is needed. It **keeps `attempted_queries`**, so D2 cannot
+reissue a query that already failed. And it **spends a plan revision**.
+
+The ceiling that bounds D1 is `max_plan_revisions`, *not* the round counter.
+That separation matters: the two ceilings would otherwise interact, and a
+late rewrite would silently do nothing because the sub-question was already
+out of rounds.
+
+**A rewrite that is not a rewrite abandons instead.** Text that is
+substantially the same as the original would consume a revision and change
+nothing — the loop counter being the only thing that changes between
+iterations. The check is explicit rather than trusted to the prompt.
+
+**MERGE does not modify the sibling it merges into.** Broadening a sibling
+would invalidate the retrieval it has already completed. The failing
+sub-question is marked abandoned with a note recording what covers it, and —
+unlike a genuine abandonment — **no gap is recorded**, because a sibling has
+the ground. Merging into a sub-question that is not in the plan does record
+a gap, since nothing covers it.
+
+**Revision failure abandons rather than stranding.** A sub-question left
+non-terminal after a failed revision would send the controller back to the
+planner forever. Abandoning is the honest fallback: it was tried, the fix
+could not be decided, and the gap is reported.
+
+**Revision is traced `was_adaptive=True`**, unlike initial decomposition
+(C16), which happens in every configuration including the A1 ablation. The
+two halves of D1 are deliberately distinguished in the trace so C35 counts
+only the adaptive one.

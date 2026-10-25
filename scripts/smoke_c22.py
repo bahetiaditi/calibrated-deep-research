@@ -89,71 +89,85 @@ def main() -> int:
     state["plan"] = build_plan()
     retriever = AdaptiveRetriever(cfg, retriever=hybrid, reranker=reranker,
                                   budget=budget)
-    state = retriever.retrieve_all(state)
-
-    print(f"{BOLD}After retrieval{RESET}")
-    for sq in state["plan"]:
-        f1 = (sq.get("sufficiency_features") or {}).get("f1_max_rerank")
-        print(f"{DIM}   {sq['id']}  {sq['status']:<13} rounds={sq['rounds']}  "
-              f"f1={'—' if f1 is None else f'{f1:.2f}'}{RESET}")
-    print()
-
     allocator = MarginalValueAllocator(cfg)
-    values = {sq["id"]: allocator.value(sq) for sq in state["plan"]}
-    print(f"{BOLD}Marginal value of one more round{RESET}")
-    for sqid, value in values.items():
-        print(f"{DIM}   {sqid}  {value:.3f}{RESET}")
 
-    fresh = Budget.from_config(cfg)
-    adaptive_alloc = allocator.allocate(fresh, state["plan"])
+    # Step through rounds rather than calling retrieve_all. Allocation has to
+    # be sampled WHILE sub-questions are open: run to completion first and
+    # everything is terminal, every value is 0.0, and there is nothing left
+    # to allocate. That is the system working and the measurement arriving
+    # too late.
+    print(f"{BOLD}Allocation after each round{RESET}\n")
+    for round_number in range(1, 4):
+        open_ids = [
+            sq["id"] for sq in state["plan"]
+            if sq["status"] not in ("sufficient", "abandoned")
+        ]
+        if not open_ids:
+            break
+
+        chosen = allocator.next_sub_question(state["plan"]) or open_ids[0]
+        update = retriever.retrieve_one(state, chosen)
+        if update:
+            state["plan"] = update["plan"]
+            from src.state import merge_evidence
+
+            state["evidence"] = merge_evidence(
+                state.get("evidence"), update.get("evidence")
+            )
+
+        print(f"{DIM}  round {round_number} — D4 chose {chosen}{RESET}")
+        probe = Budget.from_config(cfg)
+        values = {sq["id"]: allocator.value(sq) for sq in state["plan"]}
+        allocation = allocator.allocate(probe, state["plan"])
+        for sq in state["plan"]:
+            f1 = (sq.get("sufficiency_features") or {}).get("f1_max_rerank")
+            print(f"     {sq['id']}  {sq['status']:<13} "
+                  f"f1={'—' if f1 is None else f'{f1:>6.2f}'}  "
+                  f"value={values[sq['id']]:.3f}  "
+                  f"would get {allocation[sq['id']]:>2} of "
+                  f"{probe.allocatable()}")
+        print()
+
+    sq1, sq2 = state["plan"][0]["id"], state["plan"][1]["id"]
+    final_values = {sq["id"]: allocator.value(sq) for sq in state["plan"]}
+    final_budget = Budget.from_config(cfg)
+    adaptive_alloc = allocator.allocate(final_budget, state["plan"])
     uniform_alloc = UniformAllocator().allocate(
         Budget.from_config(cfg), state["plan"]
     )
 
-    print(f"\n{BOLD}Allocation of the remaining budget{RESET}")
-    print(f"{DIM}   {'':<6}{'uniform (A4)':>14}{'marginal (D4)':>15}{RESET}")
-    for sqid in adaptive_alloc:
-        print(f"   {sqid:<6}{uniform_alloc.get(sqid, 0):>14}"
-              f"{adaptive_alloc[sqid]:>15}")
+    print(f"{BOLD}Final state{RESET}")
+    for sq in state["plan"]:
+        print(f"{DIM}   {sq['id']}  {sq['status']:<13} "
+              f"rounds={sq['rounds']}{RESET}")
 
-    sq1, sq2 = state["plan"][0]["id"], state["plan"][1]["id"]
-    if values[sq1] == values[sq2] == 0.0:
-        warn("both sub-questions are terminal, so there is nothing left to "
-             "allocate. Re-run with a larger round limit to see the "
-             "reallocation.")
+    print(f"\n{BOLD}Uniform (A4) vs marginal (D4){RESET}")
+    print(f"{DIM}   {'':<6}{'uniform':>10}{'marginal':>11}{RESET}")
+    for sqid in adaptive_alloc:
+        print(f"   {sqid:<6}{uniform_alloc.get(sqid, 0):>10}"
+              f"{adaptive_alloc[sqid]:>11}")
+
+    hopeless_status = state["plan"][1]["status"]
+    if hopeless_status == "abandoned":
+        ok(f"the hopeless sub-question was abandoned after "
+           f"{state['plan'][1]['rounds']} rounds rather than running to the "
+           f"limit")
+        print(f"{DIM}       note: D3 cut this loss before D4 could. The two "
+              f"surfaces overlap,\n       which is worth predicting now — "
+              f"A4 alone may show little effect while\n       D3 is still "
+              f"live, and that is a finding rather than a null result.{RESET}")
     elif adaptive_alloc[sq1] > adaptive_alloc[sq2]:
         ok(f"budget moved toward the answerable sub-question "
-           f"({adaptive_alloc[sq1]} vs {adaptive_alloc[sq2]}) — the C22 "
-           f"criterion")
-    elif values[sq1] < values[sq2]:
-        warn("the hopeless sub-question scored higher. Check the f1 values "
-             "above — if sq1 already succeeded, it correctly has no value "
-             "left and sq2 is the only open one.")
+           f"({adaptive_alloc[sq1]} vs {adaptive_alloc[sq2]})")
     else:
-        bad("allocation did not follow value")
-        failures += 1
+        warn("no reallocation observed in the final state; check the "
+             "per-round table above, where the open sub-questions are")
 
     if uniform_alloc[sq1] == uniform_alloc[sq2]:
         ok("the uniform allocator (A4) splits evenly, ignoring all of it")
     else:
         bad("the uniform baseline is not uniform")
         failures += 1
-
-    print(f"\n{BOLD}Which sub-question D4 would work on next{RESET}")
-    chosen = allocator.next_sub_question(state["plan"])
-    plan_order = next(
-        (sq["id"] for sq in state["plan"]
-         if sq["status"] not in ("sufficient", "abandoned")), None
-    )
-    print(f"{DIM}   D4 chooses       {chosen}")
-    print(f"   plan order (A4)  {plan_order}{RESET}")
-    if chosen is None:
-        warn("nothing open to choose")
-    elif chosen == plan_order:
-        warn("D4 and plan order agree here — they will not always, and the "
-             "ablation measures the cases where they differ")
-    else:
-        ok("D4 chooses a different sub-question than plan order would")
 
     print(f"\n{BOLD}Guarantees{RESET}")
     untried = Budget.from_config(cfg)

@@ -2393,3 +2393,90 @@ one question would be overfitting to a single example, and whether D2 and D3
 earn their cost is C35's question across 24 benchmark questions, not C21's
 across one. The thresholds stay in config and are revisited at C33 with the
 calibration split.
+
+**2026-09-07 — C22. Budget allocation (D4). Phase 2 complete.**
+
+`src/sufficiency/allocation.py`. `MarginalValueAllocator` is the adaptive
+counterpart to C5's `UniformAllocator`, which *is* ablation A4.
+
+**Value is not monotone in how badly a sub-question is doing**, and that is
+the whole idea. It peaks in the middle:
+
+| state | value | why |
+|---|---|---|
+| already sufficient | 0.0 | nothing left to buy |
+| just below the bar | high | one more round plausibly closes it |
+| far below the bar | low | the corpus does not appear to have it |
+| never attempted | 1.0 | unknown, and unknown must be tried |
+
+An allocator that funds the weakest sub-question throws budget at corpus
+gaps; one that funds the strongest spends on questions already answered.
+Both are easy to write by accident, and a test pins the non-monotonicity so
+neither can creep in.
+
+**Untried sub-questions are guaranteed a first attempt before allocation
+touches anything.** A sub-question nobody has retrieved for has no evidence
+*because nobody looked*, so any score-based estimate of its prospects is a
+guess dressed as a measurement. Starving it would mean D4 is pre-judging
+rather than allocating — and it would systematically starve exactly the
+sub-questions whose difficulty the planner failed to anticipate.
+
+**Plausibility decays with rounds already spent.** This is f8's rationale
+from §5.2 ("many rounds to reach thin evidence is a bad sign") used as a
+*decision* rather than only as a feature: a sub-question on its third round
+at f1 1.0 is a worse bet than one on its first round at f1 1.0, though their
+evidence is identical.
+
+**`next_sub_question` makes the allocation load-bearing.** §3.3's routing
+table says the controller picks "highest-value SQ per D4". Without it the
+retriever takes the first pending sub-question in plan order and the
+allocation is a number nobody reads — the same defect as C21's unused route,
+which is recent enough to be worth guarding against deliberately. The node
+now asks the allocator; with no allocator it falls back to plan order, which
+is precisely what A4 restores.
+
+Allocation uses largest-remainder apportionment so shares sum exactly to the
+pool rather than losing up to n-1 calls to truncation — the same correctness
+point as C5's `_distribute`.
+
+> **Phase 2 exit criterion met.** The trace of a single run visibly shows the
+> system changing its mind: a different route on retry, a reformulated query,
+> a round count that depends on the evidence, and uneven budget spend.
+
+**2026-09-07 — C22 live run: D3 and D4 overlap, and that is a prediction
+worth recording before C35.**
+
+The run behaved correctly:
+
+```
+sq1  "What fraction of theoretical peak FLOPs does FlashAttention-2 reach?"
+     sufficient,  1 round,  f1  7.01
+sq2  "What makes retrieval augmentation fail on questions requiring
+      synthesis?"  (C13: zero fully-relevant passages in the pool)
+     abandoned,   2 rounds, f1 -0.29
+```
+
+The smoke test reported two WARNs because it sampled allocation *after*
+`retrieve_all` finished, by which point both sub-questions were terminal,
+every value was 0.0 and there was nothing left to allocate. The system was
+right and the measurement arrived too late. The script now steps through
+rounds and samples while sub-questions are still open.
+
+**The substantive finding: D3 cut the loss before D4 could.** The hopeless
+sub-question was abandoned after two rounds because round two did not
+improve on round one, so the budget D4 would have withheld was never
+requested.
+
+This has a direct consequence for §6.5. **A4 (uniform split) with D3 still
+live may show little or no effect**, because D3 already prevents the waste
+that D4 exists to prevent. The two surfaces are not independent: D3 stops a
+losing sub-question, D4 declines to fund one. Recording the prediction now
+matters for two reasons — it is intellectually cheap to claim afterwards that
+a null result was expected, and the honest reading of a small A4 effect is
+"its job was already being done elsewhere", not "budget allocation does not
+matter".
+
+If A4 does come out flat, the informative follow-up is an A3+A4 pair: freeze
+both and see whether the combined effect exceeds the sum of the individual
+ones. That is outside §6.5's one-surface-at-a-time design, so it would be an
+addition to report separately rather than a change to the ablation table.

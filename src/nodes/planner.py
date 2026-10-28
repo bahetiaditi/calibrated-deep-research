@@ -203,6 +203,13 @@ class Planner:
                 # Fresh rounds (a different question in substance), but the
                 # attempted queries survive so D2 cannot reissue a failure.
                 revised["rounds"] = 0
+                # Also a fresh marginal-improvement baseline and no pending
+                # reformulation: both described the OLD question. The C27
+                # live run abandoned a rewrite after one round because it
+                # "did not improve" on the pre-rewrite best f1 (C27.2).
+                revised["best_f1"] = None
+                revised["next_route"] = None
+                revised["next_query"] = None
                 revised["rationale"] = (
                     f"{target.get('rationale', '')} | revised: {reasoning}"
                 ).strip(" |")[:300]

@@ -142,6 +142,17 @@ class SubQuestion(TypedDict):
     # only which sub-question found a passage first.
     evidence_ids: list[str]
     suggested_route: Route | None  # the planner's guess (C16); D2 may override
+    # D2/D3's memory between rounds (C27.2). These lived on the
+    # AdaptiveRetriever instance, keyed by sub-question id — and every plan
+    # names its sub-questions sq1, sq2, sq3, while the instance is reused
+    # across questions. The C27 live run showed the second question's sq1
+    # retrieved with the FIRST question's reformulated query, and its round 1
+    # "improvement" measured against the first question's f1. On the state
+    # they are per-question by construction, and checkpointed, so a resumed
+    # run keeps them too.
+    next_route: Route | None       # D2's chosen route for the next round
+    next_query: str | None         # D2's reformulated (or router's) query
+    best_f1: float | None          # D3's marginal-improvement baseline
 
 
 class ClaimVerification(TypedDict):
@@ -312,6 +323,9 @@ def new_sub_question(
         parent_id=parent_id,
         evidence_ids=[],
         suggested_route=None,
+        next_route=None,
+        next_query=None,
+        best_f1=None,
     )
 
 
@@ -393,3 +407,6 @@ def independent_sources(passages: Sequence[Passage]) -> int:
     papers count as two sources, while two chunks of one paper count as one.
     """
     return len({p.get("source_id") for p in passages if p.get("source_id")})
+
+# Fields the retriever carries from one round of a sub-question to the next.
+ROUND_CARRY_FIELDS: tuple[str, ...] = ("next_route", "next_query", "best_f1")

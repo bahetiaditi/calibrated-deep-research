@@ -110,10 +110,13 @@ class AdaptiveRetriever(StaticRetriever):
             self.cfg.get("retrieval.adaptive.min_improvement", 0.5)
         )
         self._provider = provider
-        self._plan_decision: dict[str, dict[str, Any]] = {}
-        # Best f1 seen so far per sub-question, so a round can be compared
-        # with the one before it rather than only with a fixed threshold.
-        self._best_f1: dict[str, float] = {}
+        # NO per-sub-question state on the instance (C27.2). The pending
+        # route/query and the best f1 so far live on the SubQuestion
+        # (`next_route`, `next_query`, `best_f1`): this object is built once
+        # and reused across questions whose sub-questions share ids, and
+        # instance dicts keyed by id leaked one question's reformulations
+        # into the next. `decide_next` writes those fields onto the
+        # sub-question it is given; `step` hands it a copy.
 
     @property
     def provider(self) -> Any:
@@ -150,8 +153,7 @@ class AdaptiveRetriever(StaticRetriever):
             suggested = _coerce_route(sub_question.get("suggested_route"))
             return CHEAP_FIRST.get(suggested, suggested)
 
-        decision = self._plan_decision.get(sub_question["id"]) or {}
-        route = decision.get("route")
+        route = sub_question.get("next_route")
         if route:
             return _coerce_route(route)
 
@@ -163,8 +165,7 @@ class AdaptiveRetriever(StaticRetriever):
         if not self.d2_live:
             return super().formulate_query(sub_question)
 
-        decision = self._plan_decision.get(sub_question["id"]) or {}
-        query = (decision.get("query") or "").strip()
+        query = (sub_question.get("next_query") or "").strip()
         attempted = sub_question.get("attempted_queries") or []
         if query and query not in attempted:
             return query
@@ -185,10 +186,13 @@ class AdaptiveRetriever(StaticRetriever):
         f1 = features["f1"]
         sources = features["sources"]
 
-        sqid = sub_question["id"]
-        previous = self._best_f1.get(sqid)
+        previous = sub_question.get("best_f1")
         if f1 is not None:
-            self._best_f1[sqid] = max(f1, previous if previous is not None else f1)
+            sub_question["best_f1"] = max(f1, previous if previous is not None else f1)
+        # This round has consumed whatever was pending; a stale query must
+        # not be replayed if the sub-question is reopened later.
+        sub_question["next_route"] = None
+        sub_question["next_query"] = None
 
         verdict, rationale = self._judge(rounds, f1, sources, previous)
 
@@ -203,7 +207,8 @@ class AdaptiveRetriever(StaticRetriever):
             self._record_decision(sub_question, ABANDONED, reason, features, decision)
             return ABANDONED
 
-        self._plan_decision[sub_question["id"]] = decision
+        sub_question["next_route"] = decision.get("route") or None
+        sub_question["next_query"] = (decision.get("query") or "").strip() or None
         self._record_decision(
             sub_question, IN_PROGRESS,
             f"{decision.get('action')}: {decision.get('reasoning', '')}",

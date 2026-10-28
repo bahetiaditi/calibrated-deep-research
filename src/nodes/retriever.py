@@ -36,6 +36,7 @@ from typing import Any, Iterable, Sequence
 
 from src.config import Config, get_config
 from src.state import (
+    ROUND_CARRY_FIELDS,
     Passage,
     ResearchState,
     Route,
@@ -165,7 +166,14 @@ class StaticRetriever:
             sub_question.get("evidence_ids") or [],
             [p["id"] for p in outcome.passages],
         )
-        updated["status"] = self.decide_next(sub_question, outcome)
+        # D3 decides on a COPY of the pre-round sub-question: `decide_next`
+        # writes the round-to-round fields (next_route, next_query,
+        # best_f1) onto what it is given, and the original is the object in
+        # the checkpointed state, which a node must not mutate (C27.2).
+        working = dict(sub_question)
+        updated["status"] = self.decide_next(working, outcome)  # type: ignore[arg-type]
+        for key in ROUND_CARRY_FIELDS:
+            updated[key] = working.get(key)
 
         # Features are recomputed every round, not only at the end. D3 reads
         # them at C21 to decide whether to stop, so they have to exist while

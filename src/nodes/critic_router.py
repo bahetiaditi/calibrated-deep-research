@@ -120,7 +120,15 @@ class CriticRouter:
             available = self._available_actions(state)
             fallback = RE_RETRIEVE if RE_RETRIEVE in available else UNRESOLVED
             for finding in failed:
-                routed[id(finding)] = fallback
+                # The ownership gate applies here too: A5 is binary, not
+                # blind, and a re-retrieval that reopens nothing is not the
+                # static policy's decision, it is no decision (C27.2). The
+                # repeated-query gate deliberately does NOT apply — replaying
+                # the sub-question is exactly what the static policy does.
+                owned = find_sub_question(
+                    state, finding.get("sub_question_id") or ""
+                ) is not None
+                routed[id(finding)] = fallback if owned else UNRESOLVED
             return self._finish(state, findings, routed, adaptive=False)
 
         try:
@@ -137,8 +145,9 @@ class CriticRouter:
             return result
 
         available = self._available_actions(state)
+        retry: dict[int, str] = {}
         for index, finding in enumerate(failed):
-            action, _query, reason = decisions.get(
+            action, query, reason = decisions.get(
                 index, (UNRESOLVED, "", "no routing decision returned")
             )
             if action not in available:
@@ -148,16 +157,63 @@ class CriticRouter:
                     f"{action} unavailable ({reason})" if reason
                     else f"{action} unavailable"
                 )
+            blocked = self._claim_gate(state, finding, action, query)
+            if blocked:
+                action, reason = UNRESOLVED, (
+                    f"{blocked} ({reason})" if reason else blocked
+                )
             routed[id(finding)] = action
             finding["reasoning"] = (
                 f"{finding.get('reasoning', '')} | {reason}".strip(" |")[:400]
             )
-            if action == RE_RETRIEVE and _query:
+            if action == RE_RETRIEVE:
+                retry[id(finding)] = query.strip()
                 finding["reasoning"] = (
-                    f"{finding['reasoning']} | retry: {_query}"[:400]
+                    f"{finding['reasoning']} | retry: {query}"[:400]
                 )
 
-        return self._finish(state, findings, routed)
+        return self._finish(state, findings, routed, retry=retry)
+
+    def _claim_gate(
+        self,
+        state: ResearchState,
+        finding: ClaimVerification,
+        action: str,
+        query: str,
+    ) -> str:
+        """Per-claim facts that make a costly route impossible (C27.2).
+
+        Two, both found in the C27 live traces:
+
+        - A costly route needs a sub-question to act on. A claim the critic
+          could not attribute to one cannot be re-retrieved or revised: in
+          the live run eight RE_RETRIEVE decisions were recorded and none had
+          any effect — the record of a decision never taken, which is the
+          defect C24 was written to prevent.
+        - RE_RETRIEVE needs a query that has not already been tried. Without
+          one the retriever falls back to the sub-question's verbatim text —
+          live, the exact query that had just failed, returning the same
+          passages and a byte-identical cached draft. That is the retry §2.4
+          names as an anti-pattern, at the price of a retrieval call.
+
+        Both resolve to UNRESOLVED, which C24's prompt already prefers when
+        RE_RETRIEVE and UNRESOLVED are both arguable.
+        """
+        if action not in COSTLY:
+            return ""
+        sub_question = find_sub_question(
+            state, finding.get("sub_question_id") or ""
+        )
+        if sub_question is None:
+            return f"{action} unavailable: claim belongs to no sub-question in the plan"
+        if action == RE_RETRIEVE:
+            tried = {
+                q.strip().lower()
+                for q in sub_question.get("attempted_queries") or []
+            }
+            if not query.strip() or query.strip().lower() in tried:
+                return "RE_RETRIEVE unavailable: no query not already tried"
+        return ""
 
     # -- gates --------------------------------------------------------------
 
@@ -260,6 +316,7 @@ class CriticRouter:
         routed: dict[int, str],
         *,
         adaptive: bool = True,
+        retry: dict[int, str] | None = None,
     ) -> RoutingResult:
         plan = [dict(sq) for sq in (state.get("plan") or [])]
         by_id = {sq["id"]: sq for sq in plan}
@@ -276,6 +333,12 @@ class CriticRouter:
                 # rather than a note: the controller sees a non-terminal
                 # sub-question and routes back to the retriever.
                 sub_question["status"] = "in_progress"
+                # The router's query becomes the next round's query, so the
+                # re-retrieval asks something new rather than replaying the
+                # sub-question's text (C27.2).
+                query = (retry or {}).get(id(finding))
+                if query:
+                    sub_question["next_query"] = query
                 needs_work = True
             elif action == REVISE_PLAN and sub_question is not None:
                 sub_question["status"] = "insufficient"

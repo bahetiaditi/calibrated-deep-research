@@ -3005,7 +3005,7 @@ constraint for C30: **every Tier D1 item's refutation must be in the
 accessible corpus**, or the correct behaviour is undefined and the item
 measures retrieval coverage rather than premise detection.
 
-**3. The answerable question abstained.** Under the heuristic, 0 of 3
+**3. The answerable question abstained.** *[This reading is WRONG — corrected at C27.2: the abstention was caused by state leaking from the previous question, not by the corpus.]* Under the heuristic, 0 of 3
 resolved: sq1 reached f1 = 4.89 but its two claims came back UNSUPPORTED and
 PARTIAL (entailment 0.25); sq2 (PagedAttention, f1 = 1.47) and sq3 ("according
 to literature or technical blogs…", f1 = −2.60) were abandoned. C21 already
@@ -3037,3 +3037,100 @@ digest, so the inspector shows it directly instead of leaving it inferred.
 routes with reasons, LLM calls with cache and fallback flags, retrievals,
 premise verdicts, synthesis digests, every D1-D5 decision. Zero API calls.
 C38's failure annotation needs exactly this view.
+
+
+**2026-10-28 — C27.2. The two live runs were not independent. Retriever
+state leaked across questions; claims were attributed to the wrong
+sub-questions. Both fixed. C27.1's reading of the answerable run retracted.**
+
+`scripts/inspect_trace.py` on the two C27 traces settled the open questions
+and exposed a larger one.
+
+**The leak.** In the *answerable* run, the FlashAttention question's
+sub-questions were retrieved with `'Rotary Position Embedding RoPE mechanism
+…'`, `'Mamba-2 rotary position embeddings SSM block'` and `'Mamba-2 … SSM
+blocks reason'` — the reformulations D2 had produced for the *previous*
+question. Its first round also logged "round 1 improved f1 by −0.34", a
+comparison with that previous question's f1. `AdaptiveRetriever` kept its
+pending route/query (`_plan_decision`) and marginal-test baseline
+(`_best_f1`) in instance dicts keyed by sub-question id; the instance is
+built once and reused across questions; every plan names its sub-questions
+sq1, sq2, sq3. So sq2 and sq3 were abandoned on the wrong queries
+(f1 −2.70, −2.60), sq1 needed a planner rewrite to recover, and the run
+abstained.
+
+**C27.1 attributed that abstention to the corpus covering PagedAttention
+poorly. That was wrong**, and it is the recorded pattern exactly: a
+plausible explanation was available — C21 *had* found the corpus weak on
+PagedAttention — and it was accepted without reading what the retriever
+actually issued. In C32's eval loop, every question after the first would
+have been researched partly on its predecessor's queries, and the agency
+ablations would have compared contaminated runs. Nothing would have failed.
+
+Fixed by moving the state onto the sub-question: `next_route`, `next_query`,
+`best_f1` on `SubQuestion` — per-question by construction, and checkpointed,
+so a resume keeps them. `decide_next` writes them onto the sub-question it
+is given; `retrieve_one` hands it a copy and carries the fields into the
+returned update, so the state object LangGraph checkpointed is never
+mutated. A round clears what it consumed, so a reopened sub-question cannot
+replay a stale query. A planner REWRITE resets all three — it is a different
+question in substance — which also fixes a within-run instance of the same
+defect: in the premise run, a rewritten sub-question was abandoned after its
+first round for "improving f1 by −1.82" over the *old* question's best.
+
+**The attribution.** In the answerable run the router chose RE_RETRIEVE for
+eight claims and the next route was the decider — nothing reopened. The
+critic assigned each claim to a sub-question via `Passage.sub_question_id`,
+which C17 documented as "which sub-question found it first" and which, for a
+passage served from the persistent store, is a payload written by whatever
+run or labelling session ingested it. C17 introduced
+`SubQuestion.evidence_ids` precisely because that field is not
+authoritative; the critic never switched. Now `passage_owners(state)` builds
+the mapping from this run's plan (live sub-questions before abandoned ones),
+and a claim citing only unowned evidence is honestly unowned. This also
+corrects which sub-question each verdict feeds — f6, D5's resolution, and
+C33's stage-1 labels all read it.
+
+**Two router gates, both facts, both from the traces.** A costly route
+(RE_RETRIEVE, REVISE_PLAN) on a claim with no owning sub-question resolves
+to UNRESOLVED — otherwise the trace records a decision that was never taken,
+the defect C24 was written to prevent. And RE_RETRIEVE requires a query not
+already tried, which is then handed to the retriever as `next_query`; before,
+the router's suggested query went only into the reasoning text, and the
+reopened round replayed the sub-question's verbatim text. In the premise run
+that was the exact query that had just failed: same passages, same prompt, a
+cached byte-identical draft — a retrieval call and a synthesis spent on
+§2.4's retry. A5's binary routing gets the ownership gate but deliberately
+not the query gate: replaying the sub-question is what the static policy is.
+
+`tests/test_round_state.py`: ten of its eleven tests fail on the pre-C27.2
+code. The headline one runs two questions through one retriever instance and
+asserts the second question's first query is its own.
+
+**What the traces settled.**
+- *The premise question:* verdicts `[UNVERIFIABLE, SUPPORTED]`, f7 = 0.75.
+  The checker behaved as C15 designed — silence is not refutation — and
+  every Mamba-2 full-text query scored below zero. **The C13 corpus does not
+  contain Mamba-2's architecture.** The C30 constraint stands: a Tier D1
+  item's refutation must be retrievable, or the item measures corpus
+  coverage rather than premise detection.
+- *The critic skip in the premise run was legitimate:* the second synthesis
+  was a cache hit on the same 6,395-token prompt, so the draft was
+  byte-identical to the one already reviewed.
+
+**Open, next commit (C27.3): judgment calls landing on fallback models.**
+Both syntheses ran on fallbacks (qwen3.8-27b, 6,395 tokens; gpt-oss-20b,
+6,150 tokens) and both router calls on gpt-oss-20b, while the critic stayed
+on gpt-oss-120b. A synthesis prompt alone is ~6.3K of Groq's 8K TPM, so
+whatever else ran in the same minute pushes it over, and the provider
+switches model on a 429 by design. For the eval this is the wrong trade: the
+report under test was written by whichever model happened to have headroom,
+which varies with timing, and the weakest model in the chain wrote one of
+the two. For the judgment role, waiting out a minute window is cheap and
+switching is not.
+
+**Also noted.** When the adaptive retriever executes the route/query it
+chose in the previous round, the base class traces that execution as a
+`(static)` D2 decision. Adaptive counts are unaffected — C35 counts only
+`was_adaptive=True` — but the inspector shows a "static" decision carrying
+an adaptive choice, which will mislead whoever reads a trace at C38.

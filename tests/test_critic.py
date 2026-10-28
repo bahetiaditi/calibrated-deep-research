@@ -314,14 +314,51 @@ def test_metrics_are_none_with_no_claims():
 # --- state integration -----------------------------------------------------
 
 
-def test_findings_carry_the_owning_sub_question():
-    report = critic([{"index": 0, "verdict": SUPPORTED, "reasoning": ""}]).review(
-        state_with(
-            f"A claim about something checkable. [{PID[1]}]",
-            [passage(PID[1], sub_question_id="sq3")],
-        )
-    )
+def _with_plan(state, owned):
+    from src.state import new_sub_question
+
+    plan = []
+    for sqid, pids in owned.items():
+        sq = new_sub_question(f"text of {sqid}", sub_question_id=sqid)
+        sq["evidence_ids"] = list(pids)
+        plan.append(sq)
+    state["plan"] = plan
+    return state
+
+
+def test_findings_carry_the_owning_sub_question_from_the_plan():
+    """Ownership comes from SubQuestion.evidence_ids, the mapping C17 made
+    authoritative (C27.2)."""
+    state = _with_plan(state_with(f"A claim about something checkable. [{PID[1]}]",
+                                  [passage(PID[1])]), {"sq3": [PID[1]]})
+    report = critic([{"index": 0, "verdict": SUPPORTED, "reasoning": ""}]).review(state)
     assert report.findings[0]["sub_question_id"] == "sq3"
+
+
+def test_a_stale_passage_payload_does_not_decide_ownership():
+    """What happened live: a passage served from the persistent store
+    carried a sub_question_id from another run. The claim was attributed to
+    it, and the router's RE_RETRIEVE on that claim reopened nothing."""
+    stale = passage(PID[1], sub_question_id="rq07")
+    state = _with_plan(state_with(f"A claim about something checkable. [{PID[1]}]",
+                                  [stale]), {"sq1": [PID[1]]})
+    report = critic([{"index": 0, "verdict": UNSUPPORTED, "reasoning": ""}]).review(state)
+    assert report.findings[0]["sub_question_id"] == "sq1"
+
+
+def test_a_claim_citing_only_unowned_evidence_is_unowned():
+    state = _with_plan(state_with(f"A claim about something checkable. [{PID[1]}]",
+                                  [passage(PID[1], sub_question_id="sq1")]), {"sq1": []})
+    report = critic([{"index": 0, "verdict": UNSUPPORTED, "reasoning": ""}]).review(state)
+    assert report.findings[0]["sub_question_id"] == ""
+
+
+def test_live_sub_questions_own_shared_evidence_before_abandoned_ones():
+    from src.nodes.critic import passage_owners
+
+    state = _with_plan(new_state("q"), {"sq1": ["P1"], "sq2": ["P1"]})
+    state["plan"][0]["status"] = "abandoned"
+    assert passage_owners(state) == {"P1": "sq2"}
 
 
 def test_action_taken_is_left_for_c24():

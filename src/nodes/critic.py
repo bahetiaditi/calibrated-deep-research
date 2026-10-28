@@ -142,6 +142,7 @@ class Critic:
 
         sentences = segment(draft)
         evidence = {p["id"]: p for p in (state.get("evidence") or [])}
+        owners = passage_owners(state)
         contradicted = contradicted_passages(state.get("contradictions") or [])
 
         # Every sentence long enough to assert something goes to the model,
@@ -174,7 +175,7 @@ class Critic:
                     findings=[
                         self._finding(s, UNSUPPORTED,
                                       f"critic unavailable ({type(exc).__name__})",
-                                      evidence, _owner(s, evidence))
+                                      evidence, _owner(s, owners))
                         for s in judged
                     ],
                     discourse_sentences=discourse,
@@ -198,7 +199,7 @@ class Critic:
                     )
                 findings.append(
                     self._finding(sentence, verdict, reasoning, evidence,
-                                  _owner(sentence, evidence))
+                                  _owner(sentence, owners))
                 )
 
         report = CriticReport(findings=findings, discourse_sentences=discourse)
@@ -402,10 +403,39 @@ def contradicted_passages(contradictions: Sequence[dict[str, Any]]) -> set[str]:
     return out
 
 
-def _owner(sentence: Sentence, evidence: dict[str, Passage]) -> str:
-    """Which sub-question this claim belongs to, via its first citation."""
+def passage_owners(state: ResearchState) -> dict[str, str]:
+    """passage id -> the sub-question that retrieved it, from THIS run's plan.
+
+    Read from `SubQuestion.evidence_ids`, which C17 made the authoritative
+    mapping — not from `Passage.sub_question_id`, which C17 documented as
+    "which sub-question found it first" and which, for a passage served from
+    the persistent store, is a payload written by whatever run or labelling
+    session ingested it. The critic read that field until C27.2. In the C27
+    live run the router chose RE_RETRIEVE for eight claims and nothing
+    reopened: the claims were attributed to sub-question ids that did not
+    resolve in the plan, so the decision was recorded and had no effect.
+
+    Live sub-questions claim a passage before abandoned ones, in plan order.
+    """
+    plan = list(state.get("plan") or [])
+    owners: dict[str, str] = {}
+    ordered = ([sq for sq in plan if sq.get("status") != "abandoned"]
+               + [sq for sq in plan if sq.get("status") == "abandoned"])
+    for sub_question in ordered:
+        for pid in sub_question.get("evidence_ids") or []:
+            owners.setdefault(pid, sub_question["id"])
+    return owners
+
+
+def _owner(sentence: Sentence, owners: dict[str, str]) -> str:
+    """Which sub-question this claim belongs to, via its first owned citation.
+
+    Empty when no cited passage belongs to a sub-question in the plan — the
+    premise checker's evidence, chiefly. An honest "unowned" is what the
+    critic router needs: it cannot reopen research for a claim that no
+    sub-question is responsible for.
+    """
     for pid in sentence.citations:
-        passage = evidence.get(pid)
-        if passage and passage.get("sub_question_id"):
-            return str(passage["sub_question_id"])
+        if pid in owners:
+            return owners[pid]
     return ""

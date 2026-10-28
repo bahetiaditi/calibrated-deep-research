@@ -3199,3 +3199,81 @@ show them approaching it.
 --model <name>`. This also forgives the day's genuine spend; if the true
 allowance is gone, the next call gets a day-window 429, which is now
 recorded correctly.
+
+**2026-10-28 — C27.4. A citation-format habit cascaded into the decision.
+Fixed. Two more findings from the same run recorded for C27.5/C27.6.**
+
+The C27.3 re-run was the first with judgment on gpt-oss-120b throughout
+(0 fallbacks; 11 minute-window waits in one question, each a few seconds to
+40s) and the first to exercise PARTIAL live: decided, answer draft withheld,
+rewritten in partial mode, re-critiqued — every effect check passed. But the
+answerable question's answer-mode draft is logged `cited=0/22`, and its gap
+list holds a dozen of that draft's own sentences.
+
+**The cascade.** `CITATION_RE` accepted exactly `[P01]`. Any other form —
+`[P01, P03]`, `[P01; P04]`, `【P01】`, `(P05)`, `[P1]` — stayed as plain text;
+the critic saw sentences with no citation; with no citation each was
+UNSUPPORTED *and unowned* (ownership comes from cited passages, C27.2);
+C27.2's router gate correctly refused RE_RETRIEVE on unowned claims and
+routed them UNRESOLVED; each UNRESOLVED became a "could not establish:
+<claim>" gap; and the partial rewrite was handed those gaps under
+"UNRESOLVED — report these as gaps, do not answer them". One formatting
+habit produced a PARTIAL decision whose report was forbidden from stating
+claims its own evidence supported. Every component behaved as designed;
+the input to all of them was wrong.
+
+`normalize_citations` rewrites the variants to `[P01][P03]` before label
+resolution: one bracketed group (square, full-width or parentheses) of
+short labels separated by commas, semicolons, "and", "&" or whitespace, or
+a range `P02-P04` (≤10). Exact `[P01]` groups, content-addressed ids and
+prose like "Table P1" are untouched. Anything still label-shaped afterwards
+is counted as `unparsed_citations` and reported in the synthesis trace
+alongside `normalised_citations` — **a draft whose citations were silently
+dropped is now visible in the trace instead of discoverable only by its
+consequences.** The test that matters asserts the effect at the critic: a
+variant citation reaches `segment()` as a citation.
+
+Which variant this run actually used is not yet known — the trace logs
+counts, not text. **New: `scripts/show_run.py`** prints a finished run's
+state from the checkpoint: decision record, withheld and final drafts,
+every finding with owner and action, gaps. Zero API calls. C38 needs it
+beside `inspect_trace.py`.
+
+**Found, not fixed — C27.5: the critic penalises the honesty the partial
+prompt requires.** The partial prompt (C18) instructs: state gaps as "the
+evidence does not establish X". The critic's three categories (C23) have no
+place for that sentence: it is not discourse, so it is classified a CLAIM;
+it carries no citation (it is about an absence), so it is UNSUPPORTED. The
+premise run's gaps show the result — "could not establish: However, the
+supplied evidence does not contain an explicit statement…", a gap recording
+that a gap statement was unsupported. Two consequences: every honest gap
+statement in a PARTIAL report counts toward the hallucination rate (§5.5),
+penalising exactly the behaviour the abstention layer is meant to produce;
+and the router feeds them back as gaps. C23 needs a fourth category,
+narrowly defined — a sentence asserting only that the evidence does not
+establish something, making no claim about the world — excluded from the
+grounding denominator like NOT_A_CLAIM, and counted separately.
+
+**Found, not fixed — C27.6: the judgment budget does not cover the eval.**
+Measured judgment tokens per question, counting cached calls at their
+original cost: **~52K** (premise question: three synthesis→critic→router
+cycles, two driven by re-retrieval) and **~36K** (answerable). Groq gives
+200K TPD per model, 600K across the chain:
+
+| | question-runs/day |
+|---|---|
+| gpt-oss-120b only | ~4–6 |
+| whole judgment chain | ~12–17 |
+
+C2's estimate was ~9 calls per question and "eval no longer quota-bound";
+both were wrong by ~2× on calls and more on tokens. ~190 planned
+question-runs means **~32–48 days pinned to 120b, or ~11–16 days using the
+whole chain — in which case which model wrote a report depends on the time
+of day it ran**, a confound across the very ablations C35 compares. Two
+contributions already visible: (1) the adaptive retriever's query
+reformulation calls `complete()` without a role and defaults to JUDGMENT,
+though C2 allocated reformulation to MECHANICAL (Gemma, 14.4K RPD) — ~6
+calls × ~1.1K tokens per question on the scarce chain; (2) each critic
+cycle costs ~12K, so re-retrieval loops dominate. C27.6 should move
+reformulation to its allocated role and decide, before C32, how the writer
+model is held fixed per configuration.

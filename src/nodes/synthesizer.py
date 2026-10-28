@@ -49,6 +49,26 @@ log = logging.getLogger(__name__)
 
 CITATION_RE = re.compile(r"\[(P\d{2,}|P[0-9a-f]{12})\]")
 
+# Citation forms models actually produce besides the instructed [P01]
+# (C27.4). One citation group in brackets, full-width brackets or
+# parentheses, holding one or more short labels separated by commas,
+# semicolons, "and", "&" or whitespace, or a range "P01-P03". Unpadded
+# labels ("P1") are accepted. A content-addressed id ("P1a2b3c4d5e6f")
+# cannot match: a short label must be followed by a separator or the
+# closing bracket, never a hex letter.
+_LABEL = r"P\d{1,3}"
+_GROUP_RE = re.compile(
+    r"[\[【(]\s*("
+    + _LABEL + r"(?:\s*(?:,|;|&|\band\b|[-–—]|\s)\s*" + _LABEL + r")*"
+    + r")\s*[\]】)]"
+)
+_RANGE_RE = re.compile(r"(P\d{1,3})\s*[-–—]\s*(P\d{1,3})")
+# Anything still label-shaped after normalisation was not understood. The
+# synthesis trace reports how many, so a draft whose citations were all
+# dropped is visible rather than silently uncited.
+_LEFTOVER_RE = re.compile(r"(?<![A-Za-z0-9])P\d{1,3}(?![0-9a-f])")
+MAX_RANGE = 10
+
 # How much of each passage the synthesizer sees. The full text of 20 passages
 # would dominate the context and push the model toward summarising evidence
 # rather than answering the question.
@@ -63,6 +83,10 @@ class Draft:
     cited_passage_ids: list[str] = field(default_factory=list)
     invalid_labels: list[str] = field(default_factory=list)
     uncited_sentences: int = 0
+    # C27.4: citations rewritten from a non-standard form, and label-shaped
+    # tokens that could not be understood at all.
+    normalised_citations: int = 0
+    unparsed_citations: int = 0
     mode: str = "answer"            # answer | partial
     error: str | None = None
 
@@ -260,7 +284,11 @@ class Synthesizer:
                 cited.append(passage_id)
             return f"[{passage_id}]"
 
-        rewritten = CITATION_RE.sub(replace, text or "")
+        normalised, n_normalised = normalize_citations(text or "")
+        rewritten = CITATION_RE.sub(replace, normalised)
+        # Count what is still label-shaped once valid citations are resolved
+        # to content-addressed ids (which _LEFTOVER_RE cannot match).
+        unparsed = len(_LEFTOVER_RE.findall(rewritten))
         rewritten = re.sub(r" +([.,;])", r"\1", rewritten)   # tidy after strips
         rewritten = re.sub(r"[ \t]{2,}", " ", rewritten).strip()
 
@@ -270,6 +298,8 @@ class Synthesizer:
             cited_passage_ids=cited,
             invalid_labels=invalid,
             uncited_sentences=_count_uncited(rewritten),
+            normalised_citations=n_normalised,
+            unparsed_citations=unparsed,
             mode=mode,
         )
 
@@ -287,6 +317,8 @@ class Synthesizer:
             mode=draft.mode,
             passages_offered=n_passages,
             passages_dropped_for_budget=dropped,
+            normalised_citations=draft.normalised_citations,
+            unparsed_citations=draft.unparsed_citations,
             passages_cited=draft.citation_count,
             invalid_labels=draft.invalid_labels,
             uncited_sentences=draft.uncited_sentences,
@@ -370,3 +402,50 @@ def _round_robin(state: ResearchState, passages: Sequence[Passage]) -> list[Pass
 def _in_order(passages: Sequence[Passage], keep: Sequence[Passage]) -> list[Passage]:
     ids = {p["id"] for p in keep}
     return [p for p in passages if p["id"] in ids]
+
+
+
+def normalize_citations(text: str) -> tuple[str, int]:
+    """Rewrite citation variants to the instructed `[P01][P03]` form.
+
+    Added at C27.4. The C27.3 live run produced an answer-mode draft with
+    0 of 22 passages cited: CITATION_RE accepted only `[P01]`, so any other
+    form the model used was left as plain text, the critic saw no citations,
+    every claim came back UNSUPPORTED and unowned, the router turned each one
+    into a "could not establish" gap — and those gaps were then handed to the
+    partial rewrite as topics it must not answer. One formatting habit
+    cascaded into a PARTIAL decision and a report forbidden from stating
+    claims its evidence supported.
+
+    Returns the rewritten text and how many groups were rewritten. Exact
+    `[P01]` groups are left alone and not counted.
+    """
+    count = 0
+
+    def labels_of(body: str) -> list[str] | None:
+        out: list[str] = []
+        for start, end in _RANGE_RE.findall(body):
+            a, b = int(start[1:]), int(end[1:])
+            if a > b or b - a > MAX_RANGE:
+                return None
+            out.extend(f"P{i:02d}" for i in range(a, b + 1))
+        body = _RANGE_RE.sub(" ", body)
+        out.extend(f"P{int(m[1:]):02d}" for m in re.findall(_LABEL, body))
+        seen: list[str] = []
+        for label in out:
+            if label not in seen:
+                seen.append(label)
+        return seen
+
+    def rewrite(match: re.Match) -> str:
+        nonlocal count
+        original = match.group(0)
+        labels = labels_of(match.group(1))
+        if not labels:
+            return original
+        result = "".join(f"[{label}]" for label in labels)
+        if result != original:
+            count += 1
+        return result
+
+    return _GROUP_RE.sub(rewrite, text), count

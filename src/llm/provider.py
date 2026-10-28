@@ -396,6 +396,25 @@ class LLMProvider:
         if not any(self.chains.values()):
             raise ProviderError("no model chains configured under llm.roles")
 
+        # Eval mode: one writer for every report (C27.6). The ablations
+        # compare configurations, and with a fallback chain the model that
+        # wrote a report depends on which limits the run happened to hit —
+        # time of day, not configuration. Pinned, the chain is one model:
+        # a minute-window 429 still waits (C27.3), but a day-window 429
+        # fails the call rather than handing the report to another model.
+        # Pinning also confines the chain-wide cache lookup (C3) to the
+        # pinned model, so a response cached from a fallback during
+        # development cannot be reused as the eval's.
+        pin = self.cfg.get("llm.pin_judgment_model", None)
+        if pin:
+            pinned = [s for s in self.chains.get(Role.JUDGMENT, []) if s.model == pin]
+            if not pinned:
+                raise ProviderError(
+                    f"llm.pin_judgment_model={pin!r} is not in the judgment "
+                    f"chain {[s.model for s in self.chains.get(Role.JUDGMENT, [])]}"
+                )
+            self.chains[Role.JUDGMENT] = pinned[:1]
+
         self.ledger = ledger or QuotaLedger(
             self.cfg.path("llm.quota_ledger_path"),
             {m: s.limits for m, s in all_specs.items()},

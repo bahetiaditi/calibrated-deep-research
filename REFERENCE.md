@@ -3336,3 +3336,86 @@ strategy." a claim — borderline against C18's "The second approach differs"
 example, and the prompt's deliberate bias toward CLAIM when unsure (C23).
 And the partial draft inserted a literal `[unresolved]` marker; C28's
 finalizer should strip non-citation bracket markers before presenting.
+
+**2026-10-28 — C27.6. Reformulation on its allocated role; an eval can pin
+its writer. The judgment budget, measured.**
+
+**C27.5 verified live.** The answerable question ran clean end to end:
+standard citations (7/22 in the withheld draft), one question-level gap and
+no report sentences in it, the partial draft's "The evidence does not
+establish…" absent from the findings, and a final report of 2 SUPPORTED,
+1 PARTIAL, 1 UNSUPPORTED (an uncited "Consequently…" summary — correctly
+caught). Both questions took the PARTIAL path, rewrote in partial mode, and
+were re-critiqued.
+
+**1. Query reformulation ran on the wrong role.** It was the only LLM call in
+`src/nodes/` with no `role=`, so it inherited `complete_json`'s default,
+JUDGMENT — ~6 calls × ~1.1K tokens per question on the Groq chain that C2
+reserved for the report, and extra minute-window pressure on the model
+writing it. Now `Role.MECHANICAL`, as allocated (Gemma first, 14.4K RPD;
+its JSON goes through the structured layer's local repair). A guard test
+parses every node's source and fails on any `complete`/`complete_json` call
+without an explicit `role=` — **a default is a decision nobody made**; here
+it cost tokens, on another call it could put the judge on the writer's
+model family.
+
+**2. `llm.pin_judgment_model`.** Set, the judgment chain is that one model.
+The ablations compare configurations; with a fallback chain, which model
+wrote a report depends on which limits a run hit — time of day, not
+configuration. Pinned, a minute-window 429 still waits (C27.3) but a
+day-window 429 fails the call instead of handing the report to another
+model. It also confines the chain-wide cache lookup (C3) to the pinned
+model, so a response cached from a fallback during development cannot
+become the eval's. Ships `null`: development wants runs to finish.
+
+**For C32, from this commit:**
+- A pinned run that exhausts the model's day ends `rule=system_failure`.
+  The runner must **re-run** those questions, not resume them — the graph
+  reached FINISH, so a resume would replay the failure.
+- Run the eval against a **fresh cache directory**. Pinning confines reuse
+  to one model, but that model's development-time responses would still be
+  reused for identical prompts — produced before the eval began, under
+  whatever code was current then.
+
+**The judgment budget, measured (decision needed before C32).** Counting
+cached calls at their original cost and removing reformulation, a question
+costs **~30–45K judgment tokens** — one to three synthesis → critic →
+router cycles at ~12K each, plus premise check, planning and the decider's
+partial rewrite. Pinned to one model at 200K TPD, that is **~4–6
+question-runs per day**. The plan (§6) is ~190 question-runs:
+
+| option | wall-clock | cost |
+|---|---|---|
+| pin gpt-oss-120b, as is | ~6–7 weeks | none; §0 sets no deadline |
+| cap re-retrieval to one cycle; `reasoning_effort: low` for synthesis | ~4–5 weeks | report quality; must be applied to every config equally |
+| a paid Groq tier for the eval window | days | money; the project brief says zero paid services |
+
+Not decided here. Recommendation: pin gpt-oss-120b and measure tokens per
+question on C32's first resumable batch before choosing.
+
+**Open — the premise question went PARTIAL, margin 0.0.** The planner
+decomposed "Why does Mamba-2 use RoPE in its SSM blocks?" into *what is
+RoPE* (background), *how does Mamba-2 incorporate RoPE*, and *why did the
+authors use it* (both presuppose the false premise). The background
+sub-question is answerable from any RoPE paper; it resolved; 1 of 3 is
+exactly τ_partial for the heuristic. The report therefore explains RoPE and
+states it cannot establish how Mamba-2 uses it — which implicitly accepts
+the premise. §6.2 grades a Tier D1 item on identifying and correcting the
+false presupposition, so this is not a correct outcome, and arguably worse
+than abstaining.
+
+The cause is structural, not a heuristic quirk: **background sub-questions
+are always answerable, so they carry no information about whether the
+question is**, and every "why does X do Y" decomposition includes one. The
+calibrated model would see the same dilution in `fraction_sufficient` and
+`mean_sub_question_p`. Two candidate fixes, not chosen here:
+(a) the planner tags each sub-question `core` or `background`, and D5
+requires a core sub-question resolved for PARTIAL or ANSWER;
+(b) when a core presupposition is UNVERIFIABLE *and* every sub-question that
+depends on it is unresolved, abstain — C15's rule that silence is not
+refutation stays intact for the premise alone, but silence on the premise
+**and** on everything resting on it is a different signal.
+(a) changes C16's output contract; (b) changes D5's rules. Either needs the
+benchmark to test it: C30's Tier D1 items, built so their refutations are in
+the corpus, will exercise the hard rule instead; this case is closer to
+Tier D4.

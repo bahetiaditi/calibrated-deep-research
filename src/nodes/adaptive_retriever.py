@@ -51,6 +51,7 @@ import logging
 from typing import Any
 
 from src.config import Config
+from src.llm.provider import Role
 from src.nodes.retriever import RetrievalOutcome, StaticRetriever, _coerce_route
 from src.prompts import render
 from src.state import Route, SubQuestion
@@ -121,7 +122,7 @@ class AdaptiveRetriever(StaticRetriever):
     @property
     def provider(self) -> Any:
         if self._provider is None:
-            from src.llm.provider import LLMProvider
+            from src.llm.provider import LLMProvider, Role
 
             self._provider = LLMProvider(self.cfg, tracer=self.tracer)
         return self._provider
@@ -336,6 +337,13 @@ class AdaptiveRetriever(StaticRetriever):
                     evidence_summary=summary,
                 ),
                 user="Decide how to retry.",
+                # MECHANICAL, as C2 allocated query reformulation. The call
+                # passed no role and inherited complete_json's default,
+                # JUDGMENT, so every reformulation spent the Groq chain's
+                # scarce daily tokens (~1.1K each, ~6 per question) and added
+                # to the minute-window pressure that pushed reports onto
+                # fallback models (C27.6).
+                role=Role.MECHANICAL,
                 required_keys=["action"],
             )
         except Exception as exc:  # noqa: BLE001

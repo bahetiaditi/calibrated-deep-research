@@ -145,6 +145,15 @@ llm:
         supports_json_mode: true
         limits: {rpm: 15, rpd: 500, tpm: 250000, reset_timezone: America/Los_Angeles}
 
+  # Eval mode (C27.6). When set, the judgment chain is this one model: no
+  # fallback, so every report in an eval is written by the same model. The
+  # ablations compare configurations; with a chain, the writer depends on
+  # which limits a run hit, a time-of-day confound. Leave null for
+  # development, where finishing the run matters more than who wrote it.
+  # A pinned run that exhausts the model's day FAILS (rule=system_failure)
+  # and must be re-run, not resumed — see the C27.6 note for C32.
+  pin_judgment_model: null
+
   cache:
     enabled: true             # MANDATORY during eval — wired in C3
     dir: data/cache/llm

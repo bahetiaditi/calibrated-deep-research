@@ -149,3 +149,16 @@ def test_gemma_declares_no_system_instruction_support():
                     f"{role}/{spec['model']} must set "
                     f"supports_system_instruction: false"
                 )
+
+def test_every_requirement_line_is_a_single_valid_pin():
+    """C27 found `joblib==1.5.2joblib==1.5.2`: a line appended to a file with
+    no trailing newline. It installed locally only because sklearn already
+    pulls joblib in; a clean `pip install -r` fails on it."""
+    import re
+
+    pin = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-\[\]]*==[0-9][0-9A-Za-z.+\-]*$")
+    for raw in (ROOT / "requirements.txt").read_text().splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line:
+            assert pin.match(line), f"malformed requirement: {raw!r}"
+    assert (ROOT / "requirements.txt").read_text().endswith("\n")

@@ -2777,3 +2777,181 @@ the static policy (C20).
 
 API note: `sklearn` 1.8 deprecates `LogisticRegression(penalty=...)` in
 favour of `l1_ratio`; `l1_ratio=0.0` is L2.
+**2026-10-28 — C27. The decision policy (D5). Four input bugs fixed first.**
+
+`src/sufficiency/policy.py`, `src/sufficiency/scorer.py`,
+`src/nodes/decider.py`, registered in `default_components`. Tests:
+`test_policy.py`, `test_scorer.py`, `test_decider.py`. Smoke:
+`scripts/smoke_c27.py` (`--offline` for zero API calls).
+
+*Before writing the decider, every input it reads was checked. Four were
+wrong, and each would have produced plausible decisions.*
+
+**1. A re-retrieved draft skipped the critic.** The controller ran the critic
+when `critic_findings` was empty. RE_RETRIEVE clears the draft but not the
+findings, so the rewritten draft went straight to the decider carrying
+verdicts on text that no longer existed. The same test looped forever on a
+draft the critic found to contain no claims, because empty findings read as
+"not reviewed". Fixed with an invariant rather than a patch: the critic
+stamps `critiqued_draft` with a digest of what it reviewed, and the
+controller routes to the critic whenever the current draft differs. Any
+path that rewrites the draft now gets it reviewed, including C27's own
+PARTIAL rewrite.
+
+**2. The planner erased the router's gaps.** `unresolved_gaps` had no
+reducer, so a revision — which returns only the gaps it found — replaced
+everything recorded before it. Demonstrated through a real LangGraph merge.
+Now `Annotated[list[str], merge_gaps]`: order-preserving, deduplicated,
+idempotent on the full list, so both the router (returns all) and the
+planner (returns new) are correct. A gap is the content of a PARTIAL answer;
+losing one under-reports what was missing.
+
+**3. Stage 1 of the C26 model was fitted on its own label.** Stage-1 labels
+are "all this sub-question's claims were SUPPORTED"; f6 is the mean verdict
+strength for those claims, so f6 = 1.0 exactly when the label is 1. On
+pure-noise features with random verdicts: **CV AUC 0.979 with f6, 0.478
+without**, and with f6 the bootstrap also flagged a noise feature (f3) as
+significant. At C33 this would have been reported as "stage 1 predicts
+sufficiency almost perfectly". `STAGE1_FEATURE_NAMES` excludes f6;
+`CalibratedScorer` refuses a stage-1 model containing it at construction, and
+`get_scorer` raises rather than falls back if one is on disk. f6 stays in the
+logged vector — it is a legitimate input wherever the label does not come
+from the critic. A regression test keeps the 0.979 demonstration.
+
+**4. `requirements.txt` ended `joblib==1.5.2joblib==1.5.2`** — a line appended
+to a file with no trailing newline. Installed locally only because sklearn
+pulls joblib in; a clean `pip install -r` fails on it. Fixed, with a scaffold
+test that every line is a single valid pin and the file ends in a newline.
+
+**Not fixed, and it matters for D5: contradiction scanning has never been
+wired into the graph.** The C20 entry says "C21 flips this where the scan
+actually runs"; nothing does. No node writes `state["contradictions"]`, so f5
+is `None` on every run and the critic's contradiction flagging never fires.
+Tier D3 ("no consensus", §6.1) therefore has no live signal at all — the
+detector exists (C12) and is tested, it just isn't called. Needs a slot
+before C33; folding it into the retriever after reranking is the natural
+place. Recorded here rather than built, because C27 should not quietly
+become a retrieval commit.
+
+*The design.*
+
+**Where D5 sits: after the critic and router, not before synthesis.** §3.1's
+map scored sufficiency before writing. But a sub-question retrieval called
+sufficient can have every claim drawing on it fail verification, and the
+router then marks it unresolved; deciding before that ignores the one check
+that looks at whether evidence supports what was said. **The cost, stated:**
+an ABSTAIN arrives after paying for a draft and its critique (~3 LLM calls)
+that are then withheld. The decision record keeps per-sub-question verdicts,
+so whether the critic ever changes a decision is measurable at C33; if it
+never does, an early exit before synthesis becomes worth adding. The
+controller's `SUFFICIENCY_SCORER` stage is now dead — scoring happens inside
+the decider — and can be removed at C28.
+
+**Rules, in order** (pure function, `policy.decide`):
+`premise_refuted` → ABSTAIN, bypassing τ (§5.4) · `system_failure` → ABSTAIN
+when there is no draft and an error · `no_evidence` → ABSTAIN · `threshold`.
+`system_failure` exists for the metrics: on a Tier D question a crash and a
+genuine abstention would both be graded correct. `Decision.epistemic` is
+false for it, and **C37 must never score a non-epistemic abstention as
+correct.**
+
+**The rationale is a template, not an LLM call.** §8 lists "rationale
+generation". Asking the model would produce a fluent account of a decision
+it did not make — the score and thresholds made it — and a post-hoc
+explanation can disagree with its own cause without anyone noticing. The
+template states the numbers that decided. It is also free, on the path
+where the run has just found out it cannot answer.
+
+**Two scorers behind one interface** (B3 joins at C34). `CalibratedScorer`
+is the C26 two-stage model. `HeuristicScorer` — fraction of sub-questions
+resolved, with its own thresholds (all / any / none) — exists so the graph
+runs before C33. The alternative, the unfitted model, returns 0.5 for
+everything: through stage 2 that is 0.5 per question, between the
+placeholder thresholds, so **every run would be PARTIAL** — a plausible
+decision that depends on nothing. Every decision records `scorer` and
+`calibrated`; heuristic ones carry an UNCALIBRATED note.
+`sufficiency.scorer: calibrated` refuses to fall back and must be set for
+the held-out run at C36, so a missing model is an error rather than 24
+quietly uncalibrated decisions.
+
+"Resolved" means retrieval called it sufficient *and*, if the critic judged
+claims drawing on it, mean entailment ≥ `heuristic.min_entailment` (0.5).
+Abandoned sub-questions count as unresolved — leaving them out would let a
+question whose hardest part was given up on score as if it was never asked
+— **except** one merged into a live sibling. The merge is detected from the
+planner's rationale text ("covered by sqX:"), the only such parse in the
+module; a structured `covered_by` field would be better (C28).
+
+Features are **recomputed from all evidence** the sub-question gathered. The
+retriever's stored `sufficiency_features` are per-round, computed from that
+round's passages only (C17), so they describe the last round rather than
+what the decision rests on.
+
+**The decision changes the run, not just the record.**
+- ABSTAIN: the draft is withheld into the record and cleared. Kept, not
+  discarded, because diagnosing a false abstention at C38 means asking
+  whether the withheld report was right.
+- PARTIAL: an answer-mode draft is withheld and cleared, sending the run
+  back through the synthesizer in partial mode (C18's second prompt) and the
+  critic. Skipped only if the remaining LLM budget is below
+  `partial_rewrite.llm_calls` (3); the record then says `unaffordable` and
+  **C28's finalizer must present that answer-mode draft as partial**, using
+  the gaps and the router's UNRESOLVED/DROP_CLAIM actions.
+- ANSWER: the draft stands.
+
+**A decision closes research.** The controller sends nothing back to the
+retriever or planner once `terminal_decision` is set, and the critic router
+offers no costly route after it. Without the second gate a PARTIAL rewrite
+could be routed RE_RETRIEVE, which clears the draft, which re-synthesizes —
+a loop at three LLM calls per turn.
+
+**The record is what the eval reads.** The continuous score (C37's
+risk–coverage sweep needs it; a label cannot be re-thresholded), the rule,
+thresholds with their `source`, margin to the nearest threshold, gaps, and
+**per-sub-question features and verdicts as they were at decision time**.
+**C33 must label stage 1 from `decision["sub_questions"]`, not from final
+`critic_findings`**: on every PARTIAL run the rewrite makes no claims about
+the unresolved sub-questions, so the final findings have lost exactly the
+negatives. Only calibrated stage-1 probabilities are written into
+`SubQuestion.sufficiency`; the heuristic's 1/0 bits never are, since
+`extract_run_features` averages that field.
+
+**Static counterpart (B2):** `agency.d5_terminal_decision: false` always
+answers, traced `was_adaptive=False`, and records the adaptive decision as a
+`counterfactual` — so B2 carries the score it would have been thresholded
+on. Note for C34: with `skip_research_on_failed_premise` left on, B2 "answers"
+a refuted premise with no draft at all; B2's config should turn it off.
+
+**`premise_grounding_min` is advisory, now documented as such.** f7 averages
+{1.0, 0.5, 0.0} over core presuppositions, so it can only fall below 0.35
+when one is CONTRADICTED — which already fails the premise. As an abstention
+rule above 0.5 it would refuse questions whose premises the corpus is merely
+silent on, the exact failure C15 was built around.
+
+**Found while writing the smoke test, recorded for C33.** `_select_c` breaks
+AUC ties toward the strongest regularisation (`C_GRID[0]`). That compresses
+probabilities toward the base rate: on the synthetic data, even
+strong-on-every-sub-question evidence scores 0.60. **At the placeholder
+τ_answer = 0.65 a fitted model never answers, and every case comes out
+PARTIAL** — the same plausible-and-meaningless output the unfitted model
+would give, reached by a different route. τ must be selected on the fitted
+model's own scale (which C33 does by construction, choosing it against
+target risk) and the reliability diagram will show whether isotonic or
+Platt scaling is needed to spread the scores. The C27 acceptance test
+therefore places thresholds on the fitted scale, not at the placeholders.
+
+**Two smaller notes.** With no budget object the controller has no revision
+ceiling (`_should_revise` skips the check when `budget is None`); harmless in
+production since `run_research` always attaches one, but a test with a
+fake planner loops — the C27 flow tests disable D1 for that reason. And
+nodes charge only `if budget.can_spend(...)`, so calls made after exhaustion
+go unrecorded rather than raising; C5 intended `spend()` to be the loud path.
+Not changed here.
+
+**Acceptance.** Forced feature vectors through the real two-stage model
+produce ANSWER / PARTIAL / ABSTAIN (offline smoke, part 1, and
+`test_forced_feature_vectors_produce_each_decision`). Graph-level tests with
+fake upstream nodes confirm the effects end to end: a PARTIAL run is
+rewritten in partial mode and re-critiqued with the retriever visited once;
+an ABSTAIN run ends with no draft and no second synthesis; an ANSWER run is
+not rewritten. 960 tests pass.

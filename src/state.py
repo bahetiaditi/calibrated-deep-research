@@ -20,12 +20,32 @@ surface, and if one is never read, the corresponding surface is dead.
 So the C35 ablation check has a cheap precursor: a field nobody reads is a
 decision nobody makes.
 
+Fields added at C27
+-------------------
+    critiqued_draft     digest of the draft the critic last reviewed. The
+                        controller routes to the critic whenever the current
+                        draft differs from it — see `draft_digest`.
+    draft_mode          "answer" or "partial": which synthesizer prompt wrote
+                        the current draft. D5 reads it to know whether a
+                        PARTIAL decision still needs a partial-mode rewrite.
+    decision            D5's full record: score, thresholds, which rule
+                        fired, per-sub-question features and verdicts AT
+                        DECISION TIME. `terminal_decision` is the label;
+                        this is what C33 fits on and C37's risk-coverage
+                        curve sweeps over. A label alone cannot be
+                        re-thresholded.
+
 On reducers
 -----------
 `evidence` and `contradictions` accumulate across retrieval rounds, so they
 take reducers. Everything else is replaced wholesale by the node that owns
 it — the planner owns `plan`, the critic owns `critic_findings`, and a stale
 merge there would be a correctness bug rather than a convenience.
+
+`unresolved_gaps` accumulates too (C27). It had no reducer, so the planner's
+revision — which returns only the gaps *it* found — replaced every gap the
+critic router had recorded before it. A gap is the content of a PARTIAL
+answer; losing one means the report claims less was missing than was.
 
 `merge_evidence` deduplicates by passage id rather than using
 `operator.add`. Ids are content-addressed (C6), so a repeat id means
@@ -195,6 +215,39 @@ def merge_contradictions(
     return merged
 
 
+def merge_gaps(
+    existing: Sequence[str] | None, incoming: Sequence[str] | None
+) -> list[str]:
+    """Append gaps, keeping order and dropping exact repeats.
+
+    Order-preserving rather than a set, because the order gaps were found in
+    is the order a reader should meet them in. Idempotent on the full list,
+    so a node that returns existing-plus-new (the critic router) and one
+    that returns only new (the planner) are both correct.
+    """
+    merged: list[str] = list(existing or [])
+    seen = set(merged)
+    for gap in incoming or []:
+        if gap and gap not in seen:
+            seen.add(gap)
+            merged.append(gap)
+    return merged
+
+
+def draft_digest(draft: str | None) -> str:
+    """Identity of a draft, for "has the critic seen THIS draft?".
+
+    Introduced at C27 to replace `not state["critic_findings"]` as the
+    controller's test for whether to run the critic. That test was wrong in
+    two directions. After RE_RETRIEVE the draft is rewritten but the old
+    findings remain, so the new draft went to the decider unverified, judged
+    by verdicts on text that no longer existed. And a draft the critic found
+    to contain no claims leaves findings empty, so the controller sent it
+    back to the critic until the recursion limit fired.
+    """
+    return hashlib.sha256((draft or "").strip().encode("utf-8")).hexdigest()[:16]
+
+
 # ---------------------------------------------------------------------------
 # ResearchState
 # ---------------------------------------------------------------------------
@@ -218,13 +271,16 @@ class ResearchState(TypedDict, total=False):
     contradictions: Annotated[list[dict[str, Any]], merge_contradictions]
 
     draft: str
+    draft_mode: str                      # "answer" | "partial" | "" (C27)
     critic_findings: list[ClaimVerification]
+    critiqued_draft: str                 # draft_digest of what the critic saw
 
     budget: BudgetState
 
     terminal_decision: Terminal | None   # D5
     decision_rationale: str
-    unresolved_gaps: list[str]           # what we could not establish, and why
+    decision: dict[str, Any]             # D5's full record (C27)
+    unresolved_gaps: Annotated[list[str], merge_gaps]   # what we could not establish
 
     final_report: str
     trace_id: str
@@ -274,7 +330,9 @@ def new_state(
         evidence=[],
         contradictions=[],
         draft="",
+        draft_mode="",
         critic_findings=[],
+        critiqued_draft="",
         budget=budget or BudgetState(
             llm_calls_used=0, llm_calls_max=0,
             retrieval_calls_used=0, retrieval_calls_max=0,
@@ -282,6 +340,7 @@ def new_state(
         ),
         terminal_decision=None,
         decision_rationale="",
+        decision={},
         unresolved_gaps=[],
         final_report="",
         trace_id=trace_id or uuid.uuid4().hex[:16],

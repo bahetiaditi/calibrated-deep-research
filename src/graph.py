@@ -227,6 +227,7 @@ def default_components(config: Config | None = None) -> Components:
     from src.nodes.adaptive_retriever import AdaptiveRetriever
     from src.nodes.critic import Critic, critic_node
     from src.nodes.critic_router import CriticRouter, critic_router_node
+    from src.nodes.decider import Decider, decider_node
     from src.nodes.planner import Planner, planner_node
     from src.nodes.premise_checker import PremiseChecker, premise_checker_node
     from src.nodes.retriever import StaticRetriever, retriever_node
@@ -252,6 +253,7 @@ def default_components(config: Config | None = None) -> Components:
         synthesizer=synthesizer_node(Synthesizer(cfg)),
         critic=critic_node(Critic(cfg)),
         critic_router=critic_router_node(CriticRouter(cfg)),
+        decider=decider_node(Decider(cfg)),
     )
 
 

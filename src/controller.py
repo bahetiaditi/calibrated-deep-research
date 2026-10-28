@@ -32,7 +32,12 @@ import logging
 from typing import Any
 
 from src.config import Config, get_config
-from src.state import ResearchState, all_terminal, pending_sub_questions
+from src.state import (
+    ResearchState,
+    all_terminal,
+    draft_digest,
+    pending_sub_questions,
+)
 
 log = logging.getLogger(__name__)
 
@@ -87,6 +92,13 @@ class Controller:
     def _decide(self, state: ResearchState) -> tuple[str, str]:
         if state.get("error"):
             return self._next_after_research(state, "unrecoverable error")
+
+        # A decision closes research (C27). D5 may send the run back through
+        # synthesis for a partial-mode rewrite, and nothing upstream of that
+        # should reopen: research after the terminal decision would mean the
+        # decision was made on evidence the report does not rest on.
+        if state.get("terminal_decision") is not None:
+            return self._next_after_research(state, "decision made; research closed")
 
         # 1. Premise check runs before planning. A failed premise is the
         #    cheapest abstention signal available (§3.3).
@@ -162,12 +174,16 @@ class Controller:
         ):
             return SYNTHESIZER, reason
 
+        # Keyed on the draft's identity, not on whether findings exist. The
+        # old test (`not critic_findings`) sent a re-retrieved draft straight
+        # to the decider carrying the previous draft's verdicts, and looped
+        # forever on a draft the critic found to contain no claims (C27).
         if (
             self._enabled(CRITIC)
             and state.get("draft")
-            and not state.get("critic_findings")
+            and state.get("critiqued_draft") != draft_digest(state.get("draft"))
         ):
-            return CRITIC, "draft written, critic not run"
+            return CRITIC, "draft not yet reviewed by the critic"
 
         if (
             self._enabled(CRITIC_ROUTER)
@@ -252,6 +268,9 @@ class Controller:
             "evidence": len(state.get("evidence") or []),
             "has_draft": bool(state.get("draft")),
             "critic_run": bool(state.get("critic_findings")),
+            "draft_reviewed": bool(state.get("draft")) and (
+                state.get("critiqued_draft") == draft_digest(state.get("draft"))
+            ),
             "terminal_decision": state.get("terminal_decision"),
             "all_terminal": all_terminal(state),
         }

@@ -257,7 +257,10 @@ def synthesizer_node(synthesizer: Synthesizer):
             return {"draft": ""}
         mode = "partial" if decision == "PARTIAL" else "answer"
         draft = synthesizer.synthesize(state, mode=mode)  # type: ignore[arg-type]
-        update: dict[str, Any] = {"draft": draft.text}
+        # The mode is recorded because D5 needs to know which prompt wrote
+        # the draft it is looking at: an answer-mode draft under a PARTIAL
+        # decision still has to be rewritten, a partial-mode one does not.
+        update: dict[str, Any] = {"draft": draft.text, "draft_mode": mode}
         if draft.error:
             update["error"] = draft.error
         elif not draft.text.strip():

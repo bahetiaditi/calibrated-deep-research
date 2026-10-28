@@ -294,7 +294,27 @@ sources:
 # Sufficiency scoring and the abstention decision (§5)
 # ---------------------------------------------------------------------------
 sufficiency:
-  model_path: results/sufficiency_model.joblib
+  # Two stages since C26 — see src/sufficiency/model.py for why one model
+  # over all features cannot be fitted on 24 questions.
+  stage1_model_path: results/sufficiency_stage1.joblib   # per sub-question, f6 excluded
+  stage2_model_path: results/sufficiency_stage2.joblib   # per run, four aggregates
+  # auto       fitted models if both files exist, else the uncalibrated heuristic
+  # calibrated fitted models or an error — use for the held-out test run (C36)
+  # heuristic  never load a model
+  # Every decision records which one decided. Heuristic decisions are not
+  # reportable as results of the abstention layer.
+  scorer: auto
+  heuristic:
+    # A sub-question retrieval called sufficient counts as resolved only if
+    # the critic's mean verdict on claims drawing on it reaches this.
+    # 0.5 = at least PARTIAL on average (VERDICT_STRENGTH in features.py).
+    min_entailment: 0.5
+  # On PARTIAL, an answer-mode draft is rewritten in partial mode and
+  # re-critiqued: synthesizer + critic + critic router = 3 LLM calls. Below
+  # that much remaining budget the answer-mode draft is kept and flagged.
+  partial_rewrite:
+    enabled: true
+    llm_calls: 3
   calibration:
     method: isotonic          # applied only if the reliability diagram warrants
     apply: auto               # auto | always | never
@@ -303,9 +323,16 @@ sufficiency:
     # CALIBRATION split only. Never hand-tune these against test results.
     tau_answer: 0.65
     tau_partial: 0.40
+    source: placeholder     # analysis/calibrate.py writes "C33 calibration split"
     target_risk: 0.10         # target error rate among answered questions
   hard_rules:
     abstain_on_failed_premise: true       # categorical, bypasses tau
+    # ADVISORY ONLY — annotates the premise rationale, never abstains (C27).
+    # f7 averages {SUPPORTED 1.0, UNVERIFIABLE 0.5, CONTRADICTED 0.0} over
+    # core presuppositions, so it can only fall below 0.35 when one is
+    # CONTRADICTED — which already fails the premise. Raised above 0.5 as an
+    # abstention rule, it would refuse questions whose premises the corpus is
+    # merely silent on, the exact failure C15 was designed around.
     premise_grounding_min: 0.35
 
 # ---------------------------------------------------------------------------

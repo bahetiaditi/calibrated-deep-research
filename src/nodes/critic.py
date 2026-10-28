@@ -326,8 +326,16 @@ def critic_node(critic: Critic):
     """LangGraph node: draft -> state['critic_findings']."""
 
     def node(state: dict) -> dict:
+        from src.state import draft_digest
+
         report = critic.review(state)  # type: ignore[arg-type]
-        update: dict[str, Any] = {"critic_findings": report.findings}
+        update: dict[str, Any] = {
+            "critic_findings": report.findings,
+            # Stamped whether or not any claims were found. A draft with no
+            # claims has been reviewed; without the stamp the controller saw
+            # empty findings as "not yet reviewed" and looped (C27).
+            "critiqued_draft": draft_digest(state.get("draft")),
+        }
         if report.error:
             update["error"] = report.error
         return update

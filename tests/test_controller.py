@@ -21,7 +21,7 @@ from src.controller import (
     SYNTHESIZER,
     Controller,
 )
-from src.state import new_state, new_sub_question
+from src.state import draft_digest, new_state, new_sub_question
 
 CFG = Config({
     "agency": {"d1_plan_revision": True, "skip_research_on_failed_premise": True},
@@ -225,6 +225,7 @@ def test_full_chain_routes_through_every_stage():
     assert full.route(s) == CRITIC
 
     s["critic_findings"] = [{"claim": "x", "verdict": "SUPPORTED"}]
+    s["critiqued_draft"] = draft_digest(s["draft"])
     assert full.route(s) == DECIDER
 
     s["terminal_decision"] = "ANSWER"
@@ -330,6 +331,7 @@ def test_findings_without_actions_route_to_the_critic_router():
                                       CRITIC, CRITIC_ROUTER})
     s = planned(1, status="sufficient")
     s["draft"] = "a report"
+    s["critiqued_draft"] = draft_digest(s["draft"])
     s["critic_findings"] = [{"claim": "x", "verdict": "UNSUPPORTED",
                              "action_taken": ""}]
     assert full.route(s) == CRITIC_ROUTER
@@ -342,6 +344,7 @@ def test_routed_findings_move_on():
                                       CRITIC, CRITIC_ROUTER})
     s = planned(1, status="sufficient")
     s["draft"] = "a report"
+    s["critiqued_draft"] = draft_digest(s["draft"])
     s["critic_findings"] = [{"claim": "x", "verdict": "UNSUPPORTED",
                              "action_taken": "UNRESOLVED"}]
     assert full.route(s) == FINISH
@@ -359,3 +362,65 @@ def test_a_cleared_draft_sends_the_run_back_through_synthesis():
     s["critic_findings"] = [{"claim": "x", "verdict": "UNSUPPORTED",
                              "action_taken": "RE_RETRIEVE"}]
     assert full.route(s) == RETRIEVER
+
+# --- C27: the critic is keyed on the draft, and a decision closes research --
+
+
+def _reviewed(s, findings):
+    s["critic_findings"] = findings
+    s["critiqued_draft"] = draft_digest(s["draft"])
+    return s
+
+
+def test_a_redrafted_report_goes_back_to_the_critic():
+    """The bug this replaced: after RE_RETRIEVE the new draft went straight
+    to the decider carrying verdicts on text that no longer existed."""
+    from src.controller import CRITIC_ROUTER
+
+    full = Controller(CFG, available={PLANNER, RETRIEVER, SYNTHESIZER, CRITIC,
+                                      CRITIC_ROUTER, DECIDER})
+    s = planned(1, status="sufficient")
+    s["evidence"] = [{"id": "P1"}]
+    s["draft"] = "first draft"
+    _reviewed(s, [{"claim": "x", "verdict": "UNSUPPORTED",
+                   "action_taken": "RE_RETRIEVE"}])
+    s["draft"] = "second draft, written after re-retrieval"
+    assert full.route(s) == CRITIC
+
+
+def test_a_draft_with_no_claims_is_not_reviewed_forever():
+    """Empty findings used to mean 'not reviewed', so a claim-free draft
+    looped through the critic until the recursion limit."""
+    full = Controller(CFG, available={PLANNER, RETRIEVER, SYNTHESIZER, CRITIC,
+                                      DECIDER})
+    s = planned(1, status="sufficient")
+    s["evidence"] = [{"id": "P1"}]
+    s["draft"] = "The second approach differs."
+    _reviewed(s, [])
+    assert full.route(s) == DECIDER
+
+
+def test_a_decision_closes_research_even_with_work_pending():
+    """D5 can send the run back through synthesis; it must never send it
+    back into retrieval or revision."""
+    full = Controller(CFG, available={PLANNER, RETRIEVER, SYNTHESIZER, CRITIC,
+                                      DECIDER, FINALIZER})
+    s = planned(2, status="in_progress")
+    s["plan"][1]["status"] = "insufficient"
+    s["plan"][1]["rounds"] = 2
+    s["evidence"] = [{"id": "P1"}]
+    s["terminal_decision"] = "PARTIAL"
+    s["draft"] = ""
+    assert full.route(s) == SYNTHESIZER
+
+
+def test_a_partial_rewrite_is_reviewed_then_finalized_without_redeciding():
+    full = Controller(CFG, available={PLANNER, RETRIEVER, SYNTHESIZER, CRITIC,
+                                      DECIDER, FINALIZER})
+    s = planned(1, status="insufficient")
+    s["evidence"] = [{"id": "P1"}]
+    s["terminal_decision"] = "PARTIAL"
+    s["draft"] = "partial-mode draft"
+    assert full.route(s) == CRITIC
+    _reviewed(s, [{"claim": "x", "verdict": "SUPPORTED", "action_taken": "ACCEPT"}])
+    assert full.route(s) == FINALIZER

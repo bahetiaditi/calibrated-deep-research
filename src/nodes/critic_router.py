@@ -169,6 +169,14 @@ class CriticRouter:
         """
         available = {DROP_CLAIM, HEDGE, UNRESOLVED}
 
+        # Once D5 has decided, research is closed (C27). The router still
+        # runs on a PARTIAL rewrite — its claims need HEDGE/DROP/UNRESOLVED
+        # like any other — but reopening a sub-question would send the run
+        # back into retrieval after the decision that ended it, and clearing
+        # the draft would loop synthesis -> critic -> router indefinitely.
+        if state.get("terminal_decision") is not None:
+            return available
+
         has_budget = self.budget is None or (
             self.budget.can_spend("retrieval") and self.budget.can_spend("llm")
         )

@@ -65,6 +65,36 @@ RUN_FEATURE_NAMES: tuple[str, ...] = (
     "fraction_sufficient",
 )
 
+# Stage 1's predictors: f1-f10 WITHOUT f6 (C27).
+#
+# Stage 1 is supervised by the critic: a sub-question is labelled 1 when all
+# of its claims were SUPPORTED. f6 is the mean critic verdict strength for
+# the same claims, so f6 == 1.0 exactly when the label is 1. Fitting on it is
+# fitting on the label. Measured before the fix: on pure-noise features with
+# random verdicts, the model with f6 reached CV AUC 0.979 and flagged f6 as
+# significant; without it, 0.478 and nothing significant. At C33 the first
+# number would have been reported as "stage 1 predicts sufficiency almost
+# perfectly". f6 stays in the logged feature vector for analysis — it is a
+# legitimate input wherever the label does not come from the critic.
+LABEL_LEAKING_FEATURES: tuple[str, ...] = ("f6_entailment_strength",)
+STAGE1_FEATURE_NAMES: tuple[str, ...] = tuple(
+    name for name in FEATURE_NAMES if name not in LABEL_LEAKING_FEATURES
+)
+
+
+class LabelLeakage(ValueError):
+    """A model was built on a feature computed from its own label."""
+
+
+def assert_no_label_leakage(feature_names: Sequence[str]) -> None:
+    leaking = [n for n in feature_names if n in LABEL_LEAKING_FEATURES]
+    if leaking:
+        raise LabelLeakage(
+            f"{', '.join(leaking)} is derived from the critic verdicts that "
+            f"label stage 1; a model fitted on it predicts its own label"
+        )
+
+
 # Below this ratio of samples to predictors the fit is reported as unreliable
 # rather than quietly used.
 MIN_SAMPLES_PER_PREDICTOR = 3.0

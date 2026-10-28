@@ -132,6 +132,7 @@ class Decider:
             calibrated=run.calibrated,
             resolved=[s.text for s in run.resolved()],
             unresolved=[s.text for s in run.unresolved()],
+            background=len(run.background()),
         )
         decision = decide(inputs) if self.adaptive else static_decision(inputs)
         assert decision.terminal in TERMINALS

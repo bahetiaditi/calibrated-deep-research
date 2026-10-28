@@ -3419,3 +3419,73 @@ refutation stays intact for the premise alone, but silence on the premise
 benchmark to test it: C30's Tier D1 items, built so their refutations are in
 the corpus, will exercise the hard rule instead; this case is closer to
 Tier D4.
+
+**2026-10-28 — C27.7. Mechanical chain led by a reliable model; pinning
+extended to every role.**
+
+C27.6 moved reformulation to MECHANICAL. The next live run took 8–10
+minutes per question instead of ~2, with "gemma-4-31b-it failed 3 attempts"
+six times and three reformulations landing on flash-lite. A direct probe
+(three identical calls, bypassing the provider) settled it: **gemma returned
+`500 INTERNAL` on 2 of 3 calls, failing in ~1s, and took ~27s on the one that
+succeeded** — with perfectly good JSON. Not thinking starvation, which was
+the guess; a flaky endpoint. At 3 attempts, roughly 30% of reformulations
+exhausted their retries and fell through.
+
+Gemma led the chain for volume (14.4K RPD, C2). By C27.6 the only mechanical
+call left is reformulation, ~6 per question — volume no longer matters,
+reliability does. **gpt-oss-20b now leads**: fast and reliable, its 200K TPD
+idle once judgment is pinned to 120b, and not the judge's model family.
+Gemma is second. **flash-lite is last**, because it *is* the judge model;
+the old order made it the routine fallback for D2 decisions.
+
+**Pinning now covers every role** (`llm.pin.judgment`,
+`llm.pin.mechanical`; the judge is single-model already). The same live run
+showed the premise question flip from PARTIAL to ABSTAIN against the run
+before, because its reformulations came from different models — the C27.6
+argument for pinning judgment applies to mechanical unchanged: D2's
+decisions shape retrieval, so a configuration's results must not depend on
+which model happened to be up. `pin_judgment_model` (one commit old) is
+replaced by the `pin:` map.
+
+**2026-10-28 — C27.8. D5 decides on core sub-questions. Background ones
+are not evidence that a question is answerable.**
+
+Resolves the open item from C27.6 with option (a). Each sub-question now
+carries `kind`: **core** (answering it is part of answering the question as
+asked) or **background** (context any answer could use, answerable whatever
+the question presupposes — "what is RoPE?"). Both scorers aggregate core
+sub-questions only; gaps are listed for unresolved core ones only, since
+missing context is not a missing answer.
+
+The live case, now a test: "Why does Mamba-2 use RoPE in its SSM blocks?"
+decomposed into what-is-RoPE (background) and two sub-questions resting on
+the false premise. Only the background one resolved; at 1 of 3 the heuristic
+reached PARTIAL, and the report explained RoPE beside a premise it never
+questioned. With the background sub-question tagged, the same evidence
+gives 0 of 2 core resolved: ABSTAIN. **Why (a) rather than (b)** (abstain
+when a core premise is UNVERIFIABLE and everything resting on it fails): (b)
+fixes the false-premise case only, while background dilution affects every
+tier — a Tier A lookup decomposed into "define X" plus "find X's value" would
+reach PARTIAL on the definition alone. (a) removes the dilution at its
+source, in both the heuristic and the calibrated stage 2.
+
+**Asymmetric defaults, deliberately.** Only an explicit `"kind":
+"background"` makes a sub-question background; missing or unknown values are
+core, and a plan tagged entirely background is treated as all core.
+Mis-tagging core as background removes the part that mattered from the
+score; mis-tagging background as core merely restores pre-C27.8 behaviour.
+Split parts inherit their parent's kind. Plans and checkpoints written
+before C27.8 have no `kind` and score exactly as before.
+
+**For C33.** Stage-1 probabilities are still computed and recorded for
+background sub-questions — they are legitimate training rows for "was
+enough evidence found" — but only core ones enter stage 2's four aggregates.
+The kind is in the decision snapshot, so C33 can check whether the planner's
+tags are themselves reliable: if background sub-questions resolve at the
+same rate as core ones on Tier D, the tagging is doing nothing.
+
+**Not changed:** D4 still allocates budget without regard to kind. Spending
+less on background sub-questions is the obvious next step, but it changes an
+agency surface C35 ablates, and should be decided with C33's data rather
+than before it.

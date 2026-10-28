@@ -30,6 +30,16 @@ Routes — pick the cheapest one that can plausibly answer it
                    written.
   evidence_store   material already gathered in earlier runs.
 
+The kind field — core or background
+  core        answering it is part of answering the question AS ASKED. If
+              the question rests on a claim ("why does X use Y?"), the
+              sub-questions about X using Y are core.
+  background  context any answer could use, answerable whatever the
+              question presupposes: "what is Y?", "how does Y work in
+              general?". Its answer says nothing about whether the question
+              itself can be answered.
+At least one sub-question must be core. When unsure, say core.
+
 The rationale field
 State why this sub-question is needed to answer the parent. Write it for a
 reader who will later decide whether to rewrite, split, merge or abandon this
@@ -37,7 +47,7 @@ sub-question when retrieval fails — so say what it contributes, not what it
 asks.
 
 Return ONLY this JSON, no prose and no markdown fences:
-{{"sub_questions": [{{"text": "...", "route": "arxiv_meta", "rationale": "..."}}]}}
+{{"sub_questions": [{{"text": "...", "route": "arxiv_meta", "kind": "core", "rationale": "..."}}]}}
 
 RESEARCH QUESTION
 {question}

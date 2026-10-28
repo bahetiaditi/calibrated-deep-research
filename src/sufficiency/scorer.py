@@ -70,6 +70,7 @@ class SubQuestionScore:
     text: str
     status: str
     included: bool          # False only when merged into a live sibling
+    kind: str               # core | background (C27.8)
     resolved: bool
     p: float | None         # stage-1 probability; None under the heuristic
     features: dict[str, float | None]
@@ -93,11 +94,18 @@ class RunScore:
     def included(self) -> list[SubQuestionScore]:
         return [s for s in self.sub_questions if s.included]
 
+    def scored(self) -> list[SubQuestionScore]:
+        """What D5 decides on: included CORE sub-questions (C27.8)."""
+        return [s for s in self.included() if s.kind == "core"]
+
+    def background(self) -> list[SubQuestionScore]:
+        return [s for s in self.included() if s.kind == "background"]
+
     def resolved(self) -> list[SubQuestionScore]:
-        return [s for s in self.included() if s.resolved]
+        return [s for s in self.scored() if s.resolved]
 
     def unresolved(self) -> list[SubQuestionScore]:
-        return [s for s in self.included() if not s.resolved]
+        return [s for s in self.scored() if not s.resolved]
 
 
 class Scorer(Protocol):
@@ -151,7 +159,9 @@ def sub_question_scores(
             note = f"retrieval sufficient but entailment {f6:.2f} < {min_entailment}"
         out.append(SubQuestionScore(
             id=sq["id"], text=sq.get("text", ""), status=str(sq.get("status")),
-            included=covered is None, resolved=resolved, p=None,
+            included=covered is None,
+            kind="background" if sq.get("kind") == "background" else "core",
+            resolved=resolved, p=None,
             features=features, verdicts=verdicts, note=note,
         ))
     return out
@@ -201,9 +211,13 @@ class HeuristicScorer:
 
     def score(self, state: ResearchState) -> RunScore:
         subs = sub_question_scores(state, min_entailment=self.min_entailment)
-        included = [s for s in subs if s.included]
-        n = len(included)
-        value = (sum(s.resolved for s in included) / n) if n else None
+        # Core only (C27.8). A background sub-question resolves whatever the
+        # question presupposes; counting it let a false-premise question
+        # reach PARTIAL on "what is RoPE?" alone, a report that explains
+        # RoPE beside the premise it never questioned.
+        scored = [s for s in subs if s.included and s.kind == "core"]
+        n = len(scored)
+        value = (sum(s.resolved for s in scored) / n) if n else None
         thresholds = Thresholds(
             answer=1.0, partial=(1.0 / n) if n else 1.0,
             source="heuristic: all / any / none resolved",
@@ -256,9 +270,13 @@ class CalibratedScorer:
 
     def score(self, state: ResearchState) -> RunScore:
         subs = sub_question_scores(state, min_entailment=self.min_entailment)
-        included = [s for s in subs if s.included]
-        for s in included:
-            s.p = round(self.stage1.predict_proba(s.features), 4)
+        # Stage-1 probabilities for every included sub-question — they are
+        # recorded, and C33 trains on them — but stage 2 aggregates CORE ones
+        # only (C27.8); see HeuristicScorer.score.
+        for s in subs:
+            if s.included:
+                s.p = round(self.stage1.predict_proba(s.features), 4)
+        included = [s for s in subs if s.included and s.kind == "core"]
 
         if not included:
             return RunScore(value=None, thresholds=self.thresholds,

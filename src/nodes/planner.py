@@ -232,6 +232,8 @@ class Planner:
                         sub_question_id=f"{target['id']}.{index + 1}",
                         rationale=f"split from {target['id']}: {reasoning}",
                         parent_id=target["id"],
+                        # The parts of a core sub-question are core.
+                        kind=target.get("kind", "core"),
                     )
                     child["suggested_route"] = target.get("suggested_route")
                     new_plan.append(child)
@@ -308,6 +310,7 @@ class Planner:
                 text,
                 sub_question_id=f"sq{len(out) + 1}",
                 rationale=_rationale_of(raw),
+                kind=_kind_of(raw),
             )
             # The planner's route is a SUGGESTION. Recording it as the first
             # attempted route would tell D2 the route had already been tried
@@ -317,6 +320,15 @@ class Planner:
 
             if len(out) >= self.max_sub_questions:
                 break
+
+        if out and not any(sq["kind"] == "core" for sq in out):
+            # A plan with nothing core would leave D5 nothing to score, and
+            # every question would abstain. A model that tags everything
+            # background has mis-tagged; treating all of it as core restores
+            # the pre-C27.8 behaviour rather than inventing a judgment.
+            log.info("planner marked no sub-question core; treating all as core")
+            for sq in out:
+                sq["kind"] = "core"
 
         if not out:
             # A question the planner could not decompose is still a question.
@@ -470,6 +482,21 @@ def _premise_note(premise_check: dict[str, Any] | None) -> str:
               "false premise."
         )
     return ("\n\n" + "\n\n".join(lines)) if lines else ""
+
+
+def _kind_of(raw: Any) -> str:
+    """'background' only when the model says so explicitly; core otherwise.
+
+    The asymmetry is deliberate. Mis-tagging a core sub-question as
+    background removes it from D5's score — the question could then be
+    answered without the part that mattered. Mis-tagging background as core
+    only restores the pre-C27.8 behaviour.
+    """
+    if isinstance(raw, dict):
+        value = str(raw.get("kind") or "").strip().lower()
+        if value == "background":
+            return "background"
+    return "core"
 
 
 def _abandoned(target: SubQuestion, reasoning: str) -> SubQuestion:

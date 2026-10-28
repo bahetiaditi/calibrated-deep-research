@@ -66,6 +66,7 @@ Route = Literal["arxiv_meta", "arxiv_fulltext", "web", "evidence_store"]
 Status = Literal["pending", "in_progress", "sufficient", "insufficient", "abandoned"]
 Verdict = Literal["SUPPORTED", "PARTIAL", "UNSUPPORTED", "CONTRADICTED"]
 Terminal = Literal["ANSWER", "PARTIAL", "ABSTAIN"]
+SubQuestionKind = Literal["core", "background"]
 SourceType = Literal["arxiv", "web"]
 
 # A sub-question in one of these states will not be worked on again.
@@ -153,6 +154,14 @@ class SubQuestion(TypedDict):
     next_route: Route | None       # D2's chosen route for the next round
     next_query: str | None         # D2's reformulated (or router's) query
     best_f1: float | None          # D3's marginal-improvement baseline
+    # C27.8. Whether answering this sub-question is part of answering the
+    # question as asked ("core") or context any answer could use
+    # ("background", e.g. "what is RoPE?"). Background sub-questions are
+    # answerable whatever the question presupposes, so they carry no
+    # information about whether the QUESTION is answerable — and D5 scores
+    # core sub-questions only. Defaults to core, so plans written before
+    # C27.8 behave exactly as they did.
+    kind: SubQuestionKind
 
 
 class ClaimVerification(TypedDict):
@@ -309,6 +318,7 @@ def new_sub_question(
     sub_question_id: str | None = None,
     rationale: str = "",
     parent_id: str | None = None,
+    kind: str = "core",
 ) -> SubQuestion:
     return SubQuestion(
         id=sub_question_id or f"sq{uuid.uuid4().hex[:8]}",
@@ -326,6 +336,7 @@ def new_sub_question(
         next_route=None,
         next_query=None,
         best_f1=None,
+        kind="background" if kind == "background" else "core",
     )
 
 

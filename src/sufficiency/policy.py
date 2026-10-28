@@ -106,8 +106,9 @@ class DecisionInputs:
     error: str | None = None
     scorer: str = "heuristic"
     calibrated: bool = False
-    resolved: Sequence[str] = ()       # sub-question texts
+    resolved: Sequence[str] = ()       # CORE sub-question texts
     unresolved: Sequence[str] = ()
+    background: int = 0                # background sub-questions, not scored
 
 
 @dataclass
@@ -257,7 +258,9 @@ def _threshold_rationale(inputs: DecisionInputs, terminal: str) -> str:
     score = f"{inputs.score:.2f}"
     kind = "calibrated" if inputs.calibrated else "uncalibrated heuristic"
     n_res, n_unres = len(inputs.resolved), len(inputs.unresolved)
-    parts = f"{n_res} of {n_res + n_unres} sub-question(s) resolved"
+    parts = f"{n_res} of {n_res + n_unres} core sub-question(s) resolved"
+    if inputs.background:
+        parts += f", {inputs.background} background not scored"
 
     if terminal == ANSWER:
         head = f"Answered: score {score} >= tau_answer {t.answer:.2f}"

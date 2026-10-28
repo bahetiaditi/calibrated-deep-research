@@ -50,3 +50,5 @@ pytest==9.1.1
 #   effectively unmaintained. Install separately at C38 if it still works;
 #   the annotation protocol does not depend on it — the 14-mode taxonomy can
 #   be applied by hand against traces. Do not let a stale package block C38.
+
+joblib==1.5.2joblib==1.5.2            # sufficiency model persistence (C26)

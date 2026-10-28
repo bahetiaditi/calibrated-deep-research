@@ -2706,3 +2706,74 @@ could not be decided, and the gap is reported.
 (C16), which happens in every configuration including the A1 ablation. The
 two halves of D1 are deliberately distinguished in the trace so C35 counts
 only the adaptive one.
+
+**2026-09-07 — C26. The sufficiency model. A correction to §5.3, made before
+fitting rather than after.**
+
+`src/sufficiency/model.py`. Machinery only; fitting happens at C33.
+
+**§5.3 as written does not work, and it is better to say so now.** The spec
+is "logistic regression on the ~10 sub-question features and ~5 run-level
+aggregates", fit on 24 calibration questions:
+
+| design | n | p | n/p |
+|---|---|---|---|
+| f1-f10 + aggregates + missing indicators | 24 | 30 | 0.8 |
+| f1-f10 + aggregates | 24 | 15 | 1.6 |
+| aggregates only | 24 | 5 | 4.8 |
+
+The usual rule for logistic regression is **ten events per predictor**. Tier
+D is ~40% of the benchmark, so 24 runs supply roughly ten positive events —
+which licenses about one predictor. Fitting fifteen produces coefficients
+that are noise with standard errors attached, and claim 1 (§1.4) would rest
+on them.
+
+**Two stages instead.** The sub-question features are per *sub-question*, and
+24 questions decompose into roughly 70 of those:
+
+  **stage 1** — sub-question model. f1-f10 → P(this sub-question is
+  answered). n ≈ 70, p = 20. Still tight, regularised hard.
+
+  **stage 2** — run model. Four predictors only: mean and min of stage-1
+  output, premise grounding, fraction sufficient → P(the question is
+  answerable). n = 24, p = 4.
+
+Stage 2's inputs are summaries of stage 1 rather than raw features, so the
+information is pooled where there is enough data to estimate it rather than
+discarded. `min` is carried beside `mean` for §5.2's r2 reason: a report
+resting on one unsupported sub-question is unsafe however well the others
+went.
+
+**Stage 1 labels come free from the critic.** A sub-question whose claims
+were all SUPPORTED was sufficiently evidenced. This is a **weak label** and
+is documented as one: it supervises *retrieval sufficiency*, not truth. The
+critic judges whether a passage supports a claim, not whether the claim is
+correct — so stage 1 predicts "was enough evidence found", which is what D3
+and D5 need, while the benchmark's gold claims measure correctness
+separately. Sub-questions with no claims are **omitted rather than labelled
+0**: producing no claim is a synthesizer outcome, not evidence that
+retrieval failed.
+
+**The model reports its own unreliability.** `FitReport` carries
+samples-per-predictor, positive-event count, bootstrap CIs on every
+coefficient, and a `reliable` flag. `significant_coefficients()` returns only
+those whose CI excludes zero — because "which signals predict answerability"
+is a finding the project intends to make, and at this sample size a point
+estimate is not reportable on its own. A test asserts that pure noise
+produces no significant coefficients, which is the behaviour that makes the
+positive result mean something.
+
+**Calibration is applied conservatively.** §5.3 says to use isotonic "if the
+reliability diagram shows systematic miscalibration". At n=24 isotonic will
+happily fit the noise, so `auto` additionally requires enough data for the
+correction to mean anything — and when it refuses, it records *why* in the
+warnings rather than silently leaving the model uncalibrated.
+
+**Constant columns are dropped before the sample size is judged**, not after.
+A warning about predictors the fit never uses is worse than no warning: a
+constant feature is not a weak predictor, it is not a predictor. This fires
+on every ablation run, since f8 and f9 are constants by construction under
+the static policy (C20).
+
+API note: `sklearn` 1.8 deprecates `LogisticRegression(penalty=...)` in
+favour of `l1_ratio`; `l1_ratio=0.0` is L2.

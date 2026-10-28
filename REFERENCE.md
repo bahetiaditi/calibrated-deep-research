@@ -3134,3 +3134,68 @@ chose in the previous round, the base class traces that execution as a
 `(static)` D2 decision. Adaptive counts are unaffected — C35 counts only
 `was_adaptive=True` — but the inspector shows a "static" decision carrying
 an adaptive choice, which will mislead whoever reads a trace at C38.
+
+**2026-10-28 — C27.3. Every 429 burned the day; no judgment model could
+accept a synthesis prompt. Both fixed.**
+
+The C27.2 re-run verified the leak fix — every retrieval for the
+FlashAttention question carried its own query, and sq2/sq3 reached
+f1 5.08 / 5.00 where the contaminated run had abandoned them — and C27.1's
+ceiling fix (`revisions 1/2`). But both questions ended in
+`rule=system_failure` with no report:
+
+```
+openai/gpt-oss-120b: 200000/200000 tokens used today, need 8092
+qwen/qwen3.8-27b:    200000/200000 tokens used today, need 8092
+openai/gpt-oss-20b:  single call needs 8092 tokens but TPM ceiling is 8000
+```
+
+(D5's `system_failure` rule earned its place on its first live outing:
+without it, both crashes would have been graded as correct abstentions.)
+
+**1. The day was never spent; the ledger was told it was.** `classify` mapped
+every 429 to "switch", and the switch path called `_exhaust_locally`, which
+records the model's whole remaining daily allowance. The previous smoke
+printed three `429 … switching model` lines — minute-window rejections of a
+~6.4K-token synthesis prompt — and each wrote 200000/200000 for the rest of
+the UTC day. The comment on that path called it "a genuine 429: the provider
+says the quota is gone". The provider said the *minute* was gone.
+
+Now the window decides: a 429 whose message names a day limit (Groq "(TPD)"
+/ "(RPD)", Gemini "...PerDay...") switches and exhausts, as before; one naming
+a minute limit **waits the provider's stated retry interval and retries the
+same model**, falling through only if the wait exceeds `max_quota_wait_s` —
+and even then without touching the day; an unrecognised 429 switches without
+exhausting. The asymmetry is deliberate: wrongly exhausting a model silently
+removes it for up to 24 hours, wrongly keeping it costs one more 429.
+Waiting on the minute window is also the quality fix flagged at C27.2 — the
+report under test is now written by the primary model, not by whichever
+fallback happened to have headroom.
+
+**2. The synthesis prompt fit no judgment model.** The pre-call estimate is
+prompt (chars/3.5) plus the full `max_output_tokens` reservation. 24
+passages × 900 chars ≈ 6.1K tokens, + 2,048 = 8.1K, against an 8K TPM on
+every Groq model — so the ledger correctly refused the call everywhere. This
+is also what produced the minute-window 429s in the first place: on the run
+before, the estimate squeaked under with a smaller draft context, and the
+real token count did not.
+
+`LLMProvider.prompt_token_budget(role)` returns the largest prompt every
+model in a role's chain accepts in one call (min over TPM − output
+reservation; ~5.9K for judgment). The synthesizer trims its evidence to it.
+**Trimming is round-robin across sub-questions, lowest-ranked first** —
+cutting the tail of the grouped list would delete the last sub-question's
+evidence outright, the starvation C18's grouping exists to prevent; a
+mutation test confirms tail-trimming fails the fairness test. The label map
+is built after trimming, so a label can never resolve to a passage the model
+was not shown. `passages_dropped_for_budget` goes in the synthesis trace
+note.
+
+The critic's prompt (~4.5K live) and router's (~3.7K) currently fit; they
+grow with the draft, and should be sized to the same budget if C28's runs
+show them approaching it.
+
+**Repair for the falsely burned ledger:** `python -m scripts.quota reset
+--model <name>`. This also forgives the day's genuine spend; if the true
+allowance is gone, the next call gets a day-window 429, which is now
+recorded correctly.

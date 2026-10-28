@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from typing import Any, Sequence
 
 from src.config import Config, get_config
-from src.llm.provider import LLMProvider, Role
+from src.llm.provider import LLMProvider, Role, estimate_tokens
 from src.prompts import render
 from src.state import draft_digest, Passage, ResearchState, evidence_for, find_sub_question
 
@@ -99,12 +99,7 @@ class Synthesizer:
         if not question or not passages:
             return Draft(mode=mode, error="no question or no evidence")
 
-        label_map = {
-            f"P{i + 1:02d}": passage["id"] for i, passage in enumerate(passages)
-        }
-        rendered = self._render_evidence(passages)
         gaps = list(gaps or state.get("unresolved_gaps") or [])
-
         prompt = "synthesizer_partial" if mode == "partial" else "synthesizer"
         gap_block = (
             "\n".join(f"- {g}" for g in gaps) if gaps
@@ -115,13 +110,26 @@ class Synthesizer:
                 "NOT ESTABLISHED — do not claim these:\n"
                 + gap_block + "\n\n"
             )
+        user = f"Write the report answering:\n{question}"
+
+        passages, dropped = self._fit(state, passages, prompt, question, gap_block, user)
+        if not passages:
+            return Draft(mode=mode, error=(
+                "prompt budget too small for even one passage — the prompt "
+                "template and gaps alone exceed what the judgment chain accepts"
+            ))
+
+        label_map = {
+            f"P{i + 1:02d}": passage["id"] for i, passage in enumerate(passages)
+        }
+        rendered = self._render_evidence(passages)
 
         try:
             response = self.provider.complete(
                 system=render(
                     prompt, question=question, gaps=gap_block, evidence=rendered
                 ),
-                user=f"Write the report answering:\n{question}",
+                user=user,
                 role=Role.JUDGMENT,
             )
         except Exception as exc:  # noqa: BLE001
@@ -130,7 +138,7 @@ class Synthesizer:
         self._charge()
 
         draft = self._validate(response.text, label_map, mode)
-        self._trace(draft, len(passages))
+        self._trace(draft, len(passages), dropped=dropped)
         return draft
 
     # -- evidence selection -------------------------------------------------
@@ -175,6 +183,48 @@ class Synthesizer:
         take(state.get("evidence") or [])
 
         return ordered[:MAX_PASSAGES]
+
+    def _fit(
+        self,
+        state: ResearchState,
+        passages: list[Passage],
+        prompt: str,
+        question: str,
+        gap_block: str,
+        user: str,
+    ) -> tuple[list[Passage], int]:
+        """Trim evidence until the prompt fits the judgment chain (C27.3).
+
+        Without this the synthesizer could not be sent to ANY judgment
+        model: 24 passages came to ~6.1K estimated tokens, the ledger adds
+        the 2,048-token output reservation, and every Groq model's TPM is
+        8K. The first C27.2 smoke failed both questions this way.
+
+        Trimming is round-robin across sub-questions, lowest-ranked first:
+        cutting the tail of the grouped list would drop the LAST
+        sub-question's evidence entirely, which is the starvation C18's
+        grouping exists to prevent. The kept passages are then shown in the
+        usual grouped order. Returns (kept, number dropped).
+        """
+        budget = self.provider.prompt_token_budget(Role.JUDGMENT) \
+            if hasattr(self.provider, "prompt_token_budget") else None
+        if budget is None:
+            return passages, 0
+
+        def fits(kept: Sequence[Passage]) -> bool:
+            system = render(prompt, question=question, gaps=gap_block,
+                            evidence=self._render_evidence(kept))
+            return estimate_tokens(system, user, 0) <= budget
+
+        if fits(passages):
+            return passages, 0
+
+        priority = _round_robin(state, passages)
+        keep_n = len(priority)
+        while keep_n > 0 and not fits(_in_order(passages, priority[:keep_n])):
+            keep_n -= 1
+        kept = _in_order(passages, priority[:keep_n])
+        return kept, len(passages) - len(kept)
 
     def _render_evidence(self, passages: Sequence[Passage]) -> str:
         blocks = []
@@ -229,13 +279,14 @@ class Synthesizer:
         if self.budget is not None and self.budget.can_spend("llm"):
             self.budget.spend("llm", 1)
 
-    def _trace(self, draft: Draft, n_passages: int) -> None:
+    def _trace(self, draft: Draft, n_passages: int, *, dropped: int = 0) -> None:
         if self.tracer is None:
             return
         self.tracer.note(
             "synthesis",
             mode=draft.mode,
             passages_offered=n_passages,
+            passages_dropped_for_budget=dropped,
             passages_cited=draft.citation_count,
             invalid_labels=draft.invalid_labels,
             uncited_sentences=draft.uncited_sentences,
@@ -290,3 +341,32 @@ def _count_uncited(text: str) -> int:
         1 for s in sentences
         if len(s.strip()) > 40 and not CITATION_RE.search(s)
     )
+
+
+def _round_robin(state: ResearchState, passages: Sequence[Passage]) -> list[Passage]:
+    """Priority for trimming: each live sub-question's best passage, then
+    each one's second-best, and so on; passages owned by no live
+    sub-question last. Within a sub-question, `passages` is already in
+    rank order (see `_select`)."""
+    by_owner: dict[str, list[Passage]] = {}
+    for sub_question in state.get("plan") or []:
+        if sub_question.get("status") == "abandoned":
+            continue
+        ids = set(sub_question.get("evidence_ids") or [])
+        by_owner[sub_question["id"]] = [p for p in passages if p["id"] in ids]
+
+    order: list[Passage] = []
+    seen: set[str] = set()
+    depth = max((len(v) for v in by_owner.values()), default=0)
+    for i in range(depth):
+        for group in by_owner.values():
+            if i < len(group) and group[i]["id"] not in seen:
+                seen.add(group[i]["id"])
+                order.append(group[i])
+    order.extend(p for p in passages if p["id"] not in seen)
+    return order
+
+
+def _in_order(passages: Sequence[Passage], keep: Sequence[Passage]) -> list[Passage]:
+    ids = {p["id"] for p in keep}
+    return [p for p in passages if p["id"] in ids]

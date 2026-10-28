@@ -112,7 +112,7 @@ def test_estimate_tokens_is_conservative():
 
 
 @pytest.mark.parametrize("status,expected", [
-    (429, "switch"), (401, "fatal"), (403, "fatal"), (400, "fatal"),
+    (429, "switch_keep"), (401, "fatal"), (403, "fatal"), (400, "fatal"),
     (500, "retry"), (503, "retry"),
 ])
 def test_classify_status_codes(status, expected):
@@ -176,7 +176,7 @@ def test_429_switches_model_without_retrying_same_one(tmp_path):
 
 
 def test_429_marks_model_spent_for_the_day(tmp_path):
-    backend = FakeBackend(script=[FakeStatusError(429), '{"ok": 1}', '{"ok": 2}'])
+    backend = FakeBackend(script=[FakeStatusError(429, "Rate limit reached for model on tokens per day (TPD): Limit 200000"), '{"ok": 1}', '{"ok": 2}'])
     provider, backend, ledger, _ = build(tmp_path, backend=backend)
     provider.complete("s", "u")
     provider.complete("s", "u")     # second call must skip 'primary' entirely
@@ -545,7 +545,7 @@ def test_json_failure_does_not_mark_the_model_spent(tmp_path):
 
 
 def test_a_real_429_still_exhausts_the_model(tmp_path):
-    backend = FakeBackend(script=[FakeStatusError(429), '{"ok": true}'])
+    backend = FakeBackend(script=[FakeStatusError(429, "Rate limit reached for model on tokens per day (TPD): Limit 200000"), '{"ok": true}'])
     provider, backend, ledger, _ = build(tmp_path, backend=backend)
     provider.complete("s", "u")
     assert not ledger.check("primary", 100, now=T0).allowed
@@ -576,3 +576,93 @@ def test_a_json_failure_on_one_question_does_not_starve_the_next(tmp_path):
     provider.complete("s", "u1", json_mode=True)
     second = provider.complete("s", "u2", json_mode=True)
     assert second.model == "primary"        # back to the preferred model
+
+
+# --- C27.3: which window a 429 is about ------------------------------------
+
+MINUTE = ("Rate limit reached for model `openai/gpt-oss-120b` on tokens per "
+          "minute (TPM): Limit 8000, Used 6100, Requested 2400. "
+          "Please try again in 3.75s.")
+
+
+@pytest.mark.parametrize("message,expected", [
+    (MINUTE, "wait"),
+    ("Rate limit reached on requests per minute (RPM): Limit 30", "wait"),
+    ("Rate limit reached on tokens per day (TPD): Limit 200000", "switch"),
+    ("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel", "switch"),
+    ("429 RESOURCE_EXHAUSTED GenerateContentInputTokensPerModelPerMinute", "wait"),
+    ("429 Too Many Requests", "switch_keep"),
+])
+def test_429s_are_classified_by_window(message, expected):
+    assert classify(FakeStatusError(429, message), [500]) == expected
+
+
+def test_a_minute_429_waits_and_retries_the_same_model(tmp_path):
+    """The C27 smoke: synthesis hit the minute window and fell through to
+    weaker models. The judgment role should wait instead."""
+    slept = []
+    backend = FakeBackend(script=[FakeStatusError(429, MINUTE), '{"ok": true}'])
+    provider, backend, ledger, _ = build(tmp_path, backend=backend)
+    provider._sleep = slept.append
+    resp = provider.complete("s", "u")
+    assert resp.model == "primary" and not resp.fell_back
+    assert [c["model"] for c in backend.calls] == ["primary", "primary"]
+    assert slept and 3.75 <= slept[0] <= 5.0
+
+
+def test_a_minute_429_never_burns_the_day(tmp_path):
+    """The defect, directly: one minute-window 429 used to record the
+    model's entire remaining daily allowance."""
+    backend = FakeBackend(script=[FakeStatusError(429, MINUTE), '{"ok": true}'])
+    provider, backend, ledger, _ = build(tmp_path, backend=backend)
+    provider._sleep = lambda s: None
+    provider.complete("s", "u")
+    assert ledger.remaining_tokens_today("primary", now=T0) is None or \
+        ledger.remaining_tokens_today("primary", now=T0) > 0
+    assert ledger.check("primary", 100, now=T0).allowed
+
+
+def test_a_minute_429_with_too_long_a_wait_switches_without_burning(tmp_path):
+    long_wait = FakeStatusError(429, "tokens per minute (TPM) ... try again in 5m0s")
+    backend = FakeBackend(script=[long_wait, '{"ok": true}'])
+    provider, backend, ledger, _ = build(tmp_path, backend=backend)
+    provider._sleep = lambda s: pytest.fail("should not wait five minutes")
+    resp = provider.complete("s", "u")
+    assert resp.model == "secondary"
+    assert ledger.check("primary", 100, now=T0).allowed
+
+
+def test_an_unclassified_429_switches_without_burning(tmp_path):
+    backend = FakeBackend(script=[FakeStatusError(429, "Too Many Requests"), '{"ok": 1}'])
+    provider, backend, ledger, _ = build(tmp_path, backend=backend)
+    assert provider.complete("s", "u").model == "secondary"
+    assert ledger.check("primary", 100, now=T0).allowed
+
+
+def test_retry_after_reads_header_then_message():
+    from src.llm.provider import retry_after_seconds
+
+    class WithHeader(Exception):
+        class response:
+            headers = {"retry-after": "12"}
+
+    assert retry_after_seconds(WithHeader("x")) == 12.0
+    assert retry_after_seconds(Exception("Please try again in 1m2.5s")) == 62.5
+    assert retry_after_seconds(Exception("no hint")) == 60.0
+
+
+def test_prompt_budget_is_the_tightest_model_in_the_chain(tmp_path):
+    provider, _, _, _ = build(tmp_path)
+    budget = provider.prompt_token_budget("judgment")
+    specs = provider.chains.get("judgment") or []
+    expected = [s.limits.tpm - s.max_output_tokens for s in specs if s.limits.tpm]
+    assert budget == (min(expected) if expected else None)
+
+
+def test_the_real_judgment_chain_has_room_for_a_prompt():
+    """8K TPM minus a 2,048-token output reservation leaves ~5.9K."""
+    from src.config import get_config
+    from src.llm.provider import LLMProvider, Role
+
+    budget = LLMProvider(get_config(reload=True)).prompt_token_budget(Role.JUDGMENT)
+    assert budget is not None and 4000 < budget < 8000

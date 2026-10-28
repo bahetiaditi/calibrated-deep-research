@@ -336,3 +336,99 @@ def test_node_uses_partial_mode_on_the_partial_path():
     state["unresolved_gaps"] = ["a gap"]
     synthesizer_node(Synthesizer(CFG, provider=provider))(state)
     assert "UNRESOLVED" in provider.calls[0]["system"]
+
+# --- C27.3: the prompt must fit the judgment chain -------------------------
+
+from src.llm.provider import estimate_tokens  # noqa: E402
+
+LONG = "Measured result with enough detail to be worth citing. " * 16   # ~880 chars
+
+
+class BudgetedProvider(FakeProvider):
+    def __init__(self, budget, text="A claim. [P01]"):
+        super().__init__(text)
+        self.budget = budget
+
+    def prompt_token_budget(self, role):
+        return self.budget
+
+
+def two_sub_question_state(per_sq=12):
+    state = new_state("How do FlashAttention-2 and PagedAttention differ?")
+    state["plan"] = []
+    state["evidence"] = []
+    for sqid in ("sq1", "sq2"):
+        sq = new_sub_question(f"text {sqid}", sub_question_id=sqid)
+        ids = [f"P{sqid}{i:02d}{'a' * 8}" for i in range(per_sq)]
+        sq["evidence_ids"] = ids
+        state["plan"].append(sq)
+        state["evidence"].extend(passage(pid, text=LONG) for pid in ids)
+    return state
+
+
+def test_the_prompt_is_trimmed_to_the_chains_budget():
+    """The C27.2 smoke: 24 passages came to ~6.1K tokens and no judgment
+    model could accept the call at all."""
+    provider = BudgetedProvider(budget=3000)
+    draft = Synthesizer(CFG, provider=provider).synthesize(two_sub_question_state())
+    assert draft.error is None
+    call = provider.calls[0]
+    assert estimate_tokens(call["system"], call["user"], 0) <= 3000
+
+
+def test_trimming_is_fair_across_sub_questions():
+    """Cutting the grouped list's tail would delete the last sub-question's
+    evidence entirely — the starvation C18's grouping prevents. With
+    round-robin trimming both keep evidence, within one passage of each
+    other, and each keeps its BEST passages."""
+    provider = BudgetedProvider(budget=2500)
+    state = two_sub_question_state()
+    draft = Synthesizer(CFG, provider=provider).synthesize(state)
+    shown = set(draft.label_map.values())
+    assert 2 <= len(shown) < 24
+    ranked = [sq["evidence_ids"] for sq in state["plan"]]
+    kept = [[pid for pid in ids if pid in shown] for ids in ranked]
+    assert kept[0] and kept[1]
+    assert abs(len(kept[0]) - len(kept[1])) <= 1
+    for ids, mine in zip(ranked, kept):
+        assert mine == ids[: len(mine)]           # a prefix: best first
+
+
+def test_trimming_records_how_much_was_dropped():
+    events = []
+
+    class Tracer:
+        def note(self, name, **kw):
+            events.append(kw)
+
+    provider = BudgetedProvider(budget=2500)
+    Synthesizer(CFG, provider=provider, tracer=Tracer()).synthesize(
+        two_sub_question_state())
+    assert events[0]["passages_dropped_for_budget"] > 0
+    assert events[0]["passages_offered"] + events[0]["passages_dropped_for_budget"] == 24
+
+
+def test_nothing_is_trimmed_when_it_already_fits():
+    provider = BudgetedProvider(budget=100_000)
+    draft = Synthesizer(CFG, provider=provider).synthesize(
+        two_sub_question_state(per_sq=3))
+    assert len(draft.label_map) == 6
+
+
+def test_labels_match_the_passages_actually_shown():
+    """The label map is built after trimming. Built before, P01..P24 would
+    include labels for dropped passages, and a citation to one would resolve
+    to evidence the model never saw."""
+    provider = BudgetedProvider(budget=2500, text="A claim. [P01] Another. [P02]")
+    draft = Synthesizer(CFG, provider=provider).synthesize(two_sub_question_state())
+    system = provider.calls[0]["system"]
+    labels_in_prompt = {f"P{i:02d}" for i in range(1, 25) if f"\nP{i:02d}  " in "\n" + system}
+    assert set(draft.label_map) == labels_in_prompt
+    assert set(draft.cited_passage_ids) <= set(draft.label_map.values())
+
+
+def test_a_budget_too_small_for_one_passage_is_an_error_not_an_empty_call():
+    provider = BudgetedProvider(budget=50)
+    draft = Synthesizer(CFG, provider=provider).synthesize(two_sub_question_state())
+    assert draft.error and "prompt budget" in draft.error
+    assert provider.calls == []

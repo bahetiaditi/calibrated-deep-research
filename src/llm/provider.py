@@ -35,6 +35,8 @@ at provider defaults.
 """
 from __future__ import annotations
 
+import re
+
 import logging
 import time
 from datetime import datetime
@@ -257,6 +259,40 @@ _RETRYABLE_400_MARKERS = (
 )
 
 
+# Groq: "Rate limit reached ... on tokens per minute (TPM)". Gemini:
+# "RESOURCE_EXHAUSTED ... GenerateRequestsPerDayPerProjectPerModel".
+_MINUTE_MARKERS = ("per minute", "(tpm)", "(rpm)", "perminute")
+_DAY_MARKERS = ("per day", "(tpd)", "(rpd)", "perday")
+
+_RETRY_IN = re.compile(
+    r"try again in\s+(?:(\d+(?:\.\d+)?)m)?\s*(?:(\d+(?:\.\d+)?)s)?",
+    re.IGNORECASE,
+)
+
+
+def retry_after_seconds(exc: Exception, default: float = 60.0) -> float:
+    """How long the provider asked us to wait, from header or message.
+
+    Groq states it in the message ("Please try again in 7.425s", or
+    "in 1m2.5s") and in a retry-after header. Falls back to a full minute,
+    the longest a minute window can need.
+    """
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None) or {}
+    try:
+        value = headers.get("retry-after") if hasattr(headers, "get") else None
+        if value is not None:
+            return max(0.0, float(value))
+    except (TypeError, ValueError):
+        pass
+    match = _RETRY_IN.search(str(exc))
+    if match and (match.group(1) or match.group(2)):
+        minutes = float(match.group(1) or 0.0)
+        seconds = float(match.group(2) or 0.0)
+        return minutes * 60.0 + seconds
+    return default
+
+
 def _mentions(exc: Exception, markers: tuple[str, ...]) -> bool:
     text = str(exc).lower()
     return any(marker in text for marker in markers)
@@ -282,9 +318,21 @@ def classify(exc: Exception, retry_statuses: list[int]) -> str:
         # exhausting" path rather than switch's.
         return "retry_plain"
     if status == 429:
-        # Our ledger thought there was room and the provider disagreed.
-        # Trust the provider: stop using this model today.
-        return "switch"
+        # Which window ran out decides everything (C27.3). Until then every
+        # 429 was "switch", and the switch path burned the model's whole
+        # day: one minute-window rejection of a large prompt marked
+        # gpt-oss-120b as 200000/200000 for the rest of the UTC day. The
+        # C27 smoke produced three such 429s; the next run found both
+        # stronger judgment models "out of quota" with most of their real
+        # daily allowance unspent.
+        if _mentions(exc, _DAY_MARKERS):
+            return "switch"          # the provider says today is gone
+        if _mentions(exc, _MINUTE_MARKERS):
+            return "wait"            # wait out the window, same model
+        # Unrecognised 429: move on, but do NOT burn the day. Wrongly
+        # exhausting a model silently removes it for up to 24 hours; wrongly
+        # keeping it costs at most another 429 on the next call.
+        return "switch_keep"
     if status in (401, 403):
         return "fatal"
     if status in retry_statuses:
@@ -489,11 +537,32 @@ class LLMProvider:
                         )
                         break
                     if action == "switch":
-                        # A genuine 429: the provider says the quota is gone,
-                        # so burn the local day budget and stop choosing this
-                        # model. This is the ONLY path that exhausts a model.
+                        # A DAY-window 429: the provider says today's quota
+                        # is gone, so burn the local day budget and stop
+                        # choosing this model. This is the ONLY path that
+                        # exhausts a model.
                         self._exhaust_locally(spec)
-                        log.warning("429 on %s — switching model", spec.model)
+                        log.warning("daily 429 on %s — switching model", spec.model)
+                        break
+                    if action == "wait":
+                        # A MINUTE-window 429. For the judgment role,
+                        # waiting is the right trade: the eval is not
+                        # latency-bound, and falling through hands the
+                        # report to whichever weaker model has headroom —
+                        # the C27 smoke had both syntheses written by
+                        # fallbacks, one by gpt-oss-20b.
+                        wait = retry_after_seconds(exc) + 0.5
+                        if wait <= self.max_quota_wait_s and attempt < self.max_attempts:
+                            log.warning("minute-window 429 on %s — waiting %.1fs",
+                                        spec.model, wait)
+                            self._sleep(wait)
+                            continue
+                        log.warning("minute-window 429 on %s — switching "
+                                    "(day budget untouched)", spec.model)
+                        break
+                    if action == "switch_keep":
+                        log.warning("unclassified 429 on %s — switching "
+                                    "(day budget untouched)", spec.model)
                         break
                     if attempt == self.max_attempts:
                         log.warning("%s failed %d attempts", spec.model, attempt)
@@ -639,6 +708,28 @@ class LLMProvider:
             f"{spec.model}: quota did not clear after {_MAX_QUOTA_WAITS} waits"
         )
         return False
+
+    def prompt_token_budget(self, role: Any) -> int | None:
+        """Largest prompt, in estimate_tokens units, every model in the
+        role's chain can accept in one call.
+
+        Added at C27.3. The pre-call estimate is prompt + the full output
+        reservation, and the ledger refuses a call whose estimate exceeds
+        the model's TPM outright ("single call needs 8092 tokens but TPM
+        ceiling is 8000"). A synthesis prompt carrying 24 passages came to
+        ~6.1K tokens; with the 2,048-token reservation it fit no judgment
+        model at all. Callers that assemble large prompts size them to this.
+
+        The minimum across the chain, so a prompt that fits the primary
+        also fits every fallback. `None` when no model declares a TPM.
+        """
+        chain = self.chains.get(role) or []
+        budgets = [
+            int(spec.limits.tpm) - int(spec.max_output_tokens)
+            for spec in chain
+            if getattr(spec.limits, "tpm", None)
+        ]
+        return min(budgets) if budgets else None
 
     def _exhaust_locally(self, spec: ModelSpec) -> None:
         """Mark a model as spent for today after an unexpected 429."""

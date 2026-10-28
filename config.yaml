@@ -109,6 +109,22 @@ llm:
     #  - TPM is only 16K, so ~5 calls/minute sustained. That, not RPD, is
     #    the real ceiling here.
     mechanical:
+      # REORDERED at C27.7. Gemma led for volume (14.4K RPD), but by C27.6
+      # the only mechanical call left is D2's query reformulation, ~6 per
+      # question — volume no longer matters, reliability does. Probed live:
+      # gemma-4-31b-it returned 500 INTERNAL on 2 of 3 identical calls
+      # (~1s each) and took ~27s when it succeeded, so ~30% of
+      # reformulations burned three attempts and fell through, and runs
+      # went from ~2 to ~8-10 minutes. gpt-oss-20b is fast and reliable,
+      # its 200K TPD is idle once judgment is pinned to 120b (C27.6), and
+      # it is not the judge's family — flash-lite IS the judge model, so it
+      # is now the last resort here, not the second.
+      - provider: groq
+        model: openai/gpt-oss-20b
+        max_output_tokens: 1024
+        reasoning_effort: low
+        supports_json_mode: true
+        limits: {rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000, reset_timezone: UTC}
       - provider: gemini
         model: gemma-4-31b-it
         max_output_tokens: 2048
@@ -121,12 +137,6 @@ llm:
         thinking_budget: 0
         supports_json_mode: true
         limits: {rpm: 15, rpd: 500, tpm: 250000, reset_timezone: America/Los_Angeles}
-      - provider: groq
-        model: openai/gpt-oss-20b
-        max_output_tokens: 1024
-        reasoning_effort: low
-        supports_json_mode: true
-        limits: {rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000, reset_timezone: UTC}
 
     # Evaluation only. Different provider AND family from the judgment chain,
     # so the family that writes a report never grades it.
@@ -145,14 +155,19 @@ llm:
         supports_json_mode: true
         limits: {rpm: 15, rpd: 500, tpm: 250000, reset_timezone: America/Los_Angeles}
 
-  # Eval mode (C27.6). When set, the judgment chain is this one model: no
-  # fallback, so every report in an eval is written by the same model. The
-  # ablations compare configurations; with a chain, the writer depends on
-  # which limits a run hit, a time-of-day confound. Leave null for
-  # development, where finishing the run matters more than who wrote it.
-  # A pinned run that exhausts the model's day FAILS (rule=system_failure)
+  # Eval mode (C27.6, extended to every role at C27.7). A pinned role's
+  # chain is that one model: no fallback, so every call of that role in an
+  # eval is made by the same model. The ablations compare configurations;
+  # with a chain, the model depends on which limits or outages a run hit —
+  # time of day, not configuration. C27.6 pinned only judgment; the next
+  # live run showed the same question flip PARTIAL -> ABSTAIN because its
+  # reformulations came from a different model, so mechanical needs it too.
+  # Leave null for development, where finishing the run matters more.
+  # A pinned run that exhausts its model's day FAILS (rule=system_failure)
   # and must be re-run, not resumed — see the C27.6 note for C32.
-  pin_judgment_model: null
+  pin:
+    judgment: null
+    mechanical: null
 
   cache:
     enabled: true             # MANDATORY during eval — wired in C3

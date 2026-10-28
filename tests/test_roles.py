@@ -71,20 +71,20 @@ def test_reformulation_runs_on_the_mechanical_role():
 
 
 def test_pin_reduces_the_judgment_chain_to_one_model(tmp_path):
-    provider, _, _, _ = build(tmp_path, pin_judgment_model="secondary")
+    provider, _, _, _ = build(tmp_path, pin={"judgment": "secondary"})
     assert [s.model for s in provider.chains[Role.JUDGMENT]] == ["secondary"]
     # Other roles untouched.
     assert [s.model for s in provider.chains[Role.MECHANICAL]] == ["small"]
 
 
 def test_no_pin_keeps_the_chain(tmp_path):
-    provider, _, _, _ = build(tmp_path, pin_judgment_model=None)
+    provider, _, _, _ = build(tmp_path, pin={"judgment": None})
     assert [s.model for s in provider.chains[Role.JUDGMENT]] == ["primary", "secondary"]
 
 
 def test_an_unknown_pin_fails_at_construction(tmp_path):
-    with pytest.raises(ProviderError, match="not in the judgment chain"):
-        build(tmp_path, pin_judgment_model="gpt-imaginary")
+    with pytest.raises(ProviderError, match="not in the judgment"):
+        build(tmp_path, pin={"judgment": "gpt-imaginary"})
 
 
 def test_a_pinned_model_out_of_day_fails_rather_than_falling_back(tmp_path):
@@ -93,7 +93,7 @@ def test_a_pinned_model_out_of_day_fails_rather_than_falling_back(tmp_path):
     day = FakeStatusError(429, "Rate limit reached on tokens per day (TPD)")
     backend = FakeBackend(script=[day, '{"ok": true}'])
     provider, backend, _, _ = build(tmp_path, backend=backend,
-                                    pin_judgment_model="primary")
+                                    pin={"judgment": "primary"})
     with pytest.raises(Exception):
         provider.complete("s", "u", role=Role.JUDGMENT)
     assert [c["model"] for c in backend.calls] == ["primary"]
@@ -103,7 +103,7 @@ def test_a_pinned_model_still_waits_out_a_minute_window(tmp_path):
     minute = FakeStatusError(429, "tokens per minute (TPM) ... try again in 2s")
     backend = FakeBackend(script=[minute, '{"ok": true}'])
     provider, backend, _, slept = build(tmp_path, backend=backend,
-                                        pin_judgment_model="primary")
+                                        pin={"judgment": "primary"})
     provider._sleep = slept.append
     assert provider.complete("s", "u", role=Role.JUDGMENT).model == "primary"
     assert slept
@@ -113,4 +113,24 @@ def test_the_real_config_ships_unpinned():
     """Pinning is an eval decision, made deliberately at C32/C34."""
     from src.config import get_config
 
-    assert get_config(reload=True).get("llm.pin_judgment_model") is None
+    cfg = get_config(reload=True)
+    assert cfg.get("llm.pin.judgment") is None
+    assert cfg.get("llm.pin.mechanical") is None
+
+
+def test_mechanical_can_be_pinned_independently(tmp_path):
+    provider, _, _, _ = build(tmp_path, pin={"mechanical": "small"})
+    assert [s.model for s in provider.chains[Role.MECHANICAL]] == ["small"]
+    assert [s.model for s in provider.chains[Role.JUDGMENT]] == ["primary", "secondary"]
+
+
+def test_mechanical_leads_with_a_reliable_non_judge_model():
+    """C27.7: gemma returned 500 on 2 of 3 probes; flash-lite is the judge.
+    Reformulation must not depend on either as its first choice."""
+    from src.config import get_config
+
+    cfg = get_config(reload=True)
+    mechanical = [s["model"] for s in cfg.get("llm.roles.mechanical")]
+    judge = [s["model"] for s in cfg.get("llm.roles.judge")]
+    assert mechanical[0] == "openai/gpt-oss-20b"
+    assert mechanical[0] not in judge

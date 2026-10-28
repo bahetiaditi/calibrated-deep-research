@@ -3489,3 +3489,61 @@ same rate as core ones on Tier D, the tagging is doing nothing.
 less on background sub-questions is the obvious next step, but it changes an
 agency surface C35 ablates, and should be decided with C33's data rather
 than before it.
+
+**2026-10-28 — C27.9. Rerank scores belong to the sub-question that asked.**
+
+**C27.7 and C27.8 verified live.** Reformulation ran on gpt-oss-20b
+throughout (91s for the premise question, against 480s on the flaky Gemma
+chain). The planner tagged two of the premise question's five sub-questions
+background, and it ABSTAINed on 0 of 3 core — with a withheld draft close to
+the ideal Tier D1 answer: the cited papers "describe Mamba-2 as an
+attention-free model … but they do not discuss the use of rotary position
+embeddings".
+
+**The bug, from the same run.** All five sub-questions of the premise
+question reported decision-time `f1 = 0.35`; two of the answerable
+question's reported `3.41`. Different queries do not share a best relevance
+to two decimals. A rerank score is relevance to a *query*, but
+`Passage.rerank_score` is stored once per *passage*, and `merge_evidence`
+keeps the first copy (C14, deliberately — so one sub-question's score is not
+overwritten by another's). The other half of that trade was never handled:
+decision-time features read the stored copy, so a passage sq1 found first
+carried sq1's relevance into every other sub-question's f1, f2 and f3.
+Reproduced directly: a passage scored 0.35 against sq1's query and 6.0
+against sq2's gave sq2 an f1 of 0.35.
+
+This also explains a discrepancy noticed at C27.1 and not chased: a
+sub-question the retriever called sufficient (its round's f1 ≥ 4.0, computed
+from that round's own passages) showing f1 = 1.80 at decision time. **f1–f3
+are the primary sufficiency signals.** D5 has been deciding on these values,
+and C33 would have fit stage 1 on them.
+
+Fixed: `SubQuestion.evidence_scores` holds this sub-question's own score for
+each passage it retrieved (max over its rounds), written by the retriever
+each round; `features_for_sub_question` reads those. Plans from before C27.9
+fall back to the stored score. Three of the five new tests fail on the
+pre-fix code, including one through the real retriever: one passage, two
+sub-questions, relevances 9.0 and 1.0 — two different decision-time f1s.
+
+---
+
+### Open before C33 — consolidated (2026-10-28)
+
+Everything recorded as found-but-not-fixed since C27, in one place, ordered
+by how much it could distort a reported number.
+
+| # | item | source | blocks |
+|---|---|---|---|
+| 1 | **Contradiction scanning not wired.** No node writes `state["contradictions"]`; f5 is always `None`; the critic's contradiction flag never fires. Tier D3 ("no consensus") has no live signal. §4.6 is built and tested but not called. | C27 | C33 |
+| 2 | **Resumed runs get their whole budget back.** The Budget object is not checkpointed and `state["budget"]` is written once, at run start. | C27.1 | C32 |
+| 3 | **Eval runner rules:** pin every role; fresh cache directory; re-run (not resume) `system_failure` runs. | C27.6, C27.7 | C32 |
+| 4 | **Judgment budget:** ~30–45K tokens/question, ~4–6 runs/day pinned. Recommendation: pin gpt-oss-120b, measure on the first batch, then decide. | C27.6 | C32 |
+| 5 | **Claim ownership is by retrieval, not topic.** Live again in this run: sq3 `insufficient` with two SUPPORTED verdicts. Stage-1 labels inherit the disagreement; state it in the writeup. | C27.5 | C33 writeup |
+| 6 | **τ must be selected on the fitted model's scale.** At the placeholders a hard-regularised fit never answers. | C27 | C33 |
+| 7 | **Comparison sub-questions that restate the parent.** The answerable question's sq3 ("how do the memory access patterns … differ") is the question itself as a core sub-question; no single passage satisfies it, so it drags core resolution. Planner prompt, or tag synthesis sub-questions. | C27.9 | C29 |
+| 8 | **Tier D1 refutations must be in the corpus**, or D1 items measure coverage, not premise detection. | C27.1 | C30 |
+| 9 | Critic and router prompts should be sized to `prompt_token_budget` like the synthesizer's. | C27.3 | C28 runs |
+| 10 | Finalizer: present a PARTIAL whose rewrite was unaffordable; strip non-citation markers (`[unresolved]`); remove the controller's dead `SUFFICIENCY_SCORER` branch; a structured `covered_by` field instead of parsing rationale text. | C27, C27.5 | C28 |
+| 11 | Executing an adaptive D2 choice is traced as a `(static)` decision. Counts are unaffected; the inspector misleads. | C27.2 | C38 |
+| 12 | D4 allocates without regard to `kind`. Decide with C33's data. | C27.8 | after C33 |
+| 13 | Nodes charge the budget only `if can_spend`, so calls after exhaustion go unrecorded rather than raising. | C27 | — |

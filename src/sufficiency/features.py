@@ -381,9 +381,19 @@ def features_for_sub_question(
     if sub_question is None:
         return {name: None for name in FEATURE_NAMES}
 
+    # Each passage scored against THIS sub-question's queries (C27.9). The
+    # stored passage carries whichever sub-question retrieved it first; for
+    # a shared passage that is another question's relevance. Plans from
+    # before C27.9 have no map and fall back to the stored score.
+    own = sub_question.get("evidence_scores") or {}
+    passages = [
+        {**p, "rerank_score": own[p["id"]]} if p["id"] in own else p
+        for p in evidence_for(state, sub_question_id)
+    ]
+
     return extract_features(
         sub_question,
-        evidence_for(state, sub_question_id),
+        passages,  # type: ignore[arg-type]
         contradictions=state.get("contradictions"),
         contradictions_scanned=contradictions_scanned,
         premise_check=state.get("premise_check"),

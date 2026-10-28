@@ -166,6 +166,18 @@ class StaticRetriever:
             sub_question.get("evidence_ids") or [],
             [p["id"] for p in outcome.passages],
         )
+        # Scores against THIS sub-question's queries, kept on the
+        # sub-question because the passage itself keeps only the first
+        # sub-question's score (C27.9). Max over rounds: the best relevance
+        # this sub-question has found for the passage.
+        scores = dict(sub_question.get("evidence_scores") or {})
+        for passage in outcome.passages:
+            value = passage.get("rerank_score")
+            if value is None:
+                continue
+            pid = passage["id"]
+            scores[pid] = max(float(value), scores.get(pid, float("-inf")))
+        updated["evidence_scores"] = scores
         # D3 decides on a COPY of the pre-round sub-question: `decide_next`
         # writes the round-to-round fields (next_route, next_query,
         # best_f1) onto what it is given, and the original is the object in

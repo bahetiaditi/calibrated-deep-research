@@ -162,6 +162,14 @@ class SubQuestion(TypedDict):
     # core sub-questions only. Defaults to core, so plans written before
     # C27.8 behave exactly as they did.
     kind: SubQuestionKind
+    # C27.9. This sub-question's OWN rerank score for each passage it
+    # retrieved (max over its rounds). A rerank score is relevance to a
+    # QUERY, but `Passage.rerank_score` is stored once per passage, and
+    # merge_evidence keeps the first copy — so a passage sq1 found first
+    # carried sq1's score into every other sub-question's features. Live:
+    # five different sub-questions all reported f1 = 0.35, the score of one
+    # shared passage against sq1's query.
+    evidence_scores: dict[str, float]
 
 
 class ClaimVerification(TypedDict):
@@ -337,6 +345,7 @@ def new_sub_question(
         next_query=None,
         best_f1=None,
         kind="background" if kind == "background" else "core",
+        evidence_scores={},
     )
 
 

@@ -12,6 +12,16 @@ Not every sentence asserts something checkable.
               approach is different." "This has two consequences." "In what
               follows we compare the two."
 
+  GAP_STATEMENT says ONLY what the evidence does not establish, and nothing
+              about the world. "The evidence does not establish the KV-cache
+              layout FlashAttention-2 uses." "No passage reports the authors'
+              rationale." It has no citation, because it is about an absence.
+
+A GAP_STATEMENT must be pure. If the sentence also asserts anything about the
+world, it is a CLAIM: "FlashAttention-2 tiles the computation, but the
+evidence does not establish its cache layout" is a CLAIM, judged on its
+first half. A sentence that cites a passage is never a GAP_STATEMENT.
+
 A summary that aggregates earlier claims IS a claim — "in sum, the pattern
 is block-tiling" asserts something and must be supported. Only pure
 connective tissue is NOT_A_CLAIM. When unsure, call it a CLAIM: judging a
@@ -49,7 +59,7 @@ what happens next, so "does not support it" is useless and "the passage
 gives the figure for FlashAttention-1, not -2" is not.
 
 Return ONLY this JSON, no prose and no markdown fences:
-{{"verdicts": [{{"index": 0, "verdict": "SUPPORTED" | "PARTIAL" | "UNSUPPORTED" | "CONTRADICTED" | "NOT_A_CLAIM", "reasoning": "one sentence"}}]}}
+{{"verdicts": [{{"index": 0, "verdict": "SUPPORTED" | "PARTIAL" | "UNSUPPORTED" | "CONTRADICTED" | "NOT_A_CLAIM" | "GAP_STATEMENT", "reasoning": "one sentence"}}]}}
 
 SENTENCES
 {sentences}

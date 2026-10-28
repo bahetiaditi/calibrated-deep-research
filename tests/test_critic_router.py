@@ -136,13 +136,17 @@ def test_revise_plan_marks_the_sub_question_for_the_planner():
     assert result.needs_more_work is True
 
 
-def test_unresolved_records_a_gap_for_d5():
+def test_unresolved_reaches_d5_through_status_not_through_the_gap_list():
+    """C27.5. An unverified sentence is a property of the report; a gap is a
+    part of the question left unanswered. Writing the claim into the gap
+    list put the report's own sentences under 'not established'."""
     result = router([{"index": 0, "action": UNRESOLVED, "reasoning": "absent"}],
                     budget=budget()).route(
         state_with(finding(claim="FlashAttention-2 reaches 99% of peak."))
     )
-    assert result.unresolved_gaps
-    assert "FlashAttention-2" in result.unresolved_gaps[0]
+    assert not any("FlashAttention-2" in g for g in result.unresolved_gaps)
+    assert result.plan[0]["status"] == "insufficient"
+    assert result.findings[0]["action_taken"] == UNRESOLVED
     assert result.needs_more_work is False
 
 
@@ -372,4 +376,6 @@ def test_node_writes_actions_and_gaps():
                budget=budget())
     )(state_with(finding()))
     assert update["critic_findings"][0]["action_taken"] == UNRESOLVED
-    assert update["unresolved_gaps"]
+    # Existing question-level gaps pass through; no claim text is added.
+    assert update["unresolved_gaps"] == []
+    assert update["plan"][0]["status"] == "insufficient"

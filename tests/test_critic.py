@@ -389,3 +389,69 @@ def test_review_is_traced():
     name, payload = events[0]
     assert name == "critic"
     assert payload["claims"] == 1 and payload["supported"] == 1
+
+# --- C27.5: gap statements -------------------------------------------------
+
+from src.nodes.critic import GAP_STATEMENT  # noqa: E402
+
+LIVE_GAP = ("The evidence does not establish the precise contiguous-KV layout "
+            "used by FlashAttention-2.")
+
+
+def test_a_pure_gap_statement_is_not_a_claim():
+    """The sentence from the C27.3 live run, which was scored UNSUPPORTED."""
+    report = critic([{"index": 0, "verdict": GAP_STATEMENT, "reasoning": "absence"}]
+                    ).review(state_with(LIVE_GAP))
+    assert report.findings == []
+    assert report.gap_statements == [LIVE_GAP]
+    assert report.unsupported_rate is None
+
+
+def test_gap_statements_leave_the_hallucination_rate_alone():
+    """The metric effect C27.5 exists for. A PARTIAL report with two
+    supported claims and two honest gap statements scored a 50%
+    hallucination rate before; it is 0%."""
+    draft = (f"FlashAttention-2 tiles the computation in blocks. [{PID[1]}] "
+             f"PagedAttention stores KV blocks non-contiguously. [{PID[2]}] "
+             f"{LIVE_GAP} "
+             f"No passage reports the authors' rationale for the design.")
+    report = critic([
+        {"index": 0, "verdict": SUPPORTED, "reasoning": ""},
+        {"index": 1, "verdict": SUPPORTED, "reasoning": ""},
+        {"index": 2, "verdict": GAP_STATEMENT, "reasoning": ""},
+        {"index": 3, "verdict": GAP_STATEMENT, "reasoning": ""},
+    ]).review(state_with(draft))
+    assert report.claims == 2
+    assert report.unsupported_rate == 0.0
+    assert len(report.gap_statements) == 2
+
+
+def test_a_cited_sentence_cannot_be_a_gap_statement():
+    """Citing a passage makes a checkable claim about it. No support
+    verdict was given, so it resolves against the claim."""
+    report = critic([{"index": 0, "verdict": GAP_STATEMENT, "reasoning": ""}]
+                    ).review(state_with(f"{LIVE_GAP} [{PID[1]}]"))
+    assert report.gap_statements == []
+    assert report.findings[0]["verdict"] == UNSUPPORTED
+    assert "cites a passage" in report.findings[0]["reasoning"]
+
+
+def test_the_prompt_defines_the_category_and_its_limits():
+    from src.prompts import load
+
+    prompt = load("critic")
+    assert "GAP_STATEMENT" in prompt
+    assert "must be pure" in prompt
+    assert "never a GAP_STATEMENT" in prompt
+
+
+def test_the_trace_counts_gap_statements():
+    events = []
+
+    class Tracer:
+        def note(self, name, **kw):
+            events.append(kw)
+
+    critic([{"index": 0, "verdict": GAP_STATEMENT, "reasoning": ""}],
+           tracer=Tracer()).review(state_with(LIVE_GAP))
+    assert events[0]["gap_statements"] == 1

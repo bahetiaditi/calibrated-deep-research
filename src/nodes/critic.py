@@ -31,6 +31,14 @@ distinguishes "The second approach differs" from "FlashAttention-2 reaches
 73% of peak". Both land in the hallucination rate if guessed wrong, in
 opposite directions.
 
+**A fourth category since C27.5: GAP_STATEMENT.** "The evidence does not
+establish X" — the form the partial prompt requires for a gap — asserts
+nothing about the world and cites nothing, so the three-category scheme
+scored it as an uncited claim: UNSUPPORTED, in the hallucination rate. Pure
+gap statements are now excluded from the claim denominator and kept, so
+they can be audited. A mixed sentence is a CLAIM; a cited one is never a
+gap statement.
+
 Five-way routing on what to *do* about a verdict is C24. This node decides
 only what is true.
 """
@@ -59,6 +67,13 @@ PARTIAL = "PARTIAL"
 UNSUPPORTED = "UNSUPPORTED"
 CONTRADICTED = "CONTRADICTED"
 NOT_A_CLAIM = "NOT_A_CLAIM"
+# C27.5. A sentence asserting only that the evidence does not establish
+# something. The partial prompt (C18) REQUIRES this form for gaps; scoring it
+# as an uncited claim put every honest gap statement into the hallucination
+# rate — penalising exactly the behaviour the abstention layer exists to
+# produce. Excluded from the claim denominator like NOT_A_CLAIM, but kept and
+# counted separately, so it can be audited rather than merely excused.
+GAP_STATEMENT = "GAP_STATEMENT"
 VERDICTS = (SUPPORTED, PARTIAL, UNSUPPORTED, CONTRADICTED)
 
 # Below this a sentence is almost certainly connective tissue. Used only to
@@ -84,6 +99,7 @@ class Sentence:
 class CriticReport:
     findings: list[ClaimVerification] = field(default_factory=list)
     discourse_sentences: int = 0
+    gap_statements: list[str] = field(default_factory=list)
     error: str | None = None
 
     @property
@@ -162,6 +178,7 @@ class Critic:
 
         findings: list[ClaimVerification] = []
         discourse = trivial
+        gap_statements: list[str] = []
 
         if judged:
             try:
@@ -189,6 +206,18 @@ class Critic:
                 if verdict == NOT_A_CLAIM:
                     discourse += 1
                     continue
+                if verdict == GAP_STATEMENT:
+                    if not sentence.is_cited:
+                        gap_statements.append(sentence.text)
+                        continue
+                    # A sentence citing a passage makes a checkable claim
+                    # about that passage, so it cannot be a pure statement
+                    # of absence. No support verdict was given for it, and
+                    # every ambiguity resolves against the claim (C23).
+                    verdict, reasoning = UNSUPPORTED, (
+                        "classified as a gap statement but cites a passage; "
+                        "a cited sentence is a checkable claim"
+                    )
                 if not sentence.is_cited:
                     # The model classified it as a claim; the absence of a
                     # citation decides the verdict, whatever the model said
@@ -202,7 +231,8 @@ class Critic:
                                   _owner(sentence, owners))
                 )
 
-        report = CriticReport(findings=findings, discourse_sentences=discourse)
+        report = CriticReport(findings=findings, discourse_sentences=discourse,
+                              gap_statements=gap_statements)
         self._trace(report, len(sentences))
         return report
 
@@ -252,7 +282,7 @@ class Critic:
             except (TypeError, ValueError):
                 continue
             verdict = str(raw.get("verdict") or "").upper().strip()
-            if verdict not in (*VERDICTS, NOT_A_CLAIM):
+            if verdict not in (*VERDICTS, NOT_A_CLAIM, GAP_STATEMENT):
                 # An unparseable verdict must not become a pass. Claiming
                 # support the critic never gave is the one error the
                 # grounding metric cannot survive.
@@ -312,6 +342,7 @@ class Critic:
             sentences=sentences,
             claims=report.claims,
             discourse=report.discourse_sentences,
+            gap_statements=len(report.gap_statements),
             supported=report.count(SUPPORTED),
             partial=report.count(PARTIAL),
             unsupported=report.count(UNSUPPORTED),

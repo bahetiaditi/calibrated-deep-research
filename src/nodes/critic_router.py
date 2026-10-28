@@ -344,9 +344,16 @@ class CriticRouter:
                 sub_question["status"] = "insufficient"
                 needs_work = True
             elif action == UNRESOLVED:
-                gap = _gap_text(finding)
-                if gap not in gaps:
-                    gaps.append(gap)
+                # A claim that could not be verified is a property of the
+                # REPORT; a gap is a part of the QUESTION left unanswered
+                # (C27.5). Writing "could not establish: <the sentence>"
+                # into the gap list put the report's own sentences under
+                # "not established" beneath the report, and handed them to
+                # the partial rewrite as topics it must not answer. The claim
+                # stays labelled on its finding (action_taken=UNRESOLVED) for
+                # the finalizer; its sub-question is marked insufficient,
+                # which is how it reaches D5, and D5 writes the question-
+                # level gap from that status.
                 if sub_question is not None:
                     sub_question["status"] = "insufficient"
             # DROP_CLAIM and HEDGE change the report, not the research, and
@@ -409,8 +416,3 @@ def critic_router_node(router: CriticRouter):
         return update
 
     return node
-
-
-def _gap_text(finding: ClaimVerification) -> str:
-    claim = finding["claim"][:160].rstrip(" .")
-    return f"could not establish: {claim}"

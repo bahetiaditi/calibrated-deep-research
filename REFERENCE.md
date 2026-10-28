@@ -3277,3 +3277,62 @@ calls × ~1.1K tokens per question on the scarce chain; (2) each critic
 cycle costs ~12K, so re-retrieval loops dominate. C27.6 should move
 reformulation to its allocated role and decide, before C32, how the writer
 model is held fixed per configuration.
+
+**2026-10-28 — C27.5. Gap statements are not hallucinations; unverified
+claims are not gaps.**
+
+`scripts/show_run.py` on the C27.3 answerable run confirmed both C27.4
+diagnoses from the text itself. The withheld answer draft cited with
+full-width brackets — `【P06】`, `【P09】【P13】` — the variant C27.4 now
+normalises. And the final partial draft's last sentence, *"The evidence does
+not establish the precise contiguous-KV layout used by FlashAttention-2…"*,
+was scored UNSUPPORTED and routed UNRESOLVED, as predicted.
+
+**1. GAP_STATEMENT, a fourth critic category.** A sentence asserting only
+what the evidence does not establish, making no claim about the world. The
+partial prompt requires this form; C23's three categories had no place for
+it, so it was classified a claim, found uncited, and counted toward the
+hallucination rate — the abstention layer's own honesty scored as its
+failure. Now excluded from the claim denominator like NOT_A_CLAIM, but
+**kept on the report and counted in the trace**, so excusing a sentence is
+auditable rather than silent. Three limits keep it from becoming a place to
+hide claims: it must be pure (a sentence that also asserts something about
+the world is a CLAIM, judged on that assertion); a cited sentence is never
+one (citing a passage is a checkable claim about it — and if the model calls
+a cited sentence a gap statement, no support verdict exists, so it resolves
+to UNSUPPORTED); and the prompt states both rules. The test that matters is
+the metric: a partial report with two supported claims and two honest gap
+statements scored a 50% hallucination rate before and 0% now.
+
+**2. The router no longer writes claims into the gap list.** C24 recorded
+every UNRESOLVED claim as `could not establish: <the sentence>`. The live
+run's gap list therefore held *"could not establish: PagedAttention adopts a
+different strategy"* and *"could not establish: In sum, FlashAttention-2
+improves memory access…"* — sentences of the report itself, which C28's
+finalizer would have printed beneath the report as "not established", and
+which the partial rewrite had been handed as topics it must not answer.
+**A gap is part of the question left unanswered; an unverified sentence is
+a property of the report.** C24 conflated them. An UNRESOLVED claim still
+marks its sub-question insufficient — which is how it reaches D5, and D5
+writes the question-level gap from that status (C27) — and stays labelled on
+its finding (`action_taken = UNRESOLVED`) for the finalizer to mark in the
+report. `unresolved_gaps` now holds only question-level gaps, from the
+planner and from D5.
+
+**Observed, recorded for C33, not changed.** In the same run the
+FlashAttention-2 sub-question was abandoned (f1 3.18 on its own queries),
+so D5 lists "could not establish: what memory access pattern does
+FlashAttention-2 use" — while the report makes SUPPORTED claims answering
+exactly that, citing passages another sub-question retrieved. Claims are
+owned by whichever sub-question *retrieved* the passage they cite (C27.2),
+not by what they are *about*. Retrieval sufficiency and claim verification
+can therefore disagree about the same part of the question, and C33's
+stage-1 labels — derived from verdicts grouped by owner — inherit that
+disagreement. The weak-label caveat C26 already states covers this, but the
+mechanism is now concrete and belongs in the writeup.
+
+**Also seen:** the critic called "PagedAttention adopts a different
+strategy." a claim — borderline against C18's "The second approach differs"
+example, and the prompt's deliberate bias toward CLAIM when unsure (C23).
+And the partial draft inserted a literal `[unresolved]` marker; C28's
+finalizer should strip non-citation bracket markers before presenting.

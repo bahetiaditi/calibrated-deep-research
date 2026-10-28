@@ -61,7 +61,6 @@ class Components:
     premise_checker: Any = None
     planner: Any = None
     retriever: Any = None
-    sufficiency_scorer: Any = None
     synthesizer: Any = None
     critic: Any = None
     critic_router: Any = None
@@ -228,6 +227,7 @@ def default_components(config: Config | None = None) -> Components:
     from src.nodes.critic import Critic, critic_node
     from src.nodes.critic_router import CriticRouter, critic_router_node
     from src.nodes.decider import Decider, decider_node
+    from src.nodes.finalizer import Finalizer, finalizer_node
     from src.nodes.planner import Planner, planner_node
     from src.nodes.premise_checker import PremiseChecker, premise_checker_node
     from src.nodes.retriever import StaticRetriever, retriever_node
@@ -254,6 +254,7 @@ def default_components(config: Config | None = None) -> Components:
         critic=critic_node(Critic(cfg)),
         critic_router=critic_router_node(CriticRouter(cfg)),
         decider=decider_node(Decider(cfg)),
+        finalizer=finalizer_node(Finalizer(cfg)),
     )
 
 

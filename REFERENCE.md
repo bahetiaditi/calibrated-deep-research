@@ -802,10 +802,10 @@ Draft now, fill numbers only when they exist. **Every bracketed placeholder is c
 
 | Phase | Commits | Status | Exit criterion |
 |---|---|---|---|
-| 0 — Foundations | C1–C5 | ☐ | Cached, traced, budgeted LLM call with fallback |
-| 1 — RAG substrate | C6–C13 | ☐ | R1–R4 retrieval table generated |
-| 2 — Agentic core | C14–C22 | ☐ | Trace shows route escalation + query reformulation |
-| 3 — Verification & decision | C23–C28 | ☐ | System refuses a false-premise question correctly |
+| 0 — Foundations | C1–C5 | ☑ | Cached, traced, budgeted LLM call with fallback |
+| 1 — RAG substrate | C6–C13 | ☑ | R1–R4 retrieval table generated |
+| 2 — Agentic core | C14–C22 | ☑ | Trace shows route escalation + query reformulation |
+| 3 — Verification & decision | C23–C28 (+C27.1–.9) | ☐ pending the C28 live run | System refuses a false-premise question correctly |
 | 4 — Benchmark | C29–C32 | ☐ | 48 questions frozen, splits committed, runners resumable |
 | 5 — Calibration & eval | C33–C37 | ☐ | All metrics computed on held-out test split |
 | 6 — Analysis & shipping | C38–C42 | ☐ | Writeup, README, demo, tests green |
@@ -3547,3 +3547,65 @@ by how much it could distort a reported number.
 | 11 | Executing an adaptive D2 choice is traced as a `(static)` decision. Counts are unaffected; the inspector misleads. | C27.2 | C38 |
 | 12 | D4 allocates without regard to `kind`. Decide with C33's data. | C27.8 | after C33 |
 | 13 | Nodes charge the budget only `if can_spend`, so calls after exhaustion go unrecorded rather than raising. | C27 | — |
+
+
+**2026-10-28 — C28. The finalizer and the full graph. Phase 3 complete once the live run confirms it.**
+
+`src/nodes/finalizer.py`, registered in `default_components`. The graph now
+runs premise check → plan → research → synthesis → critique → routing →
+decision → report, with every routing decision in the controller.
+
+**Deterministic, by §2.5's rule.** No model call: every word of the report
+is either the draft the critic reviewed or a template filled from the
+decision record, so the report cannot assert anything the pipeline did not
+establish or decide.
+
+**Verification is applied in the text, not beside it.** Each claim the
+critic judged is matched back to its sentence (through the same `segment()`
+the critic used) and the router's action applied: DROP_CLAIM removes the
+sentence; anything kept that is less than SUPPORTED is marked where it
+stands — *[partially supported]*, *[unverified]*, *[contradicted by its
+cited source]*. A reader sees which sentences rest on verified evidence
+without consulting a table, and the verification summary counts exactly the
+marks in the text. Citations become numbered footnotes in order of first
+use; the sources list holds only passages cited in what remains, so a
+passage cited only by a dropped claim disappears with it.
+
+**Per decision.** ANSWER: the verified draft. PARTIAL: the verified draft,
+then the question-level gaps. ABSTAIN: never a draft — the withheld one
+stays in the decision record for C38. A refuted premise shows the
+contradicted presupposition and the correction; a system failure says it is
+not a judgment about the evidence.
+
+**Three things reading a rendered report caught that the assertions had
+not.** (1) Gap text ending in "?" got a full stop appended. (2) A refuted
+premise was bannered "the evidence does not support one" — true, but the
+reader needs to hear that the *question* is false. (3) Hard-rule decisions
+showed the sufficiency score and the "uncalibrated" note; the premise rule
+bypasses τ, so presenting a score implies the scorer decided something it
+never saw. Banners are now per rule, and score and calibration status
+appear only on threshold decisions. **Read the output, not only the
+assertions** — the same lesson as C27's live runs, one level up.
+
+**C28 items from the open table, closed.** An unaffordable partial rewrite
+is presented with a note that the report was written for the whole
+question. Stray non-citation markers (`[unresolved]`) are stripped — and
+the claim lookup is stripped the same way, because the critic saw the
+marker in the sentence text and an unstripped key would silently leave that
+sentence's verdict unapplied. The controller's `SUFFICIENCY_SCORER` stage is
+removed (scoring has lived in the decider since C27; a later registration
+would have scored every run before any claim was verified).
+`SubQuestion.covered_by` is set by the planner on a merge; the scorer reads
+it, falling back to the rationale parse only for older plans.
+
+**The smoke test's false-premise question changed, deliberately.** Every
+earlier run used "why does Mamba-2 use RoPE…", which the corpus is silent
+on, so the premise checker could only say UNVERIFIABLE and the hard rule
+(§5.4) never fired in a full run. C28 uses "Why does Mamba interleave
+multi-head attention layers between its selective SSM blocks?" — the Mamba
+abstract in the corpus states the architecture is "without attention or
+even MLP blocks", so the presupposition is refutable, not merely
+unsupported. This is the C30 constraint (item 8 of the open table) applied
+one question early.
+
+Open table after C28: items 1–9 and 11–13 stand; item 10 is closed.

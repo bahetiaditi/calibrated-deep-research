@@ -46,7 +46,6 @@ log = logging.getLogger(__name__)
 PREMISE_CHECKER = "premise_checker"
 PLANNER = "planner"
 RETRIEVER = "retriever"
-SUFFICIENCY_SCORER = "sufficiency_scorer"   # C20/C26
 SYNTHESIZER = "synthesizer"
 CRITIC = "critic"                           # C23
 CRITIC_ROUTER = "critic_router"              # C24
@@ -55,7 +54,7 @@ FINALIZER = "finalizer"                     # C28
 FINISH = "__end__"
 
 ALL_NODES = (
-    PREMISE_CHECKER, PLANNER, RETRIEVER, SUFFICIENCY_SCORER,
+    PREMISE_CHECKER, PLANNER, RETRIEVER,
     SYNTHESIZER, CRITIC, CRITIC_ROUTER, DECIDER, FINALIZER,
 )
 
@@ -153,8 +152,11 @@ class Controller:
         """Everything downstream of retrieval, in order, skipping absentees."""
         premise_failed = bool((state.get("premise_check") or {}).get("failed"))
 
-        if self._enabled(SUFFICIENCY_SCORER) and not self._sufficiency_done(state):
-            return SUFFICIENCY_SCORER, reason
+        # No separate sufficiency-scoring stage (removed at C28). §3.1 put it
+        # before synthesis, but scoring needs the critic's verdicts; since
+        # C27 the decider scores at decision time, and the stage was never
+        # registered. Leaving the branch meant a future registration would
+        # have scored every run before any claim was verified.
 
         # On a refuted premise there is nothing to write. The synthesizer
         # already declines to run on the ABSTAIN path (C18), but routing
@@ -215,12 +217,6 @@ class Controller:
         if self.budget is None:
             return True
         return self.budget.can_spend("retrieval") and self.budget.can_spend("llm")
-
-    def _sufficiency_done(self, state: ResearchState) -> bool:
-        plan = state.get("plan") or []
-        return bool(plan) and all(
-            sq.get("sufficiency") is not None for sq in plan
-        )
 
     def _should_revise(self, state: ResearchState) -> bool:
         """D1 revision, guarded three ways.

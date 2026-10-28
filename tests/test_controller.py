@@ -17,7 +17,6 @@ from src.controller import (
     PLANNER,
     PREMISE_CHECKER,
     RETRIEVER,
-    SUFFICIENCY_SCORER,
     SYNTHESIZER,
     Controller,
 )
@@ -212,13 +211,11 @@ def test_missing_premise_checker_is_skipped():
 def test_full_chain_routes_through_every_stage():
     """Registering a node must change routing without changing routing code."""
     full = Controller(CFG, available=set(
-        [PREMISE_CHECKER, PLANNER, RETRIEVER, SUFFICIENCY_SCORER,
+        [PREMISE_CHECKER, PLANNER, RETRIEVER,
          SYNTHESIZER, CRITIC, DECIDER, FINALIZER]
     ))
     s = planned(1, status="sufficient")
-    assert full.route(s) == SUFFICIENCY_SCORER
-
-    s["plan"][0]["sufficiency"] = 0.8
+    s["evidence"] = [{"id": "P1"}]
     assert full.route(s) == SYNTHESIZER
 
     s["draft"] = "a report"
@@ -233,17 +230,6 @@ def test_full_chain_routes_through_every_stage():
 
     s["final_report"] = "# Report"
     assert full.route(s) == FINISH
-
-
-def test_sufficiency_scorer_waits_for_every_sub_question():
-    full = Controller(CFG, available={PLANNER, RETRIEVER, SUFFICIENCY_SCORER,
-                                      SYNTHESIZER})
-    s = planned(2, status="sufficient")
-    s["plan"][0]["sufficiency"] = 0.8
-    assert full.route(s) == SUFFICIENCY_SCORER
-
-
-# --- errors and termination ------------------------------------------------
 
 
 def test_error_state_stops_research():

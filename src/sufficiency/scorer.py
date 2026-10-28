@@ -170,6 +170,11 @@ def sub_question_scores(
 def _covered_by(sq: SubQuestion, live_ids: set[str]) -> str | None:
     if sq.get("status") != "abandoned":
         return None
+    # The structured field since C28; the rationale parse remains only for
+    # plans written before it.
+    into = sq.get("covered_by")
+    if into:
+        return into if into in live_ids else None
     match = COVERED_RE.search(sq.get("rationale") or "")
     if match and match.group(1) in live_ids:
         return match.group(1)

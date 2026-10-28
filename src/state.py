@@ -170,6 +170,10 @@ class SubQuestion(TypedDict):
     # five different sub-questions all reported f1 = 0.35, the score of one
     # shared passage against sq1's query.
     evidence_scores: dict[str, float]
+    # C28. Set when the planner merges this sub-question into a sibling:
+    # the sibling's id. Replaces parsing "covered by sqX:" out of the
+    # rationale text, which C27 did as a stopgap.
+    covered_by: str | None
 
 
 class ClaimVerification(TypedDict):
@@ -346,6 +350,7 @@ def new_sub_question(
         best_f1=None,
         kind="background" if kind == "background" else "core",
         evidence_scores={},
+        covered_by=None,
     )
 
 

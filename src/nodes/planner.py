@@ -241,11 +241,14 @@ class Planner:
             elif action == MERGE:
                 into = str(parsed.get("merge_into") or "").strip()
                 covered = any(sq["id"] == into for sq in plan)
-                new_plan.append(_abandoned(
+                merged = _abandoned(
                     target,
                     f"covered by {into}: {reasoning}" if covered
                     else f"merge target {into!r} not in the plan; abandoned",
-                ))
+                )
+                if covered:
+                    merged["covered_by"] = into  # type: ignore[typeddict-unknown-key]
+                new_plan.append(merged)
                 if not covered:
                     gaps.append(_gap(target))
 

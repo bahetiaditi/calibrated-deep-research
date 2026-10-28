@@ -46,6 +46,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
+from src.budget import plan_revisions_remain
 from src.config import Config, get_config
 from src.llm.provider import LLMProvider, Role
 from src.nodes.critic import CONTRADICTED, PARTIAL, SUPPORTED
@@ -182,7 +183,10 @@ class CriticRouter:
         )
         if has_budget:
             available.add(RE_RETRIEVE)
-            can_revise = self.budget is None or self.budget.can_revise_plan()
+            can_revise = plan_revisions_remain(
+                state, self.budget,
+                int(self.cfg.get("budget.max_plan_revisions", 2)),
+            )
             if can_revise and self.cfg.get("agency.d1_plan_revision", True):
                 available.add(REVISE_PLAN)
         return available

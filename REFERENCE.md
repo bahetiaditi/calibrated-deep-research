@@ -2955,3 +2955,85 @@ fake upstream nodes confirm the effects end to end: a PARTIAL run is
 rewritten in partial mode and re-critiqued with the retriever visited once;
 an ABSTAIN run ends with no draft and no second synthesis; an ANSWER run is
 not rewritten. 960 tests pass.
+
+**2026-10-28 — C27 live result. Every check passed; the numbers said three
+other things. One fixed here.**
+
+```
+false premise ("why does Mamba-2 use RoPE…")   ABSTAIN via threshold, 0/3 resolved
+  llm 13/25  retrieval 12/20  74s  revisions 0/2   <- after a planner revision
+answerable  ("FlashAttention-2 vs PagedAttention")  ABSTAIN via threshold, 0/3 resolved
+  llm 7/25   retrieval 8/20   61s  revisions 0/2   <- after a planner revision
+```
+
+**1. D1's revision ceiling had never been enforced in a real run. Fixed.**
+Both runs visited the planner a second time and reported `revisions 0/2`.
+`default_components` builds `planner_node(Planner(cfg))` with no budget;
+`_attach` rebinds `planner.budget`, but the node recorded revisions on its
+closure variable, which stayed `None`. The controller and router both gated
+on `budget.can_revise_plan()` — always True. Every existing test passed a
+budget into the node factory directly, so **the tests exercised a wiring
+nothing in production used**. A second, independent hole: the Budget object
+is not checkpointed, so even a correct count would reset on resume, and C32
+resumes by design.
+
+Fixed in one place: `budget.plan_revisions_remain(state, budget, max)` takes
+the larger of the checkpointed `state["plan_revisions"]` and the live
+counter, against the stricter of the two ceilings. Controller and router
+both use it; the node now records on `planner.budget` when no budget was
+passed. `test_revision_ceiling.py` reproduces the production wiring — the
+first test fails on the old planner — and runs a planner that would rewrite
+forever against a retriever that never succeeds: three planner visits,
+exactly two revisions, stopped by the ceiling rather than the recursion
+limit.
+
+The same non-checkpointing applies to the LLM and retrieval counters: **a
+resumed run gets its whole budget back.** Not fixed here — C32 must restore
+the Budget from `state["budget"]` on resume, which also means something must
+keep that field current (today it is written once, at run start).
+
+**2. The false-premise question abstained for the wrong reason.** The
+premise checker did not refute it — the hard rule did not fire — and the
+run abstained only because evidence was thin, after spending 13 LLM calls
+researching a mechanism that does not exist. §6.2 is explicit that an
+abstention for the wrong reason is not a success: Tier D1 is graded on
+*identifying and correcting* the premise. Whether the checker misjudged or
+the C13 corpus simply does not contain Mamba-2's architecture (UNVERIFIABLE
+is the correct verdict on silence, C15) is answerable from the trace with
+`scripts/inspect_trace.py`. If it is the corpus, that is a benchmark
+constraint for C30: **every Tier D1 item's refutation must be in the
+accessible corpus**, or the correct behaviour is undefined and the item
+measures retrieval coverage rather than premise detection.
+
+**3. The answerable question abstained.** Under the heuristic, 0 of 3
+resolved: sq1 reached f1 = 4.89 but its two claims came back UNSUPPORTED and
+PARTIAL (entailment 0.25); sq2 (PagedAttention, f1 = 1.47) and sq3 ("according
+to literature or technical blogs…", f1 = −2.60) were abandoned. C21 already
+recorded that this corpus covers PagedAttention poorly, and sq3 is a
+web-shaped sub-question against an arXiv-only smoke corpus. So the
+abstention is honest about *this corpus* — but it means **neither live run
+exercised ANSWER or PARTIAL, and the partial-rewrite path is still verified
+only by fake-node graph tests.** C28's smoke needs a question the corpus
+demonstrably covers. Whether sq1's two failed claims are the critic being
+right or over-strict (the "critic over-flagging" failure mode, §11) can be
+checked against the withheld draft, which is now kept for exactly this.
+
+**Also visible, worth watching:** three 429s on `gpt-oss-120b` and `qwen`
+with a ledger reading zero. Groq's TPM is 8K per model; a synthesis or
+critic prompt carrying ~20 passages can exceed that on its own, which 429s
+on the first request regardless of history. If so, **judgment work is
+silently landing on gpt-oss-20b**, the weakest model in the chain, for
+exactly the calls whose quality moves the reported numbers. The inspector
+prints per-model call counts and fallbacks; check before C33.
+
+**And confirmed rather than assumed:** run 1 went `critic_router -> retriever
+-> synthesizer -> decider`, skipping the critic on the second draft. The
+digest rule permits that only if the second draft is byte-identical to the
+one already reviewed — expected when re-retrieval found nothing new and the
+synthesizer hit the cache. The synthesis trace note now records the draft
+digest, so the inspector shows it directly instead of leaving it inferred.
+
+**New: `scripts/inspect_trace.py`.** A run's trace as a timeline — nodes,
+routes with reasons, LLM calls with cache and fallback flags, retrievals,
+premise verdicts, synthesis digests, every D1-D5 decision. Zero API calls.
+C38's failure annotation needs exactly this view.

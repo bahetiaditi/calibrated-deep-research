@@ -303,3 +303,33 @@ def get_allocator(config: Config | None = None) -> Allocator:
     # Adaptive allocator arrives at C22. Until then uniform is the behaviour,
     # and it is honest to say so rather than pretend D4 is live.
     return UniformAllocator()
+
+
+def plan_revisions_remain(
+    state: Any, budget: "Budget | None", max_revisions: int
+) -> bool:
+    """D1's ceiling, read from BOTH places a revision is counted.
+
+    Added after the C27 live run showed `revisions 0/2` on runs that had
+    revised. Two independent holes, and either alone defeats the ceiling:
+
+    - `planner_node` recorded revisions on the budget passed to the node
+      factory, which `default_components` never passes. `_attach` rebinds
+      `planner.budget`, not the closure variable, so the live counter stayed
+      at zero and `can_revise_plan()` was always True.
+    - The Budget object is not checkpointed. A resumed run starts a fresh
+      one, so even a correctly counted ceiling would reset on resume — and
+      C32's eval runner resumes by design.
+
+    `state["plan_revisions"]` IS checkpointed, and the planner node
+    increments it. Taking the larger of the two means neither a missed
+    binding nor a resume can reopen revision.
+    """
+    done = int((state or {}).get("plan_revisions", 0) or 0)
+    ceiling = int(max_revisions)
+    if budget is not None:
+        done = max(done, int(budget.plan_revisions))
+        # Both come from budget.max_plan_revisions in production; if they
+        # ever differ, the stricter one holds.
+        ceiling = min(ceiling, int(budget.max_plan_revisions))
+    return done < ceiling

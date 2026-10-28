@@ -31,6 +31,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from src.budget import plan_revisions_remain
 from src.config import Config, get_config
 from src.state import (
     ResearchState,
@@ -79,6 +80,9 @@ class Controller:
         )
         self.max_rounds = int(
             self.cfg.get("budget.max_rounds_per_subquestion", 3)
+        )
+        self.max_plan_revisions = int(
+            self.cfg.get("budget.max_plan_revisions", 2)
         )
 
     # -- the routing table --------------------------------------------------
@@ -228,7 +232,7 @@ class Controller:
         """
         if not self._enabled(PLANNER):
             return False
-        if self.budget is not None and not self.budget.can_revise_plan():
+        if not plan_revisions_remain(state, self.budget, self.max_plan_revisions):
             return False
         if self.budget is not None and not self._has_retrieval_budget():
             return False

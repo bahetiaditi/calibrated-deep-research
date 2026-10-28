@@ -43,7 +43,7 @@ from typing import Any, Sequence
 from src.config import Config, get_config
 from src.llm.provider import LLMProvider, Role
 from src.prompts import render
-from src.state import Passage, ResearchState, evidence_for, find_sub_question
+from src.state import draft_digest, Passage, ResearchState, evidence_for, find_sub_question
 
 log = logging.getLogger(__name__)
 
@@ -240,6 +240,10 @@ class Synthesizer:
             invalid_labels=draft.invalid_labels,
             uncited_sentences=draft.uncited_sentences,
             chars=len(draft.text),
+            # Lets a trace show whether a re-synthesis produced the SAME text
+            # (a cache hit on unchanged evidence), which is when the
+            # controller correctly skips a second critique (C27).
+            digest=draft_digest(draft.text),
         )
 
 

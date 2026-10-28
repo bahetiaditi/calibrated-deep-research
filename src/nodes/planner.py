@@ -384,8 +384,15 @@ def planner_node(planner: Planner, budget: Any = None):
             # — a rewrite resets rounds deliberately, so without this the
             # controller would route back here indefinitely.
             update["plan_revisions"] = int(state.get("plan_revisions", 0)) + 1
-            if budget is not None:
-                budget.record_plan_revision()
+            # The run's budget is bound onto the planner by graph._attach,
+            # not passed to this factory — `default_components` never passes
+            # one. Reading only the closure variable left the live counter at
+            # zero in every real run (C27 live: "revisions 0/2" after a
+            # revision). The ceiling itself is enforced from state as well;
+            # see budget.plan_revisions_remain.
+            active = budget if budget is not None else getattr(planner, "budget", None)
+            if active is not None:
+                active.record_plan_revision()
         return update
 
     return node

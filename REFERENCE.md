@@ -805,7 +805,7 @@ Draft now, fill numbers only when they exist. **Every bracketed placeholder is c
 | 0 — Foundations | C1–C5 | ☑ | Cached, traced, budgeted LLM call with fallback |
 | 1 — RAG substrate | C6–C13 | ☑ | R1–R4 retrieval table generated |
 | 2 — Agentic core | C14–C22 | ☑ | Trace shows route escalation + query reformulation |
-| 3 — Verification & decision | C23–C28 (+C27.1–.9) | ☐ pending the C28 live run | System refuses a false-premise question correctly |
+| 3 — Verification & decision | C23–C28 (+C27.1–.9, C28.1–.4) | ☑ | System refuses a false-premise question correctly |
 | 4 — Benchmark | C29–C32 | ☐ | 48 questions frozen, splits committed, runners resumable |
 | 5 — Calibration & eval | C33–C37 | ☐ | All metrics computed on held-out test split |
 | 6 — Analysis & shipping | C38–C42 | ☐ | Writeup, README, demo, tests green |
@@ -3798,3 +3798,38 @@ this run shows the binding constraint is the critic's *output*, not its
 prompt. Splitting addresses it reactively; sizing the batch to an expected
 output budget would address it before the failure. Item 9 is amended to say
 so.
+
+
+**2026-11-13 — C28.4. Phase 3 complete: C28's criterion met live.**
+
+```
+answerable    PARTIAL via threshold   112s, 16 LLM calls   1 of 3 core resolved
+false premise ABSTAIN via premise_refuted   4s, 2 LLM calls   research skipped
+```
+
+The answerable report is usable as delivered: four of eight claims
+SUPPORTED by the passages they cite, one marked *[partially supported]*,
+three marked *[unverified]* in place — the C28 verification-in-the-text
+design doing what it is for — six footnotes resolving to the FlashAttention-2
+and vLLM papers, and the two unanswered parts of the question listed
+beneath. The false premise is refused before any research, with the
+contradicted assumption and the correction stated. Phase 3's exit criterion
+("system refuses a false-premise question correctly") and C28's own check
+(the answerable/false-premise split) both hold.
+
+**One flaw from reading it:** the report's last sentence ended in a literal
+`[UNRESOLVED]`. C28's stray-marker filter matched lower-case markers only.
+It is now case-insensitive, and — because a content-addressed citation id
+made entirely of hex letters would otherwise match the widened pattern —
+anything `CITATION_RE` recognises is left alone.
+
+**Phase 3 took C23–C28 plus thirteen follow-up commits** (C27.1–C27.9,
+C28.1–C28.4). Every follow-up was found from live output, not from the unit
+tests; most were two individually correct rules combining badly (marginal
+test × effective re-retrieval; UNRESOLVED demotion × correct ownership;
+critic fallback × threshold policy). The pattern is worth a paragraph in
+the writeup: unit tests verify each rule; only end-to-end runs on real
+models expose their interactions.
+
+**Next, before Phase 4:** open item 1 — wire contradiction scanning (§4.6),
+so Tier D3 ("no consensus") questions have the signal they test.

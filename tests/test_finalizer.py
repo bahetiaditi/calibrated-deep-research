@@ -204,3 +204,22 @@ def test_the_dead_scoring_stage_is_gone():
 
     assert not hasattr(controller, "SUFFICIENCY_SCORER")
     assert "sufficiency_scorer" not in controller.ALL_NODES
+
+
+
+def test_upper_case_markers_are_stripped_too():
+    """C28.4: the live report ended in a literal "[UNRESOLVED]"."""
+    draft = (f"FlashAttention-2 partitions work. [{P[0]}] "
+             f"The exact layout cannot be established [UNRESOLVED].")
+    findings = findings_for(draft, {0: ("SUPPORTED", "ACCEPT")})
+    text = report(state(draft=draft, findings=findings))
+    assert "UNRESOLVED" not in text
+    assert "cannot be established." in text
+
+
+def test_a_citation_made_only_of_hex_letters_is_not_mistaken_for_a_marker():
+    from src.nodes.finalizer import _strip_markers
+
+    pid = "P" + "abcdef" * 2
+    stripped, count = _strip_markers(f"A claim. [{pid}] Done [Citation Needed].")
+    assert f"[{pid}]" in stripped and count == 1

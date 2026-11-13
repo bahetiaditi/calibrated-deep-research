@@ -47,9 +47,26 @@ from src.state import ResearchState
 log = logging.getLogger(__name__)
 
 # Markers a model writes that are not citations: "[unresolved]",
-# "[citation needed]". Lower-case words only, so a citation ([P…]) or a
-# footnote ([3]) can never match.
-STRAY_MARKER_RE = re.compile(r"\s*\[(?:[a-z][a-z\- ]{2,30})\]")
+# "[UNRESOLVED]", "[citation needed]". Letters, spaces and hyphens only, so a
+# footnote ([3]) cannot match. Case-insensitive since C28.4 — the C28 live
+# run's report ended in a literal "[UNRESOLVED]" the lower-case pattern
+# missed. A content-addressed citation id is P + 12 hex characters; one made
+# entirely of hex LETTERS would match the pattern, so `_strip_markers`
+# leaves anything CITATION_RE recognises alone.
+STRAY_MARKER_RE = re.compile(r"\s*\[(?:[A-Za-z][A-Za-z\- ]{2,30})\]")
+
+
+def _strip_markers(text: str) -> tuple[str, int]:
+    count = 0
+
+    def drop(match: re.Match) -> str:
+        nonlocal count
+        if CITATION_RE.fullmatch(match.group(0).strip()):
+            return match.group(0)
+        count += 1
+        return ""
+
+    return STRAY_MARKER_RE.sub(drop, text), count
 
 MARK = {
     PARTIAL: "*[partially supported]*",
@@ -229,8 +246,7 @@ class Finalizer:
 
     def _render_draft(self, state: ResearchState) -> Rendered:
         draft = state.get("draft") or ""
-        stray = len(STRAY_MARKER_RE.findall(draft))
-        draft = STRAY_MARKER_RE.sub("", draft)
+        draft, stray = _strip_markers(draft)
 
         by_claim: dict[str, dict[str, Any]] = {}
         for finding in state.get("critic_findings") or []:
@@ -238,7 +254,7 @@ class Finalizer:
             # critic saw "…pattern [unresolved]." and the text now reads
             # "…pattern." — unstripped, that sentence's verdict would silently
             # go unapplied.
-            claim = STRAY_MARKER_RE.sub("", str(finding.get("claim", "")))
+            claim, _ = _strip_markers(str(finding.get("claim", "")))
             by_claim.setdefault(" ".join(claim.split()), finding)
 
         footnotes: list[str] = []

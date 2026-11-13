@@ -174,6 +174,13 @@ class SubQuestion(TypedDict):
     # the sibling's id. Replaces parsing "covered by sqX:" out of the
     # rationale text, which C27 did as a stopgap.
     covered_by: str | None
+    # C28.2. The status a sub-question had when the critic router reopened
+    # it for a claim (RE_RETRIEVE). A claim-driven round may add evidence but
+    # must not end the sub-question in a worse state than it was in: live,
+    # a sufficient sub-question (best f1 5.08) was re-searched with a query
+    # written for one comparison sentence, the round scored lower, D3's
+    # marginal test stopped it, and it ended ABANDONED.
+    reopened_from: Status | None
 
 
 class ClaimVerification(TypedDict):
@@ -351,6 +358,7 @@ def new_sub_question(
         kind="background" if kind == "background" else "core",
         evidence_scores={},
         covered_by=None,
+        reopened_from=None,
     )
 
 
@@ -435,3 +443,7 @@ def independent_sources(passages: Sequence[Passage]) -> int:
 
 # Fields the retriever carries from one round of a sub-question to the next.
 ROUND_CARRY_FIELDS: tuple[str, ...] = ("next_route", "next_query", "best_f1")
+
+
+# How good a terminal status is, for "never end worse than you started".
+STATUS_RANK: dict[str, int] = {"abandoned": 0, "insufficient": 1, "sufficient": 2}

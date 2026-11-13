@@ -333,6 +333,11 @@ sufficiency:
     # the critic's mean verdict on claims drawing on it reaches this.
     # 0.5 = at least PARTIAL on average (VERDICT_STRENGTH in features.py).
     min_entailment: 0.5
+    # C28.2. A sub-question also resolves when the critic verified at least
+    # this many of its claims SUPPORTED with mean entailment >= min_entailment,
+    # whatever retrieval's relevance score said. Two, so one lucky claim
+    # cannot resolve a sub-question alone.
+    min_supported_claims: 2
   # On PARTIAL, an answer-mode draft is rewritten in partial mode and
   # re-critiqued: synthesizer + critic + critic router = 3 LLM calls. Below
   # that much remaining budget the answer-mode draft is kept and flagged.

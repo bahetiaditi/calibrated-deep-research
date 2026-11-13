@@ -37,6 +37,7 @@ from typing import Any, Iterable, Sequence
 from src.config import Config, get_config
 from src.state import (
     ROUND_CARRY_FIELDS,
+    STATUS_RANK,
     Passage,
     ResearchState,
     Route,
@@ -186,6 +187,23 @@ class StaticRetriever:
         updated["status"] = self.decide_next(working, outcome)  # type: ignore[arg-type]
         for key in ROUND_CARRY_FIELDS:
             updated[key] = working.get(key)
+
+        # A round the critic router asked for (RE_RETRIEVE) looks for
+        # evidence for ONE claim. Its query is not the sub-question's, so its
+        # scores say nothing about whether the sub-question was answered;
+        # D3's marginal test compares them with the sub-question's best
+        # round anyway. Its passages are kept; its verdict cannot leave the
+        # sub-question worse than retrieval had already judged it (C28.2).
+        before = sub_question.get("reopened_from")
+        if before and updated["status"] in STATUS_RANK:
+            if STATUS_RANK[updated["status"]] < STATUS_RANK.get(before, -1):
+                if self.tracer is not None:
+                    self.tracer.note(
+                        "reopen_kept_status", sub_question_id=sub_question_id,
+                        round_status=updated["status"], kept=before,
+                    )
+                updated["status"] = before
+            updated["reopened_from"] = None
 
         # Features are recomputed every round, not only at the end. D3 reads
         # them at C21 to decide whether to stop, so they have to exist while

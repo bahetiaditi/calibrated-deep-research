@@ -51,7 +51,7 @@ from src.config import Config, get_config
 from src.llm.provider import LLMProvider, Role
 from src.nodes.critic import CONTRADICTED, PARTIAL, SUPPORTED
 from src.prompts import render
-from src.state import ClaimVerification, ResearchState, find_sub_question
+from src.state import STATUS_RANK, ClaimVerification, ResearchState, find_sub_question
 
 log = logging.getLogger(__name__)
 
@@ -332,6 +332,11 @@ class CriticRouter:
                 # Reopening the sub-question is what makes this a decision
                 # rather than a note: the controller sees a non-terminal
                 # sub-question and routes back to the retriever.
+                # Remember the verdict retrieval had already reached, once —
+                # a second claim reopening the same sub-question must not
+                # overwrite it with "in_progress" (C28.2).
+                if sub_question.get("status") in STATUS_RANK:
+                    sub_question["reopened_from"] = sub_question["status"]
                 sub_question["status"] = "in_progress"
                 # The router's query becomes the next round's query, so the
                 # re-retrieval asks something new rather than replaying the

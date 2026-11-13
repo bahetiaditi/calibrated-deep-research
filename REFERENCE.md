@@ -3547,6 +3547,7 @@ by how much it could distort a reported number.
 | 11 | Executing an adaptive D2 choice is traced as a `(static)` decision. Counts are unaffected; the inspector misleads. | C27.2 | C38 |
 | 12 | D4 allocates without regard to `kind`. Decide with C33's data. | C27.8 | after C33 |
 | 13 | Nodes charge the budget only `if can_spend`, so calls after exhaustion go unrecorded rather than raising. | C27 | — |
+| 14 | **Calibrated stage 2 sees no critic evidence.** Add a run-level verification aggregate (not leaky at stage 2); decide which predictor it replaces. | C28.2 | C33 |
 
 
 **2026-10-28 — C28. The finalizer and the full graph. Phase 3 complete once the live run confirms it.**
@@ -3675,3 +3676,67 @@ decider share, so their lines still deduplicate exactly.
 reset at C27.3 forgave the day's real spend, and roughly six smoke runs
 consumed the rest. The open table's item 4 is no longer an estimate: one
 model's day covers about a dozen questions of this kind.
+
+
+**2026-11-13 — C28.2. A claim-driven re-retrieval cannot revoke a
+sub-question; verification can resolve one.**
+
+**C28.1 verified live.** `scripts/probe_premise.py` passed all three cases:
+the Mamba attention premise is now CONTRADICTED (citing "We repeat this
+block, interleaved with standard normalization and residual connections");
+Mamba-2 + RoPE stays UNVERIFIABLE — the prompt change did not tip into
+calling silence a contradiction — and FlashAttention-2 vs PagedAttention
+passes as valid. In the full graph the false premise was refused in **3
+seconds and 2 LLM calls** (`premise_checker -> decider -> finalizer`), with
+no research and a report stating the contradicted assumption and the
+correction. Phase 3's exit criterion — "system refuses a false-premise
+question correctly" — is met live. C28's own check still failed: the
+answerable question abstained, 0 of 3 core.
+
+**Diagnosis, from the checkpoint** (`show_run` + the D3 trace lines):
+
+- **sq2 (PagedAttention) — revoked by re-retrieval.** Best f1 5.08,
+  sufficient. Its third query is the router's: "FlashAttention-2 dense
+  tiled reuse of contiguous data compared to PagedAttention independent
+  block reads" — a query for one comparison *claim*. That round scored
+  lower; D3's marginal test (C21) compared it with the sub-question's best
+  round and stopped it: ABANDONED. Two correct rules — C21's marginal test,
+  C27.2's re-retrieval that finally does something — combining into "trying
+  to support one sentence revokes the sub-question". It also bought nothing:
+  the final cycle's synthesis has the same digest as the one before.
+- **sq3 (the comparison) — vetoed by a proxy.** Retrieval status
+  `insufficient` (f1 3.93 against a 4.0 bar) while the critic had verified
+  its claims 6 SUPPORTED + 2 PARTIAL + 1 UNSUPPORTED (f6 0.78). The
+  heuristic required retrieval sufficiency AND entailment, so a relevance
+  score computed before any claim existed overrode nine checked claims.
+
+**Fix 1 — never end worse than the router found it.** When the router
+reopens a sub-question it records the status it had (`reopened_from`, set
+once even if several claims reopen it). If the claim-driven round ends in a
+worse terminal status, the earlier one stands; its passages are kept either
+way, and a better ending stands too. The claim round's scores answer
+"is there evidence for this sentence", not "was the sub-question answered",
+so D3's marginal test is the wrong judge of the latter.
+
+**Fix 2 — verification resolves on its own** (heuristic). A sub-question
+is resolved if retrieval called it sufficient with entailment ≥
+`min_entailment` (unchanged), **or** if the critic verified at least
+`min_supported_claims` (2) of its claims SUPPORTED with mean entailment ≥
+`min_entailment`, whatever its retrieval status. Two, so one lucky claim
+cannot resolve a sub-question alone; the decision record notes when a
+sub-question was resolved this way.
+
+Both reproduced from the live values; five of the new tests fail on the
+pre-C28.2 code. Replayed at the decider, the live run's evidence now gives
+2 of 3 core resolved: PARTIAL.
+
+**Found while fixing — the calibrated scorer is blind to the critic.**
+Stage 1 excludes f6 (label leakage, C27). Stage 2 reads retrieval *status*,
+which the critic no longer changes (C28.1). So the calibrated decision
+currently uses no verification evidence at all — while Fix 2 shows the
+heuristic is better for using it. Stage 2's labels are gold answerability,
+not critic verdicts, so a run-level verification aggregate (mean entailment
+over core sub-questions, or fraction of core claims SUPPORTED) is **not**
+leaky there. With 24 calibration questions and four predictors (C26), it
+would have to replace one; which, and whether the gain shows on the
+calibration split, is a C33 decision. Added to the open table as item 14.

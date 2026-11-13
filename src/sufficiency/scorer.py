@@ -121,7 +121,10 @@ class Scorer(Protocol):
 
 
 def sub_question_scores(
-    state: ResearchState, *, min_entailment: float = 0.5
+    state: ResearchState,
+    *,
+    min_entailment: float = 0.5,
+    min_supported: int = 2,
 ) -> list[SubQuestionScore]:
     """Features, verdicts and resolution per sub-question, from final state.
 
@@ -151,12 +154,27 @@ def sub_question_scores(
         ]
         covered = _covered_by(sq, live_ids)
         f6 = features.get("f6_entailment_strength")
-        resolved = sq.get("status") == "sufficient" and (
+        by_retrieval = sq.get("status") == "sufficient" and (
             f6 is None or f6 >= min_entailment
         )
+        # Verification resolves on its own (C28.2). Retrieval status is a
+        # relevance proxy computed before any claim existed; claims the
+        # critic checked against their passages are direct evidence. Live, a
+        # sub-question whose nine claims were 6 SUPPORTED + 2 PARTIAL
+        # (entailment 0.78) was vetoed by a relevance score of 3.93 against
+        # a 4.0 bar. `min_supported` keeps one lucky claim from resolving a
+        # sub-question by itself.
+        supported = sum(1 for v in verdicts if v == "SUPPORTED")
+        by_verification = (
+            f6 is not None and f6 >= min_entailment and supported >= min_supported
+        )
+        resolved = by_retrieval or by_verification
         note = f"merged into {covered}" if covered else ""
         if sq.get("status") == "sufficient" and not resolved:
             note = f"retrieval sufficient but entailment {f6:.2f} < {min_entailment}"
+        elif resolved and not by_retrieval:
+            note = (f"resolved by verification: {supported} supported, entailment "
+                    f"{f6:.2f}, despite retrieval status {sq.get('status')}")
         out.append(SubQuestionScore(
             id=sq["id"], text=sq.get("text", ""), status=str(sq.get("status")),
             included=covered is None,
@@ -213,9 +231,13 @@ class HeuristicScorer:
         self.min_entailment = float(
             self.cfg.get("sufficiency.heuristic.min_entailment", 0.5)
         )
+        self.min_supported = int(
+            self.cfg.get("sufficiency.heuristic.min_supported_claims", 2)
+        )
 
     def score(self, state: ResearchState) -> RunScore:
-        subs = sub_question_scores(state, min_entailment=self.min_entailment)
+        subs = sub_question_scores(state, min_entailment=self.min_entailment,
+                                   min_supported=self.min_supported)
         # Core only (C27.8). A background sub-question resolves whatever the
         # question presupposes; counting it let a false-premise question
         # reach PARTIAL on "what is RoPE?" alone, a report that explains
@@ -255,6 +277,7 @@ class CalibratedScorer:
         thresholds: Thresholds,
         *,
         min_entailment: float = 0.5,
+        min_supported: int = 2,
     ) -> None:
         # Refuse a leaky stage 1 at construction, not at prediction: a model
         # fitted on its own label must not produce a single decision.
@@ -272,9 +295,11 @@ class CalibratedScorer:
         self.stage2 = stage2
         self.thresholds = thresholds
         self.min_entailment = min_entailment
+        self.min_supported = min_supported
 
     def score(self, state: ResearchState) -> RunScore:
-        subs = sub_question_scores(state, min_entailment=self.min_entailment)
+        subs = sub_question_scores(state, min_entailment=self.min_entailment,
+                                   min_supported=self.min_supported)
         # Stage-1 probabilities for every included sub-question — they are
         # recorded, and C33 trains on them — but stage 2 aggregates CORE ones
         # only (C27.8); see HeuristicScorer.score.
@@ -337,5 +362,8 @@ def get_scorer(config: Config | None = None) -> Scorer:
 
     stage1 = SufficiencyModel.load(paths[0])
     stage2 = SufficiencyModel.load(paths[1])
-    return CalibratedScorer(stage1, stage2, Thresholds.from_config(cfg),
-                            min_entailment=min_entailment)
+    return CalibratedScorer(
+        stage1, stage2, Thresholds.from_config(cfg),
+        min_entailment=min_entailment,
+        min_supported=int(cfg.get("sufficiency.heuristic.min_supported_claims", 2)),
+    )

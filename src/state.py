@@ -313,6 +313,11 @@ class ResearchState(TypedDict, total=False):
     draft_mode: str                      # "answer" | "partial" | "" (C27)
     critic_findings: list[ClaimVerification]
     critiqued_draft: str                 # draft_digest of what the critic saw
+    # C28.3. Whether the critic's LAST review failed (every model in the chain
+    # errored, so its findings are placeholders). Per review, not sticky
+    # like `error`: a run whose first critique failed and whose final one
+    # succeeded is judged on the final one.
+    critic_failed: bool
 
     budget: BudgetState
 
@@ -380,6 +385,7 @@ def new_state(
         draft_mode="",
         critic_findings=[],
         critiqued_draft="",
+        critic_failed=False,
         budget=budget or BudgetState(
             llm_calls_used=0, llm_calls_max=0,
             retrieval_calls_used=0, retrieval_calls_max=0,

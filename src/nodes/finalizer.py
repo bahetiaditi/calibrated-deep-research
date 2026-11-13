@@ -59,7 +59,7 @@ MARK = {
 
 RULE_BANNER = {
     "premise_refuted": "NO ANSWER — the question rests on a premise the evidence contradicts",
-    "system_failure": "NO ANSWER — the run failed before a report could be written",
+    "system_failure": "NO ANSWER — the run failed; this is not a judgment about the evidence",
     "no_evidence": "NO ANSWER — no evidence was found",
     "static_always_answer": "ANSWERED (abstention disabled for this run)",
 }
@@ -161,9 +161,11 @@ class Finalizer:
             if correction:
                 out += ["**What the evidence says instead:** " + correction, ""]
         elif rule == "system_failure":
-            out += ["The run failed before a report could be written "
-                    f"(`{(record.get('error') or state.get('error') or '')[:200]}`). "
-                    "This is a system failure, not a judgment about the evidence.", ""]
+            # The decision's rationale names which failure it was — no draft
+            # written, or a draft the critic could not verify (C28.3).
+            out += [state.get("decision_rationale")
+                    or "The run failed. This is a system failure, not a "
+                       "judgment about the evidence.", ""]
         else:
             # The rationale ends with its own "Not established: …" list, cut
             # short for the trace; the full list follows below. Showing both

@@ -104,6 +104,7 @@ class DecisionInputs:
     has_evidence: bool = True
     has_draft: bool = True
     error: str | None = None
+    critic_failed: bool = False        # the last critique's findings are placeholders
     scorer: str = "heuristic"
     calibrated: bool = False
     resolved: Sequence[str] = ()       # CORE sub-question texts
@@ -145,6 +146,20 @@ def decide(inputs: DecisionInputs) -> Decision:
 
     if inputs.premise_failed and inputs.abstain_on_failed_premise:
         return _decision(inputs, ABSTAIN, RULE_PREMISE, _premise_rationale(inputs))
+
+    if inputs.critic_failed:
+        # C28.3 — corrects C27, which sent "an error with a draft" to the
+        # threshold on the grounds that the all-UNSUPPORTED placeholders
+        # would be reflected in the score. They were: the score measured the
+        # outage. Live, a critic that could not run produced 0 of 3 resolved
+        # and an ABSTAIN recorded as epistemic — which a Tier D question
+        # would have graded correct.
+        return _decision(
+            inputs, ABSTAIN, RULE_SYSTEM_FAILURE,
+            "Abstained because the report could not be verified: the critic "
+            f"failed ({(inputs.error or 'no detail')[:160]}). This is a system "
+            "failure, not a judgment about the evidence.",
+        )
 
     if not inputs.has_draft and inputs.error:
         return _decision(

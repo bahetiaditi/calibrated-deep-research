@@ -144,6 +144,18 @@ class CriticRouter:
             result.error = str(exc)
             return result
 
+        if state.get("critic_failed"):
+            # The findings are placeholders ("critic unavailable"), not
+            # judgments. Routing them spent an LLM call and could reopen
+            # research on claims nobody had checked (C28.3). Label them and
+            # stop; the decider records the run as a system failure.
+            for finding in failed:
+                routed[id(finding)] = UNRESOLVED
+                finding["reasoning"] = (
+                    f"{finding.get('reasoning', '')} | not routed: critic failed"
+                ).strip(" |")[:400]
+            return self._finish(state, findings, routed)
+
         available = self._available_actions(state)
         retry: dict[int, str] = {}
         for index, finding in enumerate(failed):

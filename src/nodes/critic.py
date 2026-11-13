@@ -74,6 +74,10 @@ NOT_A_CLAIM = "NOT_A_CLAIM"
 # produce. Excluded from the claim denominator like NOT_A_CLAIM, but kept and
 # counted separately, so it can be audited rather than merely excused.
 GAP_STATEMENT = "GAP_STATEMENT"
+
+# How many times a failed critique batch may be halved (C28.3): 2 levels =
+# at most 4 calls for one review, spent only when a batch fails.
+MAX_SPLIT_DEPTH = 2
 VERDICTS = (SUPPORTED, PARTIAL, UNSUPPORTED, CONTRADICTED)
 
 # Below this a sentence is almost certainly connective tissue. Used only to
@@ -182,7 +186,7 @@ class Critic:
 
         if judged:
             try:
-                verdicts = self._judge(state, judged, evidence, contradicted)
+                verdicts = self._judge_split(state, judged, evidence, contradicted)
             except Exception as exc:  # noqa: BLE001
                 # A critic that crashes loses the whole verification pass.
                 # Degrading to "unverified" keeps the run alive and is
@@ -237,6 +241,43 @@ class Critic:
         return report
 
     # -- the single batched call --------------------------------------------
+
+    def _judge_split(
+        self,
+        state: ResearchState,
+        sentences: Sequence[Sentence],
+        evidence: dict[str, Passage],
+        contradicted: set[str],
+        depth: int = 0,
+    ) -> dict[int, tuple[str, str]]:
+        """Judge in one call; if that fails, judge each half (C28.3).
+
+        The critic judges every sentence in one batched call, so its output
+        grows with the draft. gpt-oss spends reasoning tokens from the same
+        2,048-token output cap, and on the C28.2 live run the batch ran out
+        before any JSON was written: `json_validate_failed` with an EMPTY
+        generation, on all three judgment models in turn. The whole
+        verification pass was lost, and the run abstained on placeholders.
+        Halving the batch halves both the prompt and the output it needs.
+        Extra calls are spent only when a batch actually fails; at
+        MAX_SPLIT_DEPTH (two levels, at most four calls) the failure stands.
+        """
+        try:
+            return self._judge(state, sentences, evidence, contradicted)
+        except Exception as exc:  # noqa: BLE001
+            if depth >= MAX_SPLIT_DEPTH or len(sentences) < 2:
+                raise
+            half = len(sentences) // 2
+            log.warning("critic batch of %d failed (%s); judging halves",
+                        len(sentences), type(exc).__name__)
+            if self.tracer is not None:
+                self.tracer.note("critic_split", sentences=len(sentences),
+                                 depth=depth + 1, error=str(exc)[:200])
+            verdicts = self._judge_split(state, sentences[:half], evidence,
+                                         contradicted, depth + 1)
+            verdicts.update(self._judge_split(state, sentences[half:], evidence,
+                                              contradicted, depth + 1))
+            return verdicts
 
     def _judge(
         self,
@@ -368,6 +409,9 @@ def critic_node(critic: Critic):
             # empty findings as "not yet reviewed" and looped (C27).
             "critiqued_draft": draft_digest(state.get("draft")),
         }
+        # Written on every review, so a later successful critique clears an
+        # earlier failure for the decision that follows it (C28.3).
+        update["critic_failed"] = bool(report.error)
         if report.error:
             update["error"] = report.error
         return update

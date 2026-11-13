@@ -128,6 +128,7 @@ class Decider:
             has_evidence=bool(state.get("evidence")),
             has_draft=bool(draft),
             error=state.get("error"),
+            critic_failed=bool(state.get("critic_failed")),
             scorer=run.kind,
             calibrated=run.calibrated,
             resolved=[s.text for s in run.resolved()],

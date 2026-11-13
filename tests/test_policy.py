@@ -78,10 +78,21 @@ def test_a_crash_is_not_an_epistemic_abstention():
     assert not decision.epistemic
 
 
-def test_an_error_with_a_draft_still_goes_to_the_threshold():
-    """A critic failure leaves a draft whose claims are all UNSUPPORTED; the
-    score reflects that. It is not a system failure in the rule sense."""
-    decision = decide(inputs(0.9, error="critic unavailable"))
+def test_a_failed_critique_is_a_system_failure():
+    """C28.3 reverses C27's test here, which asserted that an error with a
+    draft goes to the threshold. With the critic down, every claim is a
+    placeholder UNSUPPORTED; the score then measures the outage, and an
+    ABSTAIN on it was recorded as epistemic."""
+    decision = decide(inputs(0.0, error="critic unavailable", critic_failed=True))
+    assert (decision.terminal, decision.rule) == (ABSTAIN, RULE_SYSTEM_FAILURE)
+    assert not decision.epistemic
+    assert "could not be verified" in decision.rationale
+
+
+def test_a_stale_error_from_a_recovered_critique_still_uses_the_threshold():
+    """`error` is sticky; `critic_failed` is per review. A run whose final
+    critique succeeded is judged on its evidence."""
+    decision = decide(inputs(0.9, error="earlier critique failed", critic_failed=False))
     assert decision.rule == RULE_THRESHOLD
 
 

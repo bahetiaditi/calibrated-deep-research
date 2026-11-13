@@ -3542,7 +3542,7 @@ by how much it could distort a reported number.
 | 6 | **τ must be selected on the fitted model's scale.** At the placeholders a hard-regularised fit never answers. | C27 | C33 |
 | 7 | **Comparison sub-questions that restate the parent.** The answerable question's sq3 ("how do the memory access patterns … differ") is the question itself as a core sub-question; no single passage satisfies it, so it drags core resolution. Planner prompt, or tag synthesis sub-questions. | C27.9 | C29 |
 | 8 | **Tier D1 refutations must be in the corpus**, or D1 items measure coverage, not premise detection. | C27.1 | C30 |
-| 9 | Critic and router prompts should be sized to `prompt_token_budget` like the synthesizer's. | C27.3 | C28 runs |
+| 9 | Critic and router prompts should be sized to `prompt_token_budget` like the synthesizer's. **Amended C28.3:** the critic's binding constraint is its OUTPUT (reasoning + per-sentence verdicts vs a 2,048 cap); split-on-failure handles it reactively, batch sizing would prevent it. | C27.3 | C28 runs |
 | 10 | Finalizer: present a PARTIAL whose rewrite was unaffordable; strip non-citation markers (`[unresolved]`); remove the controller's dead `SUFFICIENCY_SCORER` branch; a structured `covered_by` field instead of parsing rationale text. | C27, C27.5 | C28 |
 | 11 | Executing an adaptive D2 choice is traced as a `(static)` decision. Counts are unaffected; the inspector misleads. | C27.2 | C38 |
 | 12 | D4 allocates without regard to `kind`. Decide with C33's data. | C27.8 | after C33 |
@@ -3740,3 +3740,61 @@ over core sub-questions, or fraction of core claims SUPPORTED) is **not**
 leaky there. With 24 calibration questions and four predictors (C26), it
 would have to replace one; which, and whether the gain shows on the
 calibration split, is a C33 decision. Added to the open table as item 14.
+
+**2026-11-13 — C28.3. A critic that cannot run is an outage, not a verdict.
+Corrects a C27 decision.**
+
+The C28.2 smoke: the premise half passed again (refused in 4s, 2 calls).
+The answerable half abstained — for a new reason. The critic's batched
+judgment call returned `400 json_validate_failed` with
+`failed_generation: ''` on gpt-oss-120b, then on qwen3.8-27b, then on
+gpt-oss-20b (two of them also returned plain empty responses). An empty
+generation under JSON mode means the output budget was spent before any
+JSON was written: gpt-oss counts its reasoning tokens against the same
+2,048-token cap, and the critic judges every sentence of the draft in one
+call, so its output grows with the draft. Earlier successful critiques were
+already at 3.3–5.9K total tokens — near the edge.
+
+What happened next is the real defect. The critic degraded to its designed
+fallback — every claim UNSUPPORTED, "critic unavailable" — and set `error`.
+The heuristic scored 0 of 3, and the decider recorded **ABSTAIN via
+threshold: an epistemic abstention, caused by an outage.** On a Tier D
+question it would have been graded correct.
+
+**That was a C27 decision, and it was wrong.** C27 limited `system_failure`
+to "no draft and an error", and its test asserted that "an error with a
+draft still goes to the threshold", reasoning that the placeholders would be
+reflected in the score. They were: the score measured the outage. The test
+is reversed.
+
+**1. `critic_failed`, and the rule that reads it.** The critic node writes
+`critic_failed` on every review — per review, deliberately not sticky like
+`error`, so a run whose first critique failed and whose final one succeeded
+is judged on the final one. The policy checks it right after the premise
+rule: a failed critique is `system_failure`, non-epistemic, with a
+rationale naming the cause. The finalizer's system-failure banner no longer
+claims "no report could be written" (one was; it could not be verified).
+
+**2. The router does not route placeholders.** With `critic_failed`, every
+finding is labelled UNRESOLVED without an LLM call and nothing is reopened:
+routing "critic unavailable" spent a call and could reopen research on
+claims nobody had checked.
+
+**3. Split on failure.** `Critic._judge_split`: if a batch fails, judge each
+half, up to `MAX_SPLIT_DEPTH` = 2 levels. Halving the batch halves both the
+prompt and the output it needs. Extra calls are spent only when a batch
+actually fails, and a persistent failure — the model down, not merely over
+budget — gives up after one call per level (3), not the whole tree (7): the
+first leaf to fail at the limit ends the review. Traced as `critic_split`.
+
+**Effect on the C28 criterion, stated plainly:** with C28.3 this run would
+have ended `system_failure` rather than a false epistemic ABSTAIN — honest,
+but still not the answer the split check needs. The answer depends on the
+split recovering the critique, which only a live run shows. Phase 3 stays
+unticked.
+
+**For open item 9** (size the critic and router prompts to the budget):
+this run shows the binding constraint is the critic's *output*, not its
+prompt. Splitting addresses it reactively; sizing the batch to an expected
+output budget would address it before the failure. Item 9 is amended to say
+so.

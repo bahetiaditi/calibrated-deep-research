@@ -57,7 +57,7 @@ RULE_STATIC = "static_always_answer"
 EPISTEMIC_RULES = frozenset({RULE_PREMISE, RULE_NO_EVIDENCE, RULE_THRESHOLD})
 
 GAP_PREFIX = "could not establish: "
-MAX_GAP_TEXT = 160
+MAX_GAP_TEXT = 200
 
 
 @dataclass(frozen=True)
@@ -192,8 +192,15 @@ def static_decision(inputs: DecisionInputs) -> Decision:
 
 
 def gap_for(text: str) -> str:
-    """The gap line for a sub-question. Same format the planner writes."""
-    return f"{GAP_PREFIX}{(text or '')[:MAX_GAP_TEXT].rstrip(' .')}"
+    """The gap line for a sub-question. The planner uses this too.
+
+    Truncated at a word boundary with an ellipsis (C28.1): a hard cut at
+    160 characters put "…during its atten." in front of a reader.
+    """
+    text = " ".join((text or "").split()).rstrip(" .")
+    if len(text) > MAX_GAP_TEXT:
+        text = text[:MAX_GAP_TEXT].rsplit(" ", 1)[0].rstrip(" ,;:") + "…"
+    return f"{GAP_PREFIX}{text}"
 
 
 def enumerate_gaps(

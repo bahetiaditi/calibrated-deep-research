@@ -165,7 +165,11 @@ class Finalizer:
                     f"(`{(record.get('error') or state.get('error') or '')[:200]}`). "
                     "This is a system failure, not a judgment about the evidence.", ""]
         else:
-            out += [state.get("decision_rationale") or "The evidence was insufficient.", ""]
+            # The rationale ends with its own "Not established: …" list, cut
+            # short for the trace; the full list follows below. Showing both
+            # printed the gaps twice, the first time truncated (C28.1).
+            rationale = state.get("decision_rationale") or "The evidence was insufficient."
+            out += [rationale.split(" Not established:")[0], ""]
         gaps = self._question_gaps(state, record)
         if gaps:
             out += ["**Not established:**", ""] + [f"- {g}" for g in gaps] + [""]

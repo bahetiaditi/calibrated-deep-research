@@ -17,6 +17,19 @@ judgment you make, and they are not interchangeable:
   UNVERIFIABLE means the evidence is silent. Absence of mention is NOT
   contradiction. A paper that never discusses a detail has not refuted it.
 
+  An EXPLICIT STATEMENT OF ABSENCE is not silence. It is the evidence
+  positively saying otherwise. If a claim says X has or uses something, and
+  a passage says X is "without" it, "-free" of it, "does not use" it, or has
+  "no" such component, the claim is CONTRADICTED:
+    claim:   "Mamba contains multi-head attention layers"
+    passage: "...a simplified architecture without attention or even MLP
+             blocks (Mamba)"
+    verdict: CONTRADICTED — the passage states Mamba has no attention.
+  Silence is a passage that does not address whether X has it at all.
+
+Before answering UNVERIFIABLE, check every passage that describes the
+subject itself for a statement of what it does NOT contain.
+
 When in doubt between the two, choose UNVERIFIABLE. Calling silence a
 contradiction causes the system to refuse questions it could have answered.
 

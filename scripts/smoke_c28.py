@@ -134,8 +134,12 @@ def check(result, label) -> int:
             if "What the evidence says instead" in report or "contradicts" in report:
                 ok("the report states the premise the evidence contradicts")
         else:
-            warn(f"premise not refuted (verdicts {verdicts}) — the corpus states "
-                 f"Mamba is attention-free; check the premise check's reasoning")
+            # A FAIL, not a WARN (C28.1). This is the C28 acceptance
+            # criterion; as a warning it let the script print "all checks
+            # passed" while the criterion failed.
+            bad(f"premise not refuted (verdicts {verdicts}) — the corpus states "
+                f"Mamba is attention-free; run scripts.probe_premise")
+            failures += 1
 
     events = TraceReader.load(result.trace_path).of_type(
         __import__("src.tracing.tracer", fromlist=["EventType"]).EventType.NOTE)
@@ -163,7 +167,8 @@ def main() -> int:
     if a != "ABSTAIN" and p == "ABSTAIN":
         ok(f"answerable -> {a}, false premise -> {p}")
     else:
-        warn(f"answerable -> {a}, false premise -> {p}: not the expected split")
+        bad(f"answerable -> {a}, false premise -> {p}: not the expected split")
+        failures += 1
 
     print(f"\n{BOLD}{'all checks passed' if not failures else f'{failures} failure(s)'}"
           f"{RESET}\n")

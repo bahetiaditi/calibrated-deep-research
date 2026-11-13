@@ -3609,3 +3609,69 @@ unsupported. This is the C30 constraint (item 8 of the open table) applied
 one question early.
 
 Open table after C28: items 1–9 and 11–13 stand; item 10 is closed.
+
+**2026-10-28 — C28.1. The C28 live run: criterion not met. Two causes found
+in the checkpointed state; both fixed. The smoke test's own flaw fixed.**
+
+**The smoke test passed its own failure.** C28's acceptance criterion is a
+refused false premise and an answerable/false-premise split. Both checks were
+written as WARNs, and the script printed "all checks passed" while the
+criterion failed — the recorded pattern, in the acceptance test itself. Both
+are FAILs now. Phase 3 stays unticked until they pass.
+
+**1. The verifier read "without attention" as silence.** "Why does Mamba
+interleave multi-head attention layers between its selective SSM blocks?"
+came back UNVERIFIABLE on both attention presuppositions, `cited: []`,
+reasoning "the evidence does not mention Mamba interleaving multi-head
+attention layers". Retrieval was not the failure: premise evidence is
+labelled in presupposition order, so P01–P04 are the first presupposition's
+— and the SUPPORTED verdict on "Mamba has selective SSM blocks" cites **P02
+and P03**, Mamba passages describing selective SSMs retrieved by the
+*attention* query. The abstract ("…without attention or even MLP blocks")
+was in front of the verifier.
+
+The prompt explains it. C15 drilled "absence of mention is NOT
+contradiction" and "when in doubt, choose UNVERIFIABLE" — correct, and the
+reason C15 exists — but never separated **an explicit statement of
+absence** from silence. "Without attention" positively says Mamba lacks
+attention; that is contradiction, not silence. The prompt now says so, with
+this case as its example, and asks the model to check passages describing
+the subject for what it does not contain before answering UNVERIFIABLE. One
+confound, recorded rather than resolved: 120b was day-exhausted during that
+run, so the verdict was likely qwen's. The gap in the prompt stands either
+way.
+
+**`scripts/probe_premise.py`** runs only the premise checker — 2 calls per
+question, judgment pinned to 120b — and prints every passage the verifier
+saw with negations highlighted, so retrieval and verification failure
+cannot be confused. Three cases, one per outcome: the Mamba attention
+question must be refuted; **Mamba-2 + RoPE must NOT be** — the corpus is
+silent, and refuting it would reintroduce the C15 failure the original
+prompt was written against; FlashAttention-2 vs PagedAttention must pass.
+
+**2. One weak claim sank a sub-question.** The answerable run abstained on
+0 of 3 core. sq2's five claims were 3 SUPPORTED + 2 PARTIAL — mean
+entailment 0.8 — but the router routed both PARTIAL claims UNRESOLVED, and
+since C24 UNRESOLVED marked the owning sub-question `insufficient`. That
+rule predates D5; D5 now weighs every verdict proportionately (a sufficient
+sub-question resolves if its claims' mean entailment reaches
+`heuristic.min_entailment`), and the demotion overrode it with "any one
+weak claim sinks it". The rule became visible only after C27.2, when claims
+started being owned correctly and UNRESOLVED became common. UNRESOLVED now
+changes nothing about the research; the claim stays labelled for the
+finalizer and its verdict reaches D5 through f6. **This corrects C27.5's
+statement** that an UNRESOLVED claim "still marks its sub-question
+insufficient — which is how it reaches D5": it reaches D5 through f6, as it
+already did. A test routes the live run's verdicts through the router and
+decider: PARTIAL now, ABSTAIN under the old rule.
+
+**3. Two presentation flaws from reading the abstention report.** The
+rationale repeated the gap list, truncated, before the full list; and gap
+text was cut at 160 characters mid-word ("…during its atten."). Gaps are now
+cut at a word boundary with an ellipsis, by one formatter the planner and
+decider share, so their lines still deduplicate exactly.
+
+**Also from this run:** 120b's genuine daily budget ran out — the ledger
+reset at C27.3 forgave the day's real spend, and roughly six smoke runs
+consumed the rest. The open table's item 4 is no longer an estimate: one
+model's day covers about a dozen questions of this kind.

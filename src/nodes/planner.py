@@ -510,7 +510,11 @@ def _abandoned(target: SubQuestion, reasoning: str) -> SubQuestion:
 
 
 def _gap(target: SubQuestion) -> str:
-    return f"could not establish: {target['text'][:160].rstrip(' .')}"
+    # One formatter for every gap line, so the decider's dedup matches the
+    # planner's lines exactly (C28.1).
+    from src.sufficiency.policy import gap_for
+
+    return gap_for(target["text"])
 
 
 def _describe(sub_question: SubQuestion) -> str:

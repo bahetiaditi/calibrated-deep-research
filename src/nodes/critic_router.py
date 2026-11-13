@@ -344,18 +344,19 @@ class CriticRouter:
                 sub_question["status"] = "insufficient"
                 needs_work = True
             elif action == UNRESOLVED:
-                # A claim that could not be verified is a property of the
-                # REPORT; a gap is a part of the QUESTION left unanswered
-                # (C27.5). Writing "could not establish: <the sentence>"
-                # into the gap list put the report's own sentences under
-                # "not established" beneath the report, and handed them to
-                # the partial rewrite as topics it must not answer. The claim
-                # stays labelled on its finding (action_taken=UNRESOLVED) for
-                # the finalizer; its sub-question is marked insufficient,
-                # which is how it reaches D5, and D5 writes the question-
-                # level gap from that status.
-                if sub_question is not None:
-                    sub_question["status"] = "insufficient"
+                # Changes nothing about the research (C28.1). Until C28.1 an
+                # UNRESOLVED claim marked its sub-question `insufficient`
+                # (C24, kept at C27.5). Live, two PARTIAL claims routed
+                # UNRESOLVED demoted a sub-question whose five claims were
+                # 3 SUPPORTED + 2 PARTIAL — mean entailment 0.8 — and the run
+                # abstained on a question it had largely answered. D5 already
+                # weighs every verdict proportionately: a sufficient
+                # sub-question resolves only if its claims' mean entailment
+                # reaches `heuristic.min_entailment` (f6). The demotion
+                # overrode that with "any one weak claim sinks it". The claim
+                # stays labelled on its finding for the finalizer; its
+                # verdict reaches D5 through f6.
+                pass
             # DROP_CLAIM and HEDGE change the report, not the research, and
             # are applied by the finalizer at C28.
 

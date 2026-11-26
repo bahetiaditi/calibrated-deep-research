@@ -24,6 +24,11 @@ accumulated for C32 is applied here, and each is tested:
   one directory, one    a manifest records the configuration, pins and the
   configuration         split hash; continuing a directory under different
                         settings is refused
+  explicit re-run       `rerun={id: reason}` re-runs a COMPLETED question on a
+                        new attempt and thread (C37.1), keeping what it
+                        replaced under `supersedes`. Calibration only: on the
+                        test split a re-run chosen after seeing a result is
+                        cherry-picking, so it is refused there
   held-out guard        the test split needs `held_out=True` and forces the
                         calibrated scorer — the reported numbers can never be
                         produced by the heuristic by accident (C27)
@@ -67,6 +72,10 @@ class EvalSummary:
     rerun: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
     stopped_on_quota: str = ""
+    # C37.1: questions whose synthesis left citations unparsed, with the
+    # count — shown after the run so a lost-citation draft is seen the day
+    # it is produced, not at scoring.
+    unparsed: dict[str, int] = field(default_factory=dict)
 
 
 def load_questions(split: str, path: Path = QUESTIONS) -> tuple[list[dict], dict]:
@@ -131,22 +140,31 @@ class EvalRunner:
 
     # -- public ---------------------------------------------------------------
 
-    def run(self, limit: int | None = None, only: list[str] | None = None) -> EvalSummary:
+    def run(self, limit: int | None = None, only: list[str] | None = None,
+            rerun: dict[str, str] | None = None) -> EvalSummary:
+        rerun = dict(rerun or {})
+        if rerun:
+            self._check_rerun(rerun)
         self.dir.mkdir(parents=True, exist_ok=True)
         self._check_manifest()
         summary = EvalSummary(self.name, self.split)
         todo = [q for q in self.questions if not only or q["id"] in only]
+        if rerun:
+            # A re-run names its questions; nothing else runs in that
+            # invocation, so a forced re-run never quietly spends the day's
+            # quota on the regular queue as well.
+            todo = [q for q in self.questions if q["id"] in rerun]
         attempted = 0
         for q in todo:
             # Completed questions are counted before the limit is checked: a
             # limit counts ATTEMPTS. Until C32.1 the limit came first, so
             # `--limit 0` reported nothing at all, not the completed ones.
-            if self._completed(q["id"]):
+            if self._completed(q["id"]) and q["id"] not in rerun:
                 summary.skipped.append(q["id"])
                 continue
             if limit is not None and attempted >= limit:
                 break
-            outcome = self._one(q, summary)
+            outcome = self._one(q, summary, rerun_reason=rerun.pop(q["id"], None))
             attempted += 1
             if outcome == "quota":
                 summary.stopped_on_quota = q["id"]
@@ -164,6 +182,23 @@ class EvalRunner:
         """
         return [q["id"] for q in self.questions if not self._completed(q["id"])]
 
+    def _check_rerun(self, rerun: dict[str, str]) -> None:
+        if self.split != "calibration":
+            raise EvalRefused(
+                "explicit re-runs are calibration-only: re-running a held-out "
+                "question after seeing its result is choosing which result to "
+                "report. Test-split system failures are re-run automatically.")
+        known = {q["id"] for q in self.questions}
+        unknown = sorted(set(rerun) - known)
+        if unknown:
+            raise EvalRefused(f"not in the {self.split} split: {', '.join(unknown)}")
+        missing = sorted(i for i in rerun if not (self.dir / f"{i}.json").exists())
+        if missing:
+            raise EvalRefused(f"nothing to re-run (no result yet): {', '.join(missing)}")
+        blank = sorted(i for i, why in rerun.items() if not (why or "").strip())
+        if blank:
+            raise EvalRefused(f"a re-run needs a reason, recorded in the result: {', '.join(blank)}")
+
     def _completed(self, qid: str) -> bool:
         path = self.dir / f"{qid}.json"
         if not path.exists():
@@ -175,7 +210,7 @@ class EvalRunner:
 
     # -- one question ---------------------------------------------------------
 
-    def _one(self, q: dict, summary: EvalSummary) -> str:
+    def _one(self, q: dict, summary: EvalSummary, rerun_reason: str | None = None) -> str:
         qid = q["id"]
         path = self.dir / f"{qid}.json"
         previous = json.loads(path.read_text()) if path.exists() else None
@@ -189,8 +224,22 @@ class EvalRunner:
 
         result = self._run(q["question"], thread_id=thread, trace_id=trace_id)
         record = self._record(q, result, attempt, thread)
+        if rerun_reason and previous:
+            # The replaced result stays visible in the record that replaced
+            # it, not only in git history.
+            record["supersedes"] = {
+                "attempt": previous.get("attempt"),
+                "thread_id": previous.get("thread_id"),
+                "terminal_decision": previous.get("terminal_decision"),
+                "rule": previous.get("rule"),
+                "score": previous.get("score"),
+                "reason": rerun_reason,
+            }
         _write_atomic(path, record)
 
+        lost = sum(int(e.get("unparsed_citations") or 0) for e in record["synthesis_log"])
+        if lost:
+            summary.unparsed[qid] = lost
         if previous:
             summary.rerun.append(qid)
         elif result.resumed == "resumed":
@@ -241,6 +290,7 @@ class EvalRunner:
             # rewritten with verification marks.
             "draft": state.get("draft", ""),
             "draft_mode": state.get("draft_mode", ""),
+            "synthesis_log": list(state.get("synthesis_log") or []),
             "critic_findings": state.get("critic_findings", []),
             "premise_check": state.get("premise_check", {}),
             "budget": budget.to_state() if budget is not None else state.get("budget"),

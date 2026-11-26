@@ -5,6 +5,7 @@
     python -m benchmark.run_eval --config agent --split calibration --limit 2
     python -m benchmark.run_eval --config agent --split test --held-out    # C36, once
     python -m benchmark.run_eval --list
+    python -m benchmark.run_eval --config agent --split calibration --rerun A03 --reason "C37.1 ..."
 
 Resumable: re-running the same command skips completed questions, resumes an
 interrupted one from its checkpoint, and re-runs system failures. Stops when
@@ -33,6 +34,8 @@ def main(argv=None) -> int:
     ap.add_argument("--held-out", action="store_true", help="confirm a test-split run (C36)")
     ap.add_argument("--out", type=Path, default=OUT)
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--rerun", nargs="*", help="re-run these COMPLETED calibration questions (C37.1)")
+    ap.add_argument("--reason", default="", help="why; required with --rerun, stored in the result")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
 
@@ -43,7 +46,8 @@ def main(argv=None) -> int:
         return 0
     try:
         runner = EvalRunner(args.config, args.split, args.out, held_out=args.held_out)
-        s = runner.run(limit=args.limit, only=args.only)
+        rerun = {qid: args.reason for qid in (args.rerun or [])}
+        s = runner.run(limit=args.limit, only=args.only, rerun=rerun or None)
     except EvalRefused as exc:
         print(f"refused: {exc}")
         return 2
@@ -53,6 +57,9 @@ def main(argv=None) -> int:
           f"{len(s.failed)} failed")
     if s.failed:
         print(f"  failed: {', '.join(s.failed)} — re-run the same command to retry")
+    for qid, n in s.unparsed.items():
+        print(f"  WARNING {qid}: {n} citation(s) could not be parsed — the draft "
+              f"lost them; inspect before trusting this result")
     if s.stopped_on_quota:
         print(f"  stopped at {s.stopped_on_quota}: a pinned model is out of day quota. "
               f"Run the same command after the reset (00:00 UTC).")

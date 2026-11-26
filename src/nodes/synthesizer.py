@@ -57,9 +57,20 @@ CITATION_RE = re.compile(r"\[(P\d{2,}|P[0-9a-f]{12})\]")
 # cannot match: a short label must be followed by a separator or the
 # closing bracket, never a hex letter.
 _LABEL = r"P\d{1,3}"
+# C37.1. A label may carry a locator suffix introduced by a dagger:
+# `【P09†L1-L3】` is gpt-oss's trained browsing-tool citation form (cursor,
+# dagger, line range). C27.4 listed `【P09】` but not the suffix, so in the
+# A03 calibration run all 12 citations of the delivered draft stayed plain
+# text: the critic saw 8 uncited claims, the run was ANSWERED with 0 of 8
+# verified, and the markup reached the user. The locator is accepted as
+# "anything up to the next separator or closing bracket" rather than as a
+# list of known shapes, because listing shapes is how this one was missed.
+_LOCATOR = r"(?:†[^\]】),;\s]*)?"
+_LOCATOR_RE = re.compile(r"†[^\]】),;\s]*")
 _GROUP_RE = re.compile(
     r"[\[【(]\s*("
-    + _LABEL + r"(?:\s*(?:,|;|&|\band\b|[-–—]|\s)\s*" + _LABEL + r")*"
+    + _LABEL + _LOCATOR
+    + r"(?:\s*(?:,|;|&|\band\b|[-–—]|\s)\s*" + _LABEL + _LOCATOR + r")*"
     + r")\s*[\]】)]"
 )
 _RANGE_RE = re.compile(r"(P\d{1,3})\s*[-–—]\s*(P\d{1,3})")
@@ -347,7 +358,8 @@ def synthesizer_node(synthesizer: Synthesizer):
         # The mode is recorded because D5 needs to know which prompt wrote
         # the draft it is looking at: an answer-mode draft under a PARTIAL
         # decision still has to be rewritten, a partial-mode one does not.
-        update: dict[str, Any] = {"draft": draft.text, "draft_mode": mode}
+        update: dict[str, Any] = {"draft": draft.text, "draft_mode": mode,
+                                  "synthesis_log": [synthesis_entry(draft)]}
         if draft.error:
             update["error"] = draft.error
         elif not draft.text.strip():
@@ -360,6 +372,25 @@ def synthesizer_node(synthesizer: Synthesizer):
         return update
 
     return node
+
+
+def synthesis_entry(draft: Draft) -> dict[str, Any]:
+    """The citation bookkeeping of one synthesis, for state and the eval record.
+
+    C37.1: a draft can look normal while every citation was lost. The A03
+    calibration trace said `unparsed_citations: 12`; the record said nothing.
+    """
+    # getattr: B0 accepts any synthesizer-shaped object (tests inject one).
+    get = lambda name, default: getattr(draft, name, default)
+    return {
+        "mode": get("mode", "answer"),
+        "passages_cited": len(get("cited_passage_ids", []) or []),
+        "normalised_citations": get("normalised_citations", 0),
+        "unparsed_citations": get("unparsed_citations", 0),
+        "invalid_labels": list(get("invalid_labels", []) or []),
+        "uncited_sentences": get("uncited_sentences", 0),
+        "error": get("error", None),
+    }
 
 
 def _count_uncited(text: str) -> int:
@@ -424,6 +455,9 @@ def normalize_citations(text: str) -> tuple[str, int]:
 
     def labels_of(body: str) -> list[str] | None:
         out: list[str] = []
+        # Locators are dropped before ranges are read: "L1-L3" inside a
+        # locator is a line range, not a passage range.
+        body = _LOCATOR_RE.sub("", body)
         for start, end in _RANGE_RE.findall(body):
             a, b = int(start[1:]), int(end[1:])
             if a > b or b - a > MAX_RANGE:

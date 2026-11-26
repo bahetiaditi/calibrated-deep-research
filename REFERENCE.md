@@ -4429,3 +4429,82 @@ results exist is legitimate under C37's rule, and will be recorded.
 
 Phase 4 ticked in §13. `HANDOFF.md` (repo root) consolidates state, open
 items, plan and timeline for continuing in a new conversation.
+
+**2026-11-26 — N1 diagnosed: the 0.484 is mostly the system, not the grader
+(corrects the previous entry's hypothesis).**
+
+Aligning each judged label with the sentence it graded (drafts rebuilt from
+the records' reports) shows what the 15 UNSUPPORTED labels of 31 factual
+ones are:
+
+| record | UNSUPPORTED | what they are |
+|---|---|---|
+| A03 | 8 of 8 | every citation lost before grading (below) |
+| A10 | 4 of 10 | sentences written with no citation; the system's own critic flagged the same four |
+| A09 | 1 of 8 | an uncited topic sentence |
+| A05 | 2 of 5 | gap statements ("the evidence does not establish…") the judge mislabelled; it labelled the same form GAP in A10 |
+
+**All 16 cited sentences were SUPPORTED; every UNSUPPORTED label is an uncited
+sentence.** The two suspected grader defects did not move the number: 10 of
+the 12 passages cited were over 900 characters, but no cited sentence was
+labelled UNSUPPORTED (the nearest miss: "3.5 days on eight GPUs" starts at
+character 872 of 974); and the label-only output needs ~20 tokens per
+sentence, a quarter of the cap for the longest draft, with label counts
+matching sentence counts everywhere. Both remain latent defects and are
+fixed at C37.2. The grader's real error here is 2 labels of 15.
+
+**2026-11-26 — C37.1. gpt-oss's dagger citations; lost citations made
+visible; explicit re-runs.**
+
+**What broke.** A03's delivered draft cited as `【P09†L1-L3】` — gpt-oss's
+trained browsing-tool citation form (full-width brackets, a cursor, a dagger,
+a line range). C27.4's normaliser knew `【P09】` but not the locator suffix.
+All 12 citations stayed plain text (the trace said `unparsed_citations: 12`;
+the record said nothing), the critic saw eight uncited claims, and the run
+was **ANSWERED at score 1.00 with 0 of 8 claims verified** — the heuristic
+resolved every core sub-question on retrieval sufficiency alone. The markup
+reached the user's report. One formatting habit, the C27.4 cascade again,
+in a sixth variant.
+
+**Fix.** A label may carry a locator introduced by a dagger, accepted as
+"anything up to the next separator or closing bracket" rather than as a list
+of known shapes — listing shapes is how this one was missed. Locators are
+dropped before ranges are read, so `L1-L3` never cites P01–P03.
+
+**Visibility.** `synthesis_log` (state, accumulating; one entry per
+synthesis: mode, passages cited, normalised, unparsed, invalid labels) is
+copied into every eval record, and `run_eval` prints a WARNING for any
+question whose synthesis lost citations — seen the day it happens, not at
+scoring. `scripts/probe_citations.py` re-reads committed records with the
+current normaliser (zero API calls): A03 12 label-shaped tokens → 0 after
+C37.1; no other record has any.
+
+**Explicit re-run** (`--rerun IDS --reason "…"`). A completed question is
+re-run on a new attempt and thread; deleting its record would not work,
+because the runner would resume the finished thread and return the old state.
+The record keeps what it replaced under `supersedes` (attempt, thread,
+decision, rule, score, reason). Refused on the test split — re-running a
+held-out question after seeing its result is choosing which result to report
+(system failures there are still re-run automatically). Only the named
+questions run in that invocation.
+
+**Which calibration runs are affected.** The user's trace grep: only A03
+(its second synthesis, 12 unparsed); every other synthesis in every
+calibration trace counted 0. A03 is re-run under C37.1; A05, A06, A09, A10
+stand — their drafts would normalise identically under the new code.
+
+**Not changed, deliberately.** The synthesizer still sees each passage cut
+at 900 characters mid-sentence (C30.1's class, on the writer's side). Trimming
+at sentence ends would remove facts that straddle the cut ("3.5 days" again),
+and any change there changes every draft and would force re-running every
+completed calibration question. Recorded as a limitation; overturn by
+changing `MAX_PASSAGE_CHARS` handling and re-running calibration.
+
+**For C33 (#14):** A03 is the sharpest evidence yet that run-level
+sufficiency must see verification — 0/8 verified and ANSWERED at 1.00.
+
+Tests: `tests/test_c37_1.py` (17). Mutation checks: reverting the locator in
+the group pattern fails 7 tests, including the A03 effect test (the critic
+sees passages); replacing the `synthesis_log` reducer with replacement
+semantics fails the two-synthesis graph test; removing the re-run bypass or
+the `supersedes` write each fails the re-run test.

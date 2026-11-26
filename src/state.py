@@ -35,6 +35,16 @@ Fields added at C27
                         curve sweeps over. A label alone cannot be
                         re-thresholded.
 
+Field added at C37.1
+--------------------
+    synthesis_log       one entry per synthesizer call: mode, passages cited,
+                        citations normalised, unparsed and invalid. Until
+                        C37.1 these counts lived only in the trace (which is
+                        gitignored), so a draft whose citations were all lost
+                        produced a record that looked normal. Accumulates:
+                        a run synthesizes more than once, and the draft B2/B3
+                        derive from is not always the last.
+
 On reducers
 -----------
 `evidence` and `contradictions` accumulate across retrieval rounds, so they
@@ -59,6 +69,7 @@ re-retrieval legitimately returns passages already in state.
 from __future__ import annotations
 
 import hashlib
+import operator
 import uuid
 from typing import Annotated, Any, Literal, Sequence, TypedDict
 
@@ -318,6 +329,7 @@ class ResearchState(TypedDict, total=False):
 
     draft: str
     draft_mode: str                      # "answer" | "partial" | "" (C27)
+    synthesis_log: Annotated[list[dict[str, Any]], operator.add]   # C37.1
     critic_findings: list[ClaimVerification]
     critiqued_draft: str                 # draft_digest of what the critic saw
     # C28.3. Whether the critic's LAST review failed (every model in the chain
@@ -391,6 +403,7 @@ def new_state(
         contradictions=[],
         draft="",
         draft_mode="",
+        synthesis_log=[],
         critic_findings=[],
         critiqued_draft="",
         critic_failed=False,

@@ -64,7 +64,9 @@ def single_shot_run(question: str, *, config: Config, thread_id: str, trace_id: 
         from src.nodes.synthesizer import Synthesizer
         synthesizer = Synthesizer(config)
     draft = synthesizer.synthesize(state)
+    from src.nodes.synthesizer import synthesis_entry
     state.update({"draft": draft.text, "draft_mode": "answer",
+                  "synthesis_log": [synthesis_entry(draft)],
                   "terminal_decision": "ANSWER" if draft.text else "ABSTAIN"})
     rule = "static_always_answer" if draft.text else "system_failure"
     state["decision"] = {"rule": rule, "score": None, "calibrated": False,

@@ -82,6 +82,7 @@ class RunResult:
     budget: Budget | None = None
     error: str | None = None
     node_visits: list[str] = field(default_factory=list)
+    resumed: str = ""          # "" fresh | "resumed" | "complete" (C32)
 
 
 def build_graph(
@@ -105,7 +106,7 @@ def build_graph(
     )
     builder = StateGraph(ResearchState)
     for name, action in nodes.items():
-        builder.add_node(name, _traced(name, action, tracer))
+        builder.add_node(name, _budgeted(_traced(name, action, tracer), budget))
 
     # Every node, and the entry point, routes through the controller.
     path_map = {name: name for name in nodes}
@@ -138,6 +139,27 @@ def _traced(name: str, action: Any, tracer: Any) -> Any:
     return wrapped
 
 
+def _budgeted(action: Any, budget: Any) -> Any:
+    """Write the budget's spend into state after every node (C32).
+
+    The checkpointer persists state, and only state. Until C32 the budget
+    lived outside it, so a resumed run began with its whole allowance again
+    (open item 2). Snapshotting after each node makes the checkpoint carry
+    what was spent, and `run_research(resume=True)` restores it.
+    """
+    if budget is None:
+        return action
+
+    def wrapped(state: dict) -> dict:
+        update = action(state) or {}
+        update = dict(update)
+        update["budget"] = budget.to_state()
+        return update
+
+    wrapped.__name__ = getattr(action, "__name__", "node")
+    return wrapped
+
+
 def _checkpointer(cfg: Config, enabled: bool) -> Iterator[Any]:
     if not enabled:
         return nullcontext(None)  # type: ignore[return-value]
@@ -157,12 +179,22 @@ def run_research(
     trace_id: str | None = None,
     checkpoint: bool = True,
     recursion_limit: int = DEFAULT_RECURSION_LIMIT,
+    resume: bool = False,
 ) -> RunResult:
     """Run one research question end to end.
 
-    `thread_id` identifies the run to the checkpointer. Passing the same one
-    again resumes rather than restarts — which is what makes an interrupted
-    eval cheap to continue (C32).
+    `thread_id` identifies the run to the checkpointer. With `resume=True`
+    and a checkpoint for that thread: an unfinished run continues from its
+    last completed node with its budget spend restored, and a finished run
+    is returned without running anything. Otherwise the run starts fresh.
+
+    Until C32 this docstring claimed that passing the same `thread_id` again
+    resumed. It did not: the graph was always invoked with a fresh initial
+    state, and LangGraph treats input on an existing thread as a new run
+    from START — every node re-run, and reducer fields (evidence, gaps,
+    contradictions) accumulated a second time. Resuming requires invoking
+    with None. C19's test and smoke did exactly that, directly on the graph,
+    so the gap in `run_research` was never exercised.
     """
     cfg = config or get_config()
     components = components or default_components(cfg)
@@ -189,7 +221,19 @@ def run_research(
                 "configurable": {"thread_id": thread_id or tracer.trace_id},
                 "recursion_limit": recursion_limit,
             }
-            result.state = graph.invoke(state, run_config)
+            snapshot = graph.get_state(run_config) if (resume and saver is not None) else None
+            if snapshot is not None and snapshot.values:
+                saved = dict(snapshot.values)
+                if not snapshot.next:
+                    result.state = saved            # already finished
+                    result.resumed = "complete"
+                else:
+                    budget.restore(saved.get("budget"),
+                                   plan_revisions=saved.get("plan_revisions", 0))
+                    result.resumed = "resumed"
+                    result.state = graph.invoke(None, run_config)
+            else:
+                result.state = graph.invoke(state, run_config)
     except Exception as exc:  # noqa: BLE001
         # A crashed run still has a trace and a partial state, and both are
         # worth more than a stack trace alone when annotating at C38.

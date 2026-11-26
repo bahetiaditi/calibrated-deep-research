@@ -225,10 +225,11 @@ def test_to_state_matches_budget_state_schema():
     b.spend("retrieval", 3)
     UniformAllocator().allocate(b, ["a"])
     state = b.to_state()
-    assert set(state) == {
-        "llm_calls_used", "llm_calls_max",
-        "retrieval_calls_used", "retrieval_calls_max", "allocation",
-    }
+    # Derived from the TypedDict, so the schema and the serialiser cannot
+    # drift apart silently (C32 added elapsed_s to both).
+    from src.state import BudgetState
+
+    assert set(state) == set(BudgetState.__annotations__)
     assert state["llm_calls_used"] == 2 and state["retrieval_calls_used"] == 3
 
 

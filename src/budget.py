@@ -185,14 +185,35 @@ class Budget:
         return (self.llm_calls_used + self.retrieval_calls_used) / caps if caps else 0.0
 
     def to_state(self) -> dict[str, Any]:
-        """Serialise into ResearchState['budget'] (§3.2 BudgetState)."""
+        """Serialise into ResearchState['budget'] (§3.2 BudgetState).
+
+        Written after every node since C32, so the checkpoint carries it.
+        """
         return {
             "llm_calls_used": self.llm_calls_used,
             "llm_calls_max": self.llm_calls_max,
             "retrieval_calls_used": self.retrieval_calls_used,
             "retrieval_calls_max": self.retrieval_calls_max,
             "allocation": dict(self.allocation),
+            "elapsed_s": round(self.elapsed_s(), 3),
         }
+
+    def restore(self, saved: dict[str, Any] | None, *, plan_revisions: int = 0) -> None:
+        """Continue a resumed run from the spend it had reached (C32).
+
+        Open item 2 since C27.1: the Budget object is not checkpointed, so a
+        resumed run started with its whole allowance again. The graph now
+        snapshots `to_state()` into state after every node; a resume reads it
+        back. Caps are NOT restored — they come from the configuration this
+        run was started with — only what was spent, and the clock.
+        """
+        saved = saved or {}
+        self.llm_calls_used = int(saved.get("llm_calls_used", 0) or 0)
+        self.retrieval_calls_used = int(saved.get("retrieval_calls_used", 0) or 0)
+        self.allocation = dict(saved.get("allocation") or {})
+        self.plan_revisions = max(self.plan_revisions, int(plan_revisions or 0))
+        elapsed = float(saved.get("elapsed_s", 0.0) or 0.0)
+        self._started = self._now() - elapsed
 
     def report(self) -> str:
         return (

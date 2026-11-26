@@ -204,6 +204,7 @@ class BudgetState(TypedDict):
     retrieval_calls_used: int
     retrieval_calls_max: int
     allocation: dict[str, int]     # sub_question_id -> calls granted (D4)
+    elapsed_s: float                  # wall clock spent; restored on resume (C32)
 
 
 # ---------------------------------------------------------------------------

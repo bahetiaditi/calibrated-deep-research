@@ -33,6 +33,15 @@ results/*
 !results/*.csv
 !results/*.png
 
+# Eval (C32): commit each question's result JSON and each manifest — they are
+# the evidence behind every reported number. Not the working state: the LLM
+# cache, checkpoints and traces are large and regeneratable.
+!results/eval/
+results/eval/cache/
+results/eval/traces/
+results/eval/checkpoints.sqlite*
+results/eval/**/*.tmp
+
 # ---- os / editor ----
 .DS_Store
 .vscode/

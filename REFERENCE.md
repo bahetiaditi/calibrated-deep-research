@@ -3535,8 +3535,8 @@ by how much it could distort a reported number.
 | # | item | source | blocks |
 |---|---|---|---|
 | 1 | ~~Contradiction scanning not wired.~~ **Wired at C28.5.** Remaining: the heuristic scorer does not read f5 (the calibrated stage 1 does); the synthesizer does not yet present disagreement as disagreement (§4.6's second payoff). | C27 → C28.5 | C33 (heuristic/stage 1), C29 (synthesis) |
-| 2 | **Resumed runs get their whole budget back.** The Budget object is not checkpointed and `state["budget"]` is written once, at run start. | C27.1 | C32 |
-| 3 | **Eval runner rules:** pin every role; fresh cache directory; re-run (not resume) `system_failure` runs. | C27.6, C27.7 | C32 |
+| 2 | ~~Resumed runs get their whole budget back.~~ **Closed C32.**| C27.1 | C32 |
+| 3 | ~~Eval runner rules.~~ **Closed C32.**| C27.6, C27.7 | C32 |
 | 4 | **Judgment budget:** ~30–45K tokens/question, ~4–6 runs/day pinned. Recommendation: pin gpt-oss-120b, measure on the first batch, then decide. | C27.6 | C32 |
 | 5 | **Claim ownership is by retrieval, not topic.** Live again in this run: sq3 `insufficient` with two SUPPORTED verdicts. Stage-1 labels inherit the disagreement; state it in the writeup. | C27.5 | C33 writeup |
 | 6 | **τ must be selected on the fitted model's scale.** At the placeholders a hard-regularised fit never answers. | C27 | C33 |
@@ -4218,3 +4218,67 @@ Phase 4 remains: C32, the resumable eval runners — and with them the
 runner rules accumulated in the open table (pin every role, fresh cache
 directory, re-run rather than resume `system_failure`, restore the budget on
 resume).
+
+**2026-11-26 — C32. The eval runners. `run_research` could not resume; now
+it can. Phase 4 complete pending the live check.**
+
+**Found first: `run_research` never resumed.** Its docstring said passing
+the same `thread_id` again "resumes rather than restarts". It always
+invoked the graph with a fresh initial state, and LangGraph treats input on
+an existing thread as a new run from START. Demonstrated on this LangGraph
+version (1.2.21) with a two-node graph: re-invoking a crashed thread *with*
+input re-ran the first node and accumulated reducer state twice
+(`['a', 'a', 'b']`); invoking with `None` resumed at the failed node. C19's
+test and smoke had resumed by calling `graph.invoke(None, …)` directly, so
+the gap in `run_research` was never exercised. For an eval that resumes by
+design, every interruption would have re-spent the question's quota and
+duplicated accumulated state.
+
+`run_research(resume=True)`: an unfinished thread restores its budget and
+continues with `invoke(None)`; a finished thread is returned without
+running anything; otherwise it starts fresh.
+
+**Open item 2 closed: the budget survives a resume.** The checkpointer
+persists state and only state; the budget lived outside it. Every node is
+now wrapped to write `budget.to_state()` into state after it runs
+(`_budgeted`), so the checkpoint carries the spend — and the wall clock
+(`elapsed_s`, added to `BudgetState`) — and `Budget.restore` reads it back.
+Caps are not restored; they come from the configuration.
+
+`tests/test_resume.py` crashes a run mid-graph and resumes it: only the
+failed node runs again, a node that writes a different gap per execution
+contributes exactly one, and the budget spend is restored rather than
+re-spent. With the resume branch disabled, all four resume-dependent tests
+fail. (Two first-draft tests passed without resume — evidence deduplicates
+by id, and a full re-run happens to spend the same amount — and were
+strengthened until they did not.)
+
+**The runner** (`src/eval/runner.py`; CLI `benchmark/run_eval.py`, with
+`run_agent` / `run_baselines` / `run_ablations` wrappers per §7.3) applies
+every rule the open table accumulated for C32, each tested:
+
+| rule | from |
+|---|---|
+| every role pinned; configurations differ only in their switches | C27.6, C27.7 |
+| a fresh LLM cache under the eval directory, never the development cache | C27.6 |
+| completed questions skipped; interrupted ones resumed on the same thread | §8 C32 |
+| `system_failure` results re-run on a new thread, not resumed | C27.6 |
+| the batch stops when a pinned model's day quota runs out | C28.3 live |
+| a directory started under other settings is refused (manifest) | — |
+| the test split needs `--held-out` and forces the calibrated scorer | C27, §6.3 |
+| one trace id per invocation (the tracer truncates by id) | C32 |
+
+**Configurations** (`src/eval/configs.py`) are override sets on one graph.
+Two decisions recorded there: **B1 keeps D5** — freezing it too would make
+B1 a second always-answer baseline, confounding the value of agency with
+the value of abstention, which B2 already isolates; and **B2 also turns off
+skip-research-on-refuted-premise**, or it "answers" refuted premises with no
+draft (C27 note). B0 and B3 are declared and refused by name until C34
+builds them.
+
+**What gets committed** (`.gitignore`, verified with a scratch repository):
+each question's result JSON and each manifest — the evidence behind every
+reported number. Not the cache, checkpoints or traces: large and
+regeneratable.
+
+Open table: items 2 (budget on resume) and 3 (runner rules) closed.

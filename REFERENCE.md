@@ -3548,6 +3548,7 @@ by how much it could distort a reported number.
 | 12 | D4 allocates without regard to `kind`. Decide with C33's data. | C27.8 | after C33 |
 | 13 | Nodes charge the budget only `if can_spend`, so calls after exhaustion go unrecorded rather than raising. | C27 | — |
 | 14 | **Calibrated stage 2 sees no critic evidence.** Add a run-level verification aggregate (not leaky at stage 2); decide which predictor it replaces. | C28.2 | C33 |
+| 15 | **f5 measures topic mismatch, not disagreement** (probe, C28.6). One passage "contradicted" four unrelated passages at 0.995–1.000. Rule to be chosen from probe v2's data (both-direction agreement and/or topical similarity). Until then the critic's contradiction flag receives false positives. | C28.6 | C33, and before trusting the critic flag |
 
 
 **2026-10-28 — C28. The finalizer and the full graph. Phase 3 complete once the live run confirms it.**
@@ -3882,3 +3883,45 @@ calibrated stage 1 does), and the synthesizer does not yet present
 disagreement as disagreement (§4.6's second payoff). Both are recorded on
 the row rather than built now; the probe's result decides whether f5 is
 worth building on.
+
+
+**2026-11-16 — C28.6. The contradiction probe passed for the wrong reason.
+f5, as built at C12, measures topic mismatch. Recorded; rule to be chosen
+from data.**
+
+`scripts/probe_contradiction.py` v1 compared f5 on contested queries with a
+consensus control and printed OK — 0.533 against 0.000. Reading the pairs
+showed the 0.533 was false. All six top hits on the LoRA-rank query share one
+side, the thinkingmachines passage "We varied the LoRA rank over three orders
+of magnitude…", scored as contradicting — at 0.995 to 1.000 — a methods
+paragraph about XLM-RoBERTa training techniques, a glossary bullet list
+("Multi-persona chatbots, Role-specific agents…"), an explainer on what rank
+means, and a rule of thumb for alpha. None of them disagrees with it; they
+are about different things. **A passage that contradicts everything around
+it is a hub**: NLI heads trained on MNLI have no "unrelated" class, and a
+change of subject is often labelled contradiction. The scaling-law query's
+hits were more plausible but not clean (a page's TL;DR header against a
+Gopher-sizing sentence at 0.932). The control passed, but its near-misses
+(0.58, 0.51) were between passages that agree.
+
+This is the recorded pattern at its most literal: the probe's own summary
+line — the number — said OK, and only the instruction printed beneath it,
+"read the pairs, not only the rates", caught it. C12's docstring already
+named passage-level NLI on 400-character windows as a limitation; it did not
+foresee that unrelated pairs would score *highest*.
+
+**Not fixed yet, deliberately.** Two candidate filters, each principled:
+two passages can only disagree about something they are both about
+(topical similarity between the windows the NLI model sees), and a real
+disagreement should hold in both directions (the detector takes the *max*
+of the two directions; requiring the *min* removes one-directional
+artifacts). Probe v2 measures both per pair — P(contradiction) each way and
+bge cosine similarity — reports f5 under four candidate rules across three
+contested queries and two controls, and flags hubs automatically, so this
+failure cannot hide behind a good-looking rate again. The rule is chosen
+from that run, not from intuition.
+
+**Consequence until then:** the critic's contradiction flag (C23), wired
+live by C28.5, receives these false positives — a claim citing the hub
+passage is presented to the critic as "contradicted by another source".
+Open item 15.

@@ -1,25 +1,34 @@
 #!/usr/bin/env python3
-"""Run the real NLI contradiction scan on real retrieved passages.
+"""Measure the real NLI contradiction scan on real passages — and choose f5's rule.
 
     python -m scripts.probe_contradiction
     python -m scripts.probe_contradiction "your query"
 
-ZERO API calls: hybrid retrieval, cross-encoder rerank and NLI all run
-locally. Written at C28.5, when contradiction scanning was first wired into
-the graph. The unit tests use a fake NLI model; this is the only check of
-the real checkpoint's behaviour on real text — label order, the 0.60
-threshold, and whether a 400-character window carries enough of a claim to
-judge (the limitation the detector's docstring records).
+ZERO API calls: retrieval, rerank, embeddings and NLI all run locally.
 
-Scores EVERY cross-source pair (threshold 0 internally) and marks those at
-or above the configured threshold, so near-misses are visible too. Three
-queries: two where the corpus plausibly disagrees, and a consensus control.
-If the control scores as high as the contested ones, f5 is measuring NLI
-noise, not disagreement — and that must be known before C33 fits on it.
+History. v1 (C28.5) compared f5 on contested queries against a consensus
+control and printed "OK": 0.533 against 0.000. Reading the pairs showed the
+0.533 was false. One passage ("We varied the LoRA rank over three orders of
+magnitude…") "contradicted" a methods paragraph about XLM-RoBERTa, a glossary
+bullet list, an explainer on what rank is, and a rule of thumb for alpha —
+all at 0.995–1.000. None disagrees with it; they are about different things.
+A passage that contradicts everything is a HUB: NLI models trained on MNLI
+have no "unrelated" class, and often call a change of subject a
+contradiction. The rate comparison passed for the wrong reason.
+
+v2 measures what a rule needs, per pair:
+  ab, ba   P(contradiction) in each direction (the detector takes the max)
+  sim      cosine similarity of the two windows the NLI model sees (bge)
+and reports f5 under candidate rules, plus a hub check. Two passages can
+only disagree about something they are both about — that is what `sim`
+tests. A real disagreement should also hold in both directions — `min`.
 """
 from __future__ import annotations
 
+import itertools
+import math
 import sys
+from collections import Counter
 from pathlib import Path
 
 from src.config import get_config
@@ -28,19 +37,29 @@ RED, GREEN, YELLOW, DIM, BOLD, RESET = (
     "\033[31m", "\033[32m", "\033[33m", "\033[2m", "\033[1m", "\033[0m"
 )
 COLLECTION = "retrieval_eval"
+THRESHOLD = 0.60
 
 CASES = [
-    ("What LoRA rank is needed for fine-tuning to match full fine-tuning?",
-     "contested"),
-    ("What is the compute-optimal ratio of training tokens to model parameters?",
-     "contested"),
+    ("What LoRA rank is needed for fine-tuning to match full fine-tuning?", "contested"),
+    ("Does LoRA match the performance of full fine-tuning?", "contested"),
+    ("What is the compute-optimal ratio of training tokens to model parameters?", "contested"),
     ("How does PagedAttention store the KV cache in memory?", "control"),
+    ("What does FlashAttention-2 change compared to FlashAttention?", "control"),
 ]
+
+# Candidate rules for "this pair contradicts". All use the 0.60 threshold.
+RULES = {
+    "R0 max (current)": lambda ab, ba, sim: max(ab, ba) >= THRESHOLD,
+    "R1 min (both directions)": lambda ab, ba, sim: min(ab, ba) >= THRESHOLD,
+    "R2 max & sim>=0.6": lambda ab, ba, sim: max(ab, ba) >= THRESHOLD and sim >= 0.6,
+    "R3 min & sim>=0.5": lambda ab, ba, sim: min(ab, ba) >= THRESHOLD and sim >= 0.5,
+}
 
 
 def wire(cfg):
     from qdrant_client import QdrantClient
 
+    from src.rag.embed import Embedder
     from src.rag.fusion import HybridRetriever
     from src.rag.rerank import Reranker
     from src.rag.sparse import BM25Index
@@ -53,65 +72,101 @@ def wire(cfg):
     records, _ = store.client.scroll(collection_name=COLLECTION, limit=10_000,
                                      with_payload=True)
     hybrid.sparse.build([dict(r.payload) for r in records if r.payload])
-    return hybrid, Reranker(cfg)
+    return hybrid, Reranker(cfg), Embedder(cfg)
 
 
-def snippet(p) -> str:
-    return " ".join((p.get("text") or "").split())[:150]
+def cosine(a, b) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    return dot / (na * nb) if na and nb else 0.0
+
+
+def short(text: str, n: int = 140) -> str:
+    return " ".join((text or "").split())[:n]
+
+
+def measure(passages, detector, embedder):
+    """Every cross-source pair: (a, b, ab, ba, sim)."""
+    from src.rag.contradiction import _contradiction_probability, _window
+
+    pairs = [(a, b) for a, b in itertools.combinations(passages, 2)
+             if a["source_id"] != b["source_id"]][: detector.max_pairs]
+    if not pairs:
+        return []
+    windows = {p["id"]: _window(p["text"]) for p in passages}
+    inputs = [(windows[a["id"]], windows[b["id"]]) for a, b in pairs]
+    inputs += [(y, x) for x, y in inputs]
+    raw = detector.model.predict(inputs)
+    index = detector.contradiction_index()
+    probs = [_contradiction_probability(r, index) for r in raw]
+    half = len(pairs)
+    vectors = dict(zip(windows, embedder.embed_documents(list(windows.values()))))
+    return [(a, b, probs[i], probs[i + half], cosine(vectors[a["id"]], vectors[b["id"]]))
+            for i, (a, b) in enumerate(pairs)]
 
 
 def main() -> int:
     from src.rag.contradiction import ContradictionDetector
 
     cfg = get_config()
-    threshold = float(cfg.get("retrieval.contradiction.contradiction_threshold", 0.6))
     top_k = int(cfg.get("retrieval.contradiction.scan_top_k", 8))
-    hybrid, reranker = wire(cfg)
-    # Threshold 0: every scored pair comes back with its score.
-    everything = ContradictionDetector(cfg.with_overrides(
-        {"retrieval.contradiction.contradiction_threshold": 0.0}))
-
+    hybrid, reranker, embedder = wire(cfg)
+    detector = ContradictionDetector(cfg)
     cases = [(sys.argv[1], "query")] if len(sys.argv) > 1 else CASES
-    rates: dict[str, list[float]] = {}
+    table: dict[str, dict[str, list[float]]] = {r: {} for r in RULES}
+
     for query, kind in cases:
         print(f"\n{BOLD}{'=' * 78}\n[{kind}] {query}{RESET}")
         results = reranker.rerank(query, hybrid.retrieve(query, top_k=30), top_k=top_k)
         passages = [r.passage for r in results]
-        by_id = {p["id"]: p for p in passages}
+        label = {p["id"]: chr(ord("A") + i) for i, p in enumerate(passages)}
         for p in passages:
-            print(f"  {DIM}{p['id']} {p.get('source_id', '')[:40]:<40} "
-                  f"{snippet(p)[:90]}{RESET}")
+            print(f"  {label[p['id']]} {DIM}{p.get('source_id', '')[:38]:<38} "
+                  f"{short(p['text'], 95)}{RESET}")
 
-        scan = everything.scan(passages, sub_question_id="probe")
-        if scan.failed:
-            print(f"  {RED}NLI failed: {scan.error}{RESET}")
-            return 1
-        hits = [r for r in scan.records if r.score >= threshold]
-        rate = len(hits) / scan.pairs if scan.pairs else 0.0
-        rates.setdefault(kind, []).append(rate)
-        print(f"\n  {scan.pairs} cross-source pairs scored; "
-              f"{len(hits)} at >= {threshold:.2f}  ->  f5 = {rate:.3f}")
-        for r in scan.records[:6]:
-            mark = f"{RED}CONTRADICTS{RESET}" if r.score >= threshold else f"{DIM}below{RESET}"
-            print(f"\n  {r.score:.3f} {mark}")
-            print(f"    A {by_id[r.passage_a].get('source_id', '')[:40]}: "
-                  f"{DIM}{snippet(by_id[r.passage_a])}{RESET}")
-            print(f"    B {by_id[r.passage_b].get('source_id', '')[:40]}: "
-                  f"{DIM}{snippet(by_id[r.passage_b])}{RESET}")
+        rows = measure(passages, detector, embedder)
+        if not rows:
+            print("  no cross-source pairs")
+            continue
 
-    if "contested" in rates and "control" in rates:
-        contested = max(rates["contested"])
-        control = max(rates["control"])
-        print(f"\n{BOLD}contested f5 max {contested:.3f}  vs  control f5 {control:.3f}{RESET}")
-        if control >= contested:
-            print(f"  {YELLOW}WARN{RESET} the control scores as high as the contested "
-                  f"questions — f5 may be measuring NLI noise")
-        elif control > 0.2:
-            print(f"  {YELLOW}WARN{RESET} the control's f5 is high in absolute terms")
-        else:
-            print(f"  {GREEN}OK{RESET} contested questions score above the control")
-    print("\nRead the pairs, not only the rates: a 'contradiction' between a "
-          "claim and an unrelated passage is a false positive whatever its score.\n")
+        for rule, test in RULES.items():
+            hits = sum(1 for _, _, ab, ba, sim in rows if test(ab, ba, sim))
+            table[rule].setdefault(kind, []).append(hits / len(rows))
+
+        hub = Counter()
+        for a, b, ab, ba, sim in rows:
+            if max(ab, ba) >= THRESHOLD:
+                hub[a["id"]] += 1
+                hub[b["id"]] += 1
+        r0_hits = sum(1 for _, _, ab, ba, _ in rows if max(ab, ba) >= THRESHOLD)
+        if r0_hits >= 3:
+            top_id, top_n = hub.most_common(1)[0]
+            if top_n >= 0.6 * r0_hits:
+                print(f"\n  {YELLOW}HUB{RESET} passage {label[top_id]} is in "
+                      f"{top_n} of {r0_hits} R0 hits — likely topic mismatch, "
+                      f"not disagreement")
+
+        print(f"\n  {len(rows)} pairs.  {'pair':<6}{'ab':>6}{'ba':>6}{'sim':>6}   "
+              f"R0 R1 R2 R3")
+        rows.sort(key=lambda r: max(r[2], r[3]), reverse=True)
+        for a, b, ab, ba, sim in rows[:8]:
+            marks = " ".join("x " if test(ab, ba, sim) else ". "
+                             for test in RULES.values())
+            print(f"  {label[a['id']]}-{label[b['id']]:<4}{ab:>6.2f}{ba:>6.2f}{sim:>6.2f}   {marks}")
+        for a, b, ab, ba, sim in rows[:3]:
+            if max(ab, ba) >= THRESHOLD:
+                print(f"\n  {label[a['id']]}-{label[b['id']]}  {DIM}{short(a['text'])}{RESET}")
+                print(f"  {' ' * 4}  {DIM}{short(b['text'])}{RESET}")
+
+    print(f"\n{BOLD}f5 by rule (mean over queries){RESET}")
+    print(f"  {'rule':<26}{'contested':>11}{'control':>9}")
+    for rule in RULES:
+        cont = table[rule].get("contested") or [0.0]
+        ctrl = table[rule].get("control") or [0.0]
+        print(f"  {rule:<26}{sum(cont)/len(cont):>11.3f}{sum(ctrl)/len(ctrl):>9.3f}")
+    print("\nA rule earns its place only if the pairs it keeps are ones a reader "
+          "would call a disagreement. Read the printed pairs before the table.\n")
     return 0
 
 

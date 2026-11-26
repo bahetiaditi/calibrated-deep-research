@@ -599,7 +599,7 @@
           ]
         },
         {
-          "claim": "A later report on Llama 3.1 found 4-bit models kept 98.9% accuracy on coding tasks and over 99% accuracy recovery on OpenLLM v1.",
+          "claim": "A later benchmark of quantized Llama 3.1 models reported minimal loss: 4-bit models kept 98.9% accuracy on coding tasks, and quantized models overall recovered over 99% of accuracy on OpenLLM v1.",
           "passage_ids": [
             "P5d7a9bf2b58f",
             "Pdf5312010d26"
@@ -772,7 +772,7 @@
           ]
         },
         {
-          "claim": "LoRA matches full finetuning when the required weight change is well represented by a low-rank update, implying tasks needing higher-rank changes may not be served by low rank.",
+          "claim": "Practitioner guidance says full finetuning's extra freedom may help for a large domain shift, extensive continued training, or a task where LoRA has hit a clear performance ceiling, but with a small dataset those extra degrees of freedom do not guarantee a better result.",
           "passage_ids": [
             "Paaefce55d766"
           ]
@@ -873,5 +873,17 @@
       ],
       "notes": "The corpus supports parity at the scales tested and hybrids in practice, not obsolescence."
     }
-  ]
+  ],
+  "review": {
+    "status": "reviewed",
+    "date": "2026-11-26",
+    "method": "every claim read against the full text of each cited passage, not only the sheet's best-matching sentence",
+    "corrected": [
+      "C08.2 (cited Mamba's genomics result for a language-modelling claim)",
+      "C02.1 (70B lacked a citation)",
+      "C05.1 ('on GPT-3' unstated)",
+      "B10.4 (aggregate >99% recovery attributed to 4-bit)",
+      "C05.3 (inference replaced by what the source says)"
+    ]
+  }
 }

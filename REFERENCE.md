@@ -4047,3 +4047,24 @@ that claim against its citation would have found it unsupported. C02.1 said
 C05.1 said "on GPT-3", which its passages do not state (dropped). The other
 13 low scorers were supported — tables and pseudocode share few words with
 prose. The hand review of the remaining claims stands.
+
+**2026-11-26 — C29 complete. Gold claims reviewed against full passages.**
+
+Every claim was read against the full text of each passage it cites — not
+only the review sheet's best-matching sentence, which under-represents
+tables, pseudocode and passages whose key sentence shares few words with
+the claim (B03.3's support, "our prediction results in a more performant
+model", was one sentence past the one the sheet showed). Five claims
+corrected in total: C08.2 cited Mamba's genomics result for a
+language-modelling claim; C02.1's "70B" lacked a citation; C05.1 said "on
+GPT-3", unstated; **B10.4 attributed a report's aggregate ">99% recovery"
+to 4-bit models specifically** — only the 98.9% coding figure is 4-bit's;
+and **C05.3 replaced an inference of mine with what the source actually
+says**: full finetuning may help for a large domain shift, extensive
+continued training, or a LoRA performance ceiling, and its extra freedom
+does not guarantee better results on small data. The review is recorded in
+`questions.json` (`review`) and stated at the top of the review sheet.
+
+Lesson for C30 and for grading at C37: a claim's support must be read in
+the passage, not inferred from a matched sentence — the same discipline the
+critic is held to.

@@ -115,7 +115,11 @@ def best_sentence(claim: str, text: str) -> str:
 
 
 def review_sheet(data, corpus) -> str:
-    out = ["# Gold-claim review (C29)", "",
+    review = data.get("review") or {}
+    status = (f"**Status: {review['status']} ({review.get('date', '')}).** "
+              f"{review.get('method', '')}. Corrected: {'; '.join(review.get('corrected', []))}."
+              if review else "**Status: not yet reviewed.**")
+    out = ["# Gold-claim review (C29)", "", status, "",
            "For each claim, check the quoted sentence actually supports it. "
            "Mark `[x]` to accept; edit or delete the claim in "
            "`benchmark/questions.json` otherwise, then re-run the checker.", ""]

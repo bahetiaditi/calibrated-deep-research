@@ -4033,3 +4033,17 @@ writeup.
 accessible sources — verify by hand". The review sheet makes that fast; the
 judgment is the author's, and C29 is final when every box is ticked or the
 claim fixed.
+
+**2026-11-26 — C29 pre-screen: one wrong citation found before review.**
+
+Scoring each claim against the best-matching sentence of its cited passages
+and reading the 16 weakest found one real error and two weak spots. **C08.2
+cited the wrong experiment**: the claim is Mamba's language-modelling result
+("the first attention-free model to match a strong Transformer++ recipe"),
+but the build script took the first Mamba passage mentioning Transformer++ —
+the *genomics* scaling result. Right paper, wrong evidence; a grader checking
+that claim against its citation would have found it unsupported. C02.1 said
+"70B" with a citation that only states the token count (citation added);
+C05.1 said "on GPT-3", which its passages do not state (dropped). The other
+13 low scorers were supported — tables and pseudocode share few words with
+prose. The hand review of the remaining claims stands.

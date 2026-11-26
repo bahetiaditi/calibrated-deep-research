@@ -650,7 +650,8 @@
         {
           "claim": "Chinchilla's compute-optimal result corresponds to about 20 tokens per parameter (70B parameters on 1.4 trillion tokens).",
           "passage_ids": [
-            "P1bff5a5e81b4"
+            "P1bff5a5e81b4",
+            "Pbcc634befd2e"
           ]
         },
         {
@@ -758,7 +759,7 @@
       "question": "Is a higher LoRA rank always better?",
       "gold_claims": [
         {
-          "claim": "The LoRA paper finds very low ranks suffice: on GPT-3 with Wq and Wv adapted, ranks from 1 to 64 perform similarly.",
+          "claim": "The LoRA paper finds very low ranks suffice: with Wq and Wv adapted, ranks from 1 to 64 perform similarly.",
           "passage_ids": [
             "Pe6bea725c65e",
             "P34a586c47048"
@@ -854,7 +855,7 @@
         {
           "claim": "Mamba is the first attention-free model to match a strong Transformer++ recipe, particularly as sequence length grows.",
           "passage_ids": [
-            "P29ef36493590"
+            "P04f458f89fcb"
           ]
         },
         {

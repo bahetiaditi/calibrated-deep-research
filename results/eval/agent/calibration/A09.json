@@ -1,0 +1,305 @@
+{
+  "id": "A09",
+  "tier": "A",
+  "subtype": null,
+  "split": "calibration",
+  "config": "agent",
+  "attempt": 0,
+  "thread_id": "agent:calibration:A09:a0",
+  "resumed": "",
+  "terminal_decision": "ANSWER",
+  "rule": "threshold",
+  "score": 1.0,
+  "calibrated": false,
+  "decision": {
+    "terminal": "ANSWER",
+    "rule": "threshold",
+    "score": 1.0,
+    "thresholds": {
+      "answer": 1.0,
+      "partial": 0.3333333333333333,
+      "source": "heuristic: all / any / none resolved"
+    },
+    "margin": 0.0,
+    "rationale": "Answered: score 1.00 >= tau_answer 1.00 (uncalibrated heuristic; 3 of 3 core sub-question(s) resolved, 1 background not scored).",
+    "scorer": "heuristic",
+    "calibrated": false,
+    "counterfactual": null,
+    "notes": [
+      "UNCALIBRATED: decided by the heuristic scorer, not a fitted model. Not reportable as a result of the abstention layer."
+    ],
+    "epistemic": true,
+    "adaptive": true,
+    "gaps": [],
+    "sub_questions": [
+      {
+        "id": "sq1",
+        "text": "What modifications does FlashAttention-2 introduce compared to the original FlashAttention algorithm?",
+        "status": "sufficient",
+        "included": true,
+        "kind": "core",
+        "resolved": true,
+        "p": null,
+        "features": {
+          "f1_max_rerank": 4.491268157958984,
+          "f2_mean_top3": 2.9631583591302237,
+          "f3_score_gap": 9.60103702545166,
+          "f4_independent_sources": 6.0,
+          "f5_contradiction_rate": 0.0,
+          "f6_entailment_strength": 0.8333333333333334,
+          "f7_premise_grounding": 1.0,
+          "f8_rounds_consumed": 1.0,
+          "f9_route_escalation": 0.5,
+          "f10_recency": 0.5797399041752225
+        },
+        "verdicts": [
+          "PARTIAL",
+          "SUPPORTED",
+          "SUPPORTED",
+          "PARTIAL",
+          "SUPPORTED",
+          "SUPPORTED"
+        ],
+        "note": ""
+      },
+      {
+        "id": "sq2",
+        "text": "What speedup does FlashAttention-2 report relative to FlashAttention, and how is it quantified (e.g., throughput, latency, FLOPs)?",
+        "status": "sufficient",
+        "included": true,
+        "kind": "core",
+        "resolved": true,
+        "p": null,
+        "features": {
+          "f1_max_rerank": 6.816176891326904,
+          "f2_mean_top3": 5.263242801030477,
+          "f3_score_gap": 14.496169090270996,
+          "f4_independent_sources": 6.0,
+          "f5_contradiction_rate": 0.0,
+          "f6_entailment_strength": null,
+          "f7_premise_grounding": 1.0,
+          "f8_rounds_consumed": 1.0,
+          "f9_route_escalation": 0.5,
+          "f10_recency": 0.5992470910335387
+        },
+        "verdicts": [],
+        "note": ""
+      },
+      {
+        "id": "sq3",
+        "text": "On which hardware platforms, model sizes, and sequence lengths were the speedup measurements for FlashAttention-2 obtained?",
+        "status": "sufficient",
+        "included": true,
+        "kind": "core",
+        "resolved": true,
+        "p": null,
+        "features": {
+          "f1_max_rerank": 6.182433128356934,
+          "f2_mean_top3": 4.661128441492717,
+          "f3_score_gap": 10.861652851104736,
+          "f4_independent_sources": 5.0,
+          "f5_contradiction_rate": 0.0,
+          "f6_entailment_strength": null,
+          "f7_premise_grounding": 1.0,
+          "f8_rounds_consumed": 1.0,
+          "f9_route_escalation": 0.5,
+          "f10_recency": 0.6266255989048597
+        },
+        "verdicts": [],
+        "note": ""
+      },
+      {
+        "id": "sq4",
+        "text": "According to Dao et al. (2022), what are the key design principles of FlashAttention and what are the individual computational steps (e.g., blockwise matrix multiplication, softmax computation, and output generation) used in the algorithm?",
+        "status": "abandoned",
+        "included": true,
+        "kind": "background",
+        "resolved": false,
+        "p": null,
+        "features": {
+          "f1_max_rerank": 3.5336365699768066,
+          "f2_mean_top3": 2.1519248882929483,
+          "f3_score_gap": 2.3285796642303467,
+          "f4_independent_sources": 15.0,
+          "f5_contradiction_rate": 0.0,
+          "f6_entailment_strength": 0.5,
+          "f7_premise_grounding": 1.0,
+          "f8_rounds_consumed": 3.0,
+          "f9_route_escalation": 1.0,
+          "f10_recency": 0.5797399041752225
+        },
+        "verdicts": [
+          "PARTIAL"
+        ],
+        "note": ""
+      }
+    ],
+    "run_features": {
+      "fraction_resolved": 1.0,
+      "premise_grounding": 1.0
+    },
+    "scorer_notes": [
+      "uncalibrated heuristic scorer",
+      "no fitted model at /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage1.joblib, /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage2.joblib"
+    ],
+    "error": null,
+    "withheld_draft": "",
+    "withheld_draft_mode": "",
+    "partial_rewrite": "not_needed"
+  },
+  "final_report": "# What changes does FlashAttention-2 make to the FlashAttention algorithm, and what speedup results?\n\n> **ANSWERED**\n> Evidence-sufficiency score 1.00 (heuristic)\n> _Uncalibrated: decided by the heuristic scorer, not a fitted model._\n\n## Answer\n\nFlashAttention‑2 revises the original FlashAttention pipeline by reshaping how work is divided among GPU resources. *[unverified]* First, the algorithm is altered to cut the number of non‑matrix‑multiply floating‑point operations, which were a dominant source of overhead in the earlier design [1]. *[partially supported]* Second, attention is parallelized across multiple thread blocks even when a single head is processed, raising occupancy and allowing more of the GPU’s compute units to stay busy [1]. Third, within each thread block the workload is spread among warps, which reduces the amount of data that must pass through shared memory and therefore lowers intra‑block communication costs [1].\n\nThese three engineering changes directly address the sub‑optimal work partitioning that limited the original FlashAttention to only 25‑40 % of the theoretical FLOPs / s on A100 GPUs and prevented it from matching the efficiency of dense GEMM kernels [2][3]. *[partially supported]* The original method relied on tiling and an online soft‑max to cut memory traffic, delivering 2‑4× wall‑clock speedups over baseline attention implementations but still falling short of GEMM performance [4]. *[partially supported]*\n\nBy applying the new partitioning strategy, FlashAttention‑2 doubles the effective throughput of the baseline FlashAttention implementation, achieving roughly a 2× speedup and reaching 50‑73 % of the theoretical maximum FLOPs / s on A100 hardware, which is close to the efficiency of optimized matrix‑multiply operations [1]. In end‑to‑end GPT‑style training this translates to up to 225 TFLOPs / s per A100 GPU, corresponding to a model‑level FLOPs utilization of about 72 % [1].\n\n## Verification\n\n4 of 8 claims are supported by the passages they cite.\n3 marked *partially supported*.\n1 marked *unverified*.\n\n## Sources\n\n[1] FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning — 2307.08691v1 — Abstract — 2023-07-17\n[2] FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning — 2307.08691v1 — Abstract — 2023-07-17\n[3] FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning — 2307.08691v1 — Abstract — 2023-07-17\n[4] FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning — 2307.08691v1 — 2023-07-17\n",
+  "critic_findings": [
+    {
+      "claim": "FlashAttention‑2 revises the original FlashAttention pipeline by reshaping how work is divided among GPU resources.",
+      "sub_question_id": "",
+      "cited_passage_ids": [],
+      "verdict": "UNSUPPORTED",
+      "reasoning": "no citation — nothing to verify the claim against | No sub-question or citation; retrieval not feasible",
+      "action_taken": "UNRESOLVED"
+    },
+    {
+      "claim": "First, the algorithm is altered to cut the number of non‑matrix‑multiply floating‑point operations, which were a dominant source of overhead in the earlier design [P4f463279a6c3].",
+      "sub_question_id": "sq1",
+      "cited_passage_ids": [
+        "P4f463279a6c3"
+      ],
+      "verdict": "PARTIAL",
+      "reasoning": "Citation confirms the algorithm reduces non‑matmul FLOPs but does not state they were the dominant source of overhead. | Evidence confirms reduction of FLOPs but not that they were the dominant overhead",
+      "action_taken": "HEDGE"
+    },
+    {
+      "claim": "Second, attention is parallelized across multiple thread blocks even when a single head is processed, raising occupancy and allowing more of the GPU’s compute units to stay busy [P4f463279a6c3].",
+      "sub_question_id": "sq1",
+      "cited_passage_ids": [
+        "P4f463279a6c3"
+      ],
+      "verdict": "SUPPORTED",
+      "reasoning": "Citation explicitly mentions parallelizing attention across thread blocks for a single head and increasing occupancy.",
+      "action_taken": "ACCEPT"
+    },
+    {
+      "claim": "Third, within each thread block the workload is spread among warps, which reduces the amount of data that must pass through shared memory and therefore lowers intra‑block communication costs [P4f463279a6c3].",
+      "sub_question_id": "sq1",
+      "cited_passage_ids": [
+        "P4f463279a6c3"
+      ],
+      "verdict": "SUPPORTED",
+      "reasoning": "Citation directly states work is distributed among warps to reduce shared‑memory communication.",
+      "action_taken": "ACCEPT"
+    },
+    {
+      "claim": "These three engineering changes directly address the sub‑optimal work partitioning that limited the original FlashAttention to only 25‑40 % of the theoretical FLOPs / s on A100 GPUs and prevented it from matching the efficiency of dense GEMM kernels [Pe2f66d5714a1][P3fc5de2a2483].",
+      "sub_question_id": "sq1",
+      "cited_passage_ids": [
+        "Pe2f66d5714a1",
+        "P3fc5de2a2483"
+      ],
+      "verdict": "PARTIAL",
+      "reasoning": "Citations verify the original FlashAttention achieved only 25‑40 % FLOPs/s and lagged behind GEMM, but they do not link this limitation to sub‑optimal work partitioning or to the three engineering changes. | Performance numbers verified, but causal link to work partitioning not supported",
+      "action_taken": "HEDGE"
+    },
+    {
+      "claim": "The original method relied on tiling and an online soft‑max to cut memory traffic, delivering 2‑4× wall‑clock speedups over baseline attention implementations but still falling short of GEMM performance [P0d052347f438].",
+      "sub_question_id": "sq4",
+      "cited_passage_ids": [
+        "P0d052347f438"
+      ],
+      "verdict": "PARTIAL",
+      "reasoning": "Citation confirms tiling, online soft‑max and 2‑4× speedup, but does not mention that the method still falls short of GEMM performance. | Sub-question abandoned and no source confirms the claim",
+      "action_taken": "UNRESOLVED"
+    },
+    {
+      "claim": "By applying the new partitioning strategy, FlashAttention‑2 doubles the effective throughput of the baseline FlashAttention implementation, achieving roughly a 2× speedup and reaching 50‑73 % of the theoretical maximum FLOPs / s on A100 hardware, which is close to the efficiency of optimized matrix‑multiply operations [P4f463279a6c3].",
+      "sub_question_id": "sq1",
+      "cited_passage_ids": [
+        "P4f463279a6c3"
+      ],
+      "verdict": "SUPPORTED",
+      "reasoning": "Citation reports a ~2× speedup, 50‑73 % FLOPs/s utilization and near‑GEMM efficiency for FlashAttention‑2.",
+      "action_taken": "ACCEPT"
+    },
+    {
+      "claim": "In end‑to‑end GPT‑style training this translates to up to 225 TFLOPs / s per A100 GPU, corresponding to a model‑level FLOPs utilization of about 72 % [P4f463279a6c3].",
+      "sub_question_id": "sq1",
+      "cited_passage_ids": [
+        "P4f463279a6c3"
+      ],
+      "verdict": "SUPPORTED",
+      "reasoning": "Citation reports up to 225 TFLOPs/s per A100 GPU and about 72 % model FLOPs utilization.",
+      "action_taken": "ACCEPT"
+    }
+  ],
+  "premise_check": {
+    "ran": true,
+    "presuppositions": [
+      {
+        "text": "FlashAttention-2 exists",
+        "centrality": "core",
+        "verdict": "SUPPORTED",
+        "reasoning": "Passages explicitly mention FlashAttention-2, confirming it exists.",
+        "correction": "",
+        "cited_passage_ids": [
+          "Pc3529585d6e9"
+        ]
+      },
+      {
+        "text": "FlashAttention-2 modifies the FlashAttention algorithm",
+        "centrality": "core",
+        "verdict": "SUPPORTED",
+        "reasoning": "The paper describes algorithmic tweaks and work‑partitioning changes in FlashAttention-2, showing it modifies the original FlashAttention algorithm.",
+        "correction": "",
+        "cited_passage_ids": [
+          "P4f463279a6c3"
+        ]
+      },
+      {
+        "text": "FlashAttention-2 yields a speedup compared to the original FlashAttention algorithm",
+        "centrality": "core",
+        "verdict": "SUPPORTED",
+        "reasoning": "Benchmark results state FlashAttention-2 is 1.7–3.0× faster than FlashAttention, indicating a speedup.",
+        "correction": "",
+        "cited_passage_ids": [
+          "P2f2c3398a8a8"
+        ]
+      }
+    ],
+    "grounding_score": 1.0,
+    "failed": false,
+    "correction": "",
+    "rationale": "all 3 presuppositions confirmed",
+    "error": null
+  },
+  "budget": {
+    "llm_calls_used": 13,
+    "llm_calls_max": 25,
+    "retrieval_calls_used": 14,
+    "retrieval_calls_max": 20,
+    "allocation": {},
+    "elapsed_s": 145.054
+  },
+  "node_visits": [
+    "premise_checker",
+    "planner",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "planner",
+    "retriever",
+    "retriever",
+    "retriever",
+    "planner",
+    "retriever",
+    "retriever",
+    "retriever",
+    "synthesizer",
+    "critic",
+    "critic_router",
+    "decider",
+    "finalizer"
+  ],
+  "trace_path": "/Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/eval/traces/agent-calibration-A09-a0-1795699349.jsonl",
+  "error": null,
+  "finished_at": "2026-11-26T13:24:54+00:00"
+}

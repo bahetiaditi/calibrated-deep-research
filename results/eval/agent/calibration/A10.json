@@ -1,0 +1,356 @@
+{
+  "id": "A10",
+  "tier": "A",
+  "subtype": null,
+  "split": "calibration",
+  "config": "agent",
+  "attempt": 0,
+  "thread_id": "agent:calibration:A10:a0",
+  "resumed": "",
+  "terminal_decision": "PARTIAL",
+  "rule": "threshold",
+  "score": 0.3333,
+  "calibrated": false,
+  "decision": {
+    "terminal": "PARTIAL",
+    "rule": "threshold",
+    "score": 0.3333,
+    "thresholds": {
+      "answer": 1.0,
+      "partial": 0.3333333333333333,
+      "source": "heuristic: all / any / none resolved"
+    },
+    "margin": 0.0,
+    "rationale": "Partial answer: score 0.33 is between tau_partial 0.33 and tau_answer 1.00 (uncalibrated heuristic; 1 of 3 core sub-question(s) resolved, 1 background not scored). Not established: How does vLLM ensure safe concurrent access to the shared KV cache when multiple samples o; How does vLLM handle updates to the KV cache when beams diverge during beam search, ensuri.",
+    "scorer": "heuristic",
+    "calibrated": false,
+    "counterfactual": null,
+    "notes": [
+      "UNCALIBRATED: decided by the heuristic scorer, not a fitted model. Not reportable as a result of the abstention layer."
+    ],
+    "epistemic": true,
+    "adaptive": true,
+    "gaps": [
+      "could not establish: How does vLLM ensure safe concurrent access to the shared KV cache when multiple samples or beams are processed in parallel?",
+      "could not establish: How does vLLM handle updates to the KV cache when beams diverge during beam search, ensuring that shared entries remain consistent?"
+    ],
+    "sub_questions": [
+      {
+        "id": "sq1",
+        "text": "What data structures does vLLM use to store the key and value (KV) cache for each transformer layer?",
+        "status": "abandoned",
+        "included": false,
+        "kind": "core",
+        "resolved": false,
+        "p": null,
+        "features": {
+          "f1_max_rerank": 2.025214433670044,
+          "f2_mean_top3": 1.5155073006947835,
+          "f3_score_gap": 1.8532429188489914,
+          "f4_independent_sources": 7.0,
+          "f5_contradiction_rate": 0.0,
+          "f6_entailment_strength": null,
+          "f7_premise_grounding": 1.0,
+          "f8_rounds_consumed": 2.0,
+          "f9_route_escalation": 1.0,
+          "f10_recency": 0.5992470910335387
+        },
+        "verdicts": [],
+        "note": "merged into sq2"
+      },
+      {
+        "id": "sq2",
+        "text": "How does vLLM allocate and index KV cache entries so that multiple parallel samples and beams can reference the same cached tokens?",
+        "status": "sufficient",
+        "included": true,
+        "kind": "core",
+        "resolved": true,
+        "p": null,
+        "features": {
+          "f1_max_rerank": 4.608572006225586,
+          "f2_mean_top3": 3.742077430089315,
+          "f3_score_gap": 2.7434606552124023,
+          "f4_independent_sources": 7.0,
+          "f5_contradiction_rate": 0.0,
+          "f6_entailment_strength": 0.5714285714285714,
+          "f7_premise_grounding": 1.0,
+          "f8_rounds_consumed": 3.0,
+          "f9_route_escalation": 1.0,
+          "f10_recency": 0.5992470910335387
+        },
+        "verdicts": [
+          "SUPPORTED",
+          "SUPPORTED",
+          "SUPPORTED",
+          "SUPPORTED",
+          "UNSUPPORTED",
+          "UNSUPPORTED",
+          "UNSUPPORTED"
+        ],
+        "note": ""
+      },
+      {
+        "id": "sq3",
+        "text": "How does vLLM ensure safe concurrent access to the shared KV cache when multiple samples or beams are processed in parallel?",
+        "status": "abandoned",
+        "included": true,
+        "kind": "core",
+        "resolved": false,
+        "p": null,
+        "features": {
+          "f1_max_rerank": 4.309131622314453,
+          "f2_mean_top3": 3.2118352254231772,
+          "f3_score_gap": 3.3017972707748413,
+          "f4_independent_sources": 12.0,
+          "f5_contradiction_rate": 0.0,
+          "f6_entailment_strength": null,
+          "f7_premise_grounding": 1.0,
+          "f8_rounds_consumed": 3.0,
+          "f9_route_escalation": 1.0,
+          "f10_recency": 0.5992470910335387
+        },
+        "verdicts": [],
+        "note": ""
+      },
+      {
+        "id": "sq4",
+        "text": "How does vLLM handle updates to the KV cache when beams diverge during beam search, ensuring that shared entries remain consistent?",
+        "status": "insufficient",
+        "included": true,
+        "kind": "core",
+        "resolved": false,
+        "p": null,
+        "features": {
+          "f1_max_rerank": 0.2732884883880615,
+          "f2_mean_top3": 0.17247609794139862,
+          "f3_score_gap": 0.7124003469944,
+          "f4_independent_sources": 7.0,
+          "f5_contradiction_rate": 0.0,
+          "f6_entailment_strength": null,
+          "f7_premise_grounding": 1.0,
+          "f8_rounds_consumed": 3.0,
+          "f9_route_escalation": 1.0,
+          "f10_recency": 0.5992470910335387
+        },
+        "verdicts": [],
+        "note": ""
+      },
+      {
+        "id": "sq5",
+        "text": "What performance improvements (e.g., reduced memory usage or faster inference) does vLLM report from sharing KV cache memory across parallel samples and beams?",
+        "status": "sufficient",
+        "included": true,
+        "kind": "background",
+        "resolved": true,
+        "p": null,
+        "features": {
+          "f1_max_rerank": 4.341094970703125,
+          "f2_mean_top3": 3.040930986404419,
+          "f3_score_gap": 2.7109044790267944,
+          "f4_independent_sources": 6.0,
+          "f5_contradiction_rate": 0.0,
+          "f6_entailment_strength": null,
+          "f7_premise_grounding": 1.0,
+          "f8_rounds_consumed": 3.0,
+          "f9_route_escalation": 1.0,
+          "f10_recency": 0.5992470910335387
+        },
+        "verdicts": [],
+        "note": ""
+      }
+    ],
+    "run_features": {
+      "fraction_resolved": 0.3333333333333333,
+      "premise_grounding": 1.0
+    },
+    "scorer_notes": [
+      "uncalibrated heuristic scorer",
+      "no fitted model at /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage1.joblib, /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage2.joblib"
+    ],
+    "error": null,
+    "withheld_draft": "vLLM reduces KV‑cache waste by treating the cache as a set of logical blocks that are mapped to physical memory pages, a design called PagedAttention that mirrors operating‑system paging [P0e0bee546fc5][P3367ea1ac7de]. When a request generates several output sequences—either through parallel sampling or beam search—the prompt portion of the cache is stored once as physical blocks and referenced by the logical blocks of every new sequence. In parallel sampling the system “forks’’ the original sequence, creating multiple child sequences that all point to the same prompt blocks; each iteration then “appends’’ a new token to each child while the shared prompt cache remains untouched [P34cd29a8ebec][Pbe8811fbeba5]. Because the prompt accounts for roughly 12 % of total KV memory, this sharing yields measurable savings [Pf50ce35e4c88].\n\nWhen a child sequence eventually needs to write into a block that is still shared, vLLM employs a copy‑on‑write scheme. The block engine tracks a reference count for each physical block; if the count exceeds one, a new physical block is allocated, the contents are copied, and the reference count is decremented [P402025ed7055]. The second sample can then write directly to the now‑exclusive block. This mechanism allows the majority of the prompt cache to stay shared while only the final logical block of each sample is duplicated, dramatically cutting memory use for long inputs [P402025ed7055][Pf50ce35e4c88].\n\nBeam search extends the same principle. All beams start from the same prompt and share its KV cache; as beams diverge, additional blocks are allocated only for the differing suffixes. Empirically, vLLM saves 6–10 % of KV blocks in parallel sampling and up to 55 % in beam search with a width of six, because beams can share larger portions of the cache than independent samples [P6fb6ea0c7fc7][Pf50ce35e4c88]. The centralized KV‑cache manager, shared by all GPU workers, maintains the logical‑to‑physical mapping so that each worker can access the same physical pages without redundant copies [P5c9f646ffa37][P98b2a98bf6c3]. Thus, vLLM’s combination of logical block abstraction, reference‑counted sharing, copy‑on‑write, and the fork/append/free workflow enables efficient KV‑cache sharing across both parallel samples and beam search.",
+    "withheld_draft_mode": "answer",
+    "partial_rewrite": "requested"
+  },
+  "final_report": "# How does vLLM share KV cache memory across parallel samples and beams?\n\n> **PARTIAL ANSWER — some parts of the question could not be established**\n> Evidence-sufficiency score 0.33 (heuristic)\n> _Uncalibrated: decided by the heuristic scorer, not a fitted model._\n\n## What the evidence establishes\n\nvLLM reduces KV‑cache memory by letting multiple output sequences reuse the same physical blocks that store the prompt’s key and value states. *[unverified]* The system represents the cache as logical KV blocks that are mapped to physical blocks managed by a single KV‑cache manager shared across all GPU workers [1]. *[partially supported]* When a request is decoded with parallel sampling, vLLM “forks’’ the original prompt sequence into several samples; each forked sequence initially points to the same physical blocks, so the prompt KV cache is shared [2][3]. As generation proceeds, new tokens are appended to each sample. *[unverified]* For tokens that belong to the shared prompt region, the existing physical blocks are read without duplication, while the newly generated KV entries are written into newly allocated physical blocks that are added to the block table [4].\n\nTo keep the shared region consistent, vLLM uses a copy‑on‑write scheme. *[unverified]* If a sample needs to modify the last logical block of the shared prompt, the manager checks the reference count of the underlying physical block; when the count exceeds one it allocates a fresh physical block, copies the data, and decrements the count, after which the sample writes its new KV entries to the private block [5]. The other sample can then continue writing directly to the original block because its reference count has dropped to one. *[unverified]* This mechanism enables most of the prompt KV cache to be shared across parallel samples, with only the final logical block being duplicated as needed [5][6].\n\nBeam search follows the same pattern: all beams start from a common prompt and therefore share its KV cache; as beams diverge, each creates its own physical blocks for newly generated tokens, yielding larger overall sharing (up to about 55 % memory saving) compared with independent sampling [7][6]. *[partially supported]*\n\nThe evidence does not establish how vLLM guarantees safe concurrent access to the shared KV cache when multiple samples or beams are processed in parallel, nor does it explain how updates are coordinated when beams diverge to keep shared entries consistent. These aspects remain unresolved because the cited sources provide no details on synchronization or consistency mechanisms for concurrent writes.\n\n## What could not be established\n\n- How does vLLM ensure safe concurrent access to the shared KV cache when multiple samples or beams are processed in parallel?\n- How does vLLM handle updates to the KV cache when beams diverge during beam search, ensuring that shared entries remain consistent?\n\n## Verification\n\n4 of 10 claims are supported by the passages they cite.\n2 marked *partially supported*.\n4 marked *unverified*.\n\n## Sources\n\n[1] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — Method — 2023-09-12\n[2] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n[3] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n[4] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n[5] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n[6] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n[7] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n",
+  "critic_findings": [
+    {
+      "claim": "vLLM reduces KV‑cache memory by letting multiple output sequences reuse the same physical blocks that store the prompt’s key and value states.",
+      "sub_question_id": "",
+      "cited_passage_ids": [],
+      "verdict": "UNSUPPORTED",
+      "reasoning": "no citation — nothing to verify the claim against | No supporting source found and retrieval budget is exhausted",
+      "action_taken": "UNRESOLVED"
+    },
+    {
+      "claim": "The system represents the cache as logical KV blocks that are mapped to physical blocks managed by a single KV‑cache manager shared across all GPU workers [P5c9f646ffa37].",
+      "sub_question_id": "sq2",
+      "cited_passage_ids": [
+        "P5c9f646ffa37"
+      ],
+      "verdict": "PARTIAL",
+      "reasoning": "Passage confirms a shared KV‑cache manager but does not explicitly describe logical‑to‑physical block mapping | Evidence confirms a shared manager but does not verify the logical‑to‑physical block mapping",
+      "action_taken": "HEDGE"
+    },
+    {
+      "claim": "When a request is decoded with parallel sampling, vLLM “forks’’ the original prompt sequence into several samples; each forked sequence initially points to the same physical blocks, so the prompt KV cache is shared [P34cd29a8ebec][Pbe8811fbeba5].",
+      "sub_question_id": "sq2",
+      "cited_passage_ids": [
+        "P34cd29a8ebec",
+        "Pbe8811fbeba5"
+      ],
+      "verdict": "SUPPORTED",
+      "reasoning": "Both cited passages describe forking into multiple samples that initially share the same physical blocks",
+      "action_taken": "ACCEPT"
+    },
+    {
+      "claim": "As generation proceeds, new tokens are appended to each sample.",
+      "sub_question_id": "",
+      "cited_passage_ids": [],
+      "verdict": "UNSUPPORTED",
+      "reasoning": "no citation — nothing to verify the claim against | Claim lacks any citation and cannot be verified with remaining resources",
+      "action_taken": "UNRESOLVED"
+    },
+    {
+      "claim": "For tokens that belong to the shared prompt region, the existing physical blocks are read without duplication, while the newly generated KV entries are written into newly allocated physical blocks that are added to the block table [P98b2a98bf6c3].",
+      "sub_question_id": "sq2",
+      "cited_passage_ids": [
+        "P98b2a98bf6c3"
+      ],
+      "verdict": "SUPPORTED",
+      "reasoning": "Cited passage explains reading existing blocks without duplication and allocating new physical blocks for new KV entries",
+      "action_taken": "ACCEPT"
+    },
+    {
+      "claim": "To keep the shared region consistent, vLLM uses a copy‑on‑write scheme.",
+      "sub_question_id": "",
+      "cited_passage_ids": [],
+      "verdict": "UNSUPPORTED",
+      "reasoning": "no citation — nothing to verify the claim against | No source confirms the copy‑on‑write scheme and retrieval is not possible",
+      "action_taken": "UNRESOLVED"
+    },
+    {
+      "claim": "If a sample needs to modify the last logical block of the shared prompt, the manager checks the reference count of the underlying physical block; when the count exceeds one it allocates a fresh physical block, copies the data, and decrements the count, after which the sample writes its new KV entries to the private block [P402025ed7055].",
+      "sub_question_id": "sq2",
+      "cited_passage_ids": [
+        "P402025ed7055"
+      ],
+      "verdict": "SUPPORTED",
+      "reasoning": "Passage details reference‑count check, allocation of a fresh block, copy, and decrement before writing",
+      "action_taken": "ACCEPT"
+    },
+    {
+      "claim": "The other sample can then continue writing directly to the original block because its reference count has dropped to one.",
+      "sub_question_id": "",
+      "cited_passage_ids": [],
+      "verdict": "UNSUPPORTED",
+      "reasoning": "no citation — nothing to verify the claim against | No evidence supports the reference‑count claim and no further retrieval can be done",
+      "action_taken": "UNRESOLVED"
+    },
+    {
+      "claim": "This mechanism enables most of the prompt KV cache to be shared across parallel samples, with only the final logical block being duplicated as needed [P402025ed7055][Pf50ce35e4c88].",
+      "sub_question_id": "sq2",
+      "cited_passage_ids": [
+        "P402025ed7055",
+        "Pf50ce35e4c88"
+      ],
+      "verdict": "SUPPORTED",
+      "reasoning": "Both passages affirm that most prompt KV cache is shared and only the final logical block is duplicated",
+      "action_taken": "ACCEPT"
+    },
+    {
+      "claim": "Beam search follows the same pattern: all beams start from a common prompt and therefore share its KV cache; as beams diverge, each creates its own physical blocks for newly generated tokens, yielding larger overall sharing (up to about 55 % memory saving) compared with independent sampling [P6fb6ea0c7fc7][Pf50ce35e4c88].",
+      "sub_question_id": "sq2",
+      "cited_passage_ids": [
+        "P6fb6ea0c7fc7",
+        "Pf50ce35e4c88"
+      ],
+      "verdict": "PARTIAL",
+      "reasoning": "Passages note increased sharing in beam search but do not specify the exact 55 % memory‑saving figure | Sources note increased sharing in beam search but do not substantiate the specific 55 % memory‑saving figure",
+      "action_taken": "HEDGE"
+    }
+  ],
+  "premise_check": {
+    "ran": true,
+    "presuppositions": [
+      {
+        "text": "vLLM shares KV cache memory across parallel samples and beams",
+        "centrality": "core",
+        "verdict": "SUPPORTED",
+        "reasoning": "P01 explicitly states that vLLM shares the KV cache for the prompt in parallel sampling and achieves greater sharing in beam search",
+        "correction": "",
+        "cited_passage_ids": [
+          "P6fb6ea0c7fc7"
+        ]
+      },
+      {
+        "text": "vLLM has KV cache memory",
+        "centrality": "core",
+        "verdict": "SUPPORTED",
+        "reasoning": "P05 describes a KV cache manager that manages KV cache memory, confirming its existence",
+        "correction": "",
+        "cited_passage_ids": [
+          "P38b4a927221a"
+        ]
+      },
+      {
+        "text": "vLLM supports parallel samples and beams",
+        "centrality": "core",
+        "verdict": "SUPPORTED",
+        "reasoning": "P01 and P09 show that vLLM handles parallel sampling and beam search, indicating support for parallel samples and beams",
+        "correction": "",
+        "cited_passage_ids": [
+          "P6fb6ea0c7fc7",
+          "P34cd29a8ebec"
+        ]
+      }
+    ],
+    "grounding_score": 1.0,
+    "failed": false,
+    "correction": "",
+    "rationale": "all 3 presuppositions confirmed",
+    "error": null
+  },
+  "budget": {
+    "llm_calls_used": 22,
+    "llm_calls_max": 25,
+    "retrieval_calls_used": 20,
+    "retrieval_calls_max": 20,
+    "allocation": {},
+    "elapsed_s": 274.663
+  },
+  "node_visits": [
+    "premise_checker",
+    "planner",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "planner",
+    "planner",
+    "retriever",
+    "retriever",
+    "retriever",
+    "synthesizer",
+    "critic",
+    "critic_router",
+    "decider",
+    "synthesizer",
+    "critic",
+    "critic_router",
+    "finalizer"
+  ],
+  "trace_path": "/Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/eval/traces/agent-calibration-A10-a0-1795699494.jsonl",
+  "error": null,
+  "finished_at": "2026-11-26T13:29:29+00:00"
+}

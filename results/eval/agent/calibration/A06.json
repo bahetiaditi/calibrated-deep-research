@@ -1,0 +1,206 @@
+{
+  "id": "A06",
+  "tier": "A",
+  "subtype": null,
+  "split": "calibration",
+  "config": "agent",
+  "attempt": 0,
+  "thread_id": "agent:calibration:A06:a0",
+  "resumed": "",
+  "terminal_decision": "ABSTAIN",
+  "rule": "threshold",
+  "score": 0.0,
+  "calibrated": false,
+  "decision": {
+    "terminal": "ABSTAIN",
+    "rule": "threshold",
+    "score": 0.0,
+    "thresholds": {
+      "answer": 1.0,
+      "partial": 0.5,
+      "source": "heuristic: all / any / none resolved"
+    },
+    "margin": 0.5,
+    "rationale": "Abstained: score 0.00 < tau_partial 0.50 (uncalibrated heuristic; 0 of 2 core sub-question(s) resolved, 1 background not scored). Not established: In the original Transformer \"base\" model described by Vaswani et al. (2017), how many atte; What were the findings of the ablation study that varied the number of attention heads in .",
+    "scorer": "heuristic",
+    "calibrated": false,
+    "counterfactual": null,
+    "notes": [
+      "UNCALIBRATED: decided by the heuristic scorer, not a fitted model. Not reportable as a result of the abstention layer."
+    ],
+    "epistemic": true,
+    "adaptive": true,
+    "gaps": [
+      "could not establish: What were the findings of the ablation study that varied the number of attention heads in the base Transformer?",
+      "could not establish: In the original Transformer \"base\" model described by Vaswani et al. (2017), how many attention heads are used in each multi‑head attention layer?"
+    ],
+    "sub_questions": [
+      {
+        "id": "sq1",
+        "text": "In the original Transformer \"base\" model described by Vaswani et al. (2017), how many attention heads are used in each multi‑head attention layer?",
+        "status": "sufficient",
+        "included": true,
+        "kind": "core",
+        "resolved": false,
+        "p": null,
+        "features": {
+          "f1_max_rerank": 7.443840980529785,
+          "f2_mean_top3": 6.199273109436035,
+          "f3_score_gap": 3.7627174854278564,
+          "f4_independent_sources": 18.0,
+          "f5_contradiction_rate": 0.0,
+          "f6_entailment_strength": 0.0,
+          "f7_premise_grounding": 0.75,
+          "f8_rounds_consumed": 2.0,
+          "f9_route_escalation": 1.0,
+          "f10_recency": 0.4801505817932923
+        },
+        "verdicts": [
+          "UNSUPPORTED"
+        ],
+        "note": "retrieval sufficient but entailment 0.00 < 0.5"
+      },
+      {
+        "id": "sq2",
+        "text": "What were the findings of the ablation study that varied the number of attention heads in the base Transformer?",
+        "status": "abandoned",
+        "included": true,
+        "kind": "core",
+        "resolved": false,
+        "p": null,
+        "features": {
+          "f1_max_rerank": 0.4925456941127777,
+          "f2_mean_top3": 0.1950357804695765,
+          "f3_score_gap": 0.8280763328075409,
+          "f4_independent_sources": 10.0,
+          "f5_contradiction_rate": 0.0,
+          "f6_entailment_strength": null,
+          "f7_premise_grounding": 0.75,
+          "f8_rounds_consumed": 2.0,
+          "f9_route_escalation": 1.0,
+          "f10_recency": 0.5797399041752225
+        },
+        "verdicts": [],
+        "note": ""
+      },
+      {
+        "id": "sq3",
+        "text": "What is an ablation study in the context of evaluating Transformer model components?",
+        "status": "insufficient",
+        "included": true,
+        "kind": "background",
+        "resolved": false,
+        "p": null,
+        "features": {
+          "f1_max_rerank": 0.8040691614151001,
+          "f2_mean_top3": -0.6511445542176565,
+          "f3_score_gap": 3.4363919496536255,
+          "f4_independent_sources": 12.0,
+          "f5_contradiction_rate": 0.0,
+          "f6_entailment_strength": null,
+          "f7_premise_grounding": 0.75,
+          "f8_rounds_consumed": 3.0,
+          "f9_route_escalation": 1.0,
+          "f10_recency": 0.5992470910335387
+        },
+        "verdicts": [],
+        "note": ""
+      }
+    ],
+    "run_features": {
+      "fraction_resolved": 0.0,
+      "premise_grounding": 0.75
+    },
+    "scorer_notes": [
+      "uncalibrated heuristic scorer",
+      "no fitted model at /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage1.joblib, /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage2.joblib"
+    ],
+    "error": null,
+    "withheld_draft": "The original “base” Transformer architecture employs eight parallel attention heads in each multi‑head attention layer [Pb6eeca1bdcd7]. The cited description specifies h = 8 heads, with each head using a dimensionality of dmodel/h = 64, yielding the same total computational cost as a single‑head full‑dimensional attention.\n\nThe provided evidence does not contain any reported results from an ablation study that varies the number of attention heads in the base model, so the effects of such a manipulation cannot be stated from the available sources.",
+    "withheld_draft_mode": "answer",
+    "partial_rewrite": "not_needed"
+  },
+  "final_report": "# How many attention heads does the base Transformer use, and what did the ablation on the number of heads show?\n\n> **NO ANSWER — the evidence does not support one**\n> Evidence-sufficiency score 0.00 (heuristic)\n> _Uncalibrated: decided by the heuristic scorer, not a fitted model._\n\n## Why there is no answer\n\nAbstained: score 0.00 < tau_partial 0.50 (uncalibrated heuristic; 0 of 2 core sub-question(s) resolved, 1 background not scored).\n\n**Not established:**\n\n- What were the findings of the ablation study that varied the number of attention heads in the base Transformer?\n- In the original Transformer \"base\" model described by Vaswani et al. (2017), how many attention heads are used in each multi‑head attention layer?\n",
+  "critic_findings": [
+    {
+      "claim": "The original “base” Transformer architecture employs eight parallel attention heads in each multi‑head attention layer [Pb6eeca1bdcd7].",
+      "sub_question_id": "sq1",
+      "cited_passage_ids": [
+        "Pb6eeca1bdcd7"
+      ],
+      "verdict": "UNSUPPORTED",
+      "reasoning": "the cited passage describes the authors' model, not the original base Transformer architecture | The sub‑question is clear and the claim is likely true; a different query should locate the original paper’s description. | retry: Vaswani 2017 \"base model\" \"number of attention heads\"",
+      "action_taken": "RE_RETRIEVE"
+    },
+    {
+      "claim": "The cited description specifies h = 8 heads, with each head using a dimensionality of dmodel/h = 64, yielding the same total computational cost as a single‑head full‑dimensional attention.",
+      "sub_question_id": "",
+      "cited_passage_ids": [],
+      "verdict": "UNSUPPORTED",
+      "reasoning": "no citation — nothing to verify the claim against | No sub‑question or citation is available, and without a target passage the claim cannot be verified.",
+      "action_taken": "UNRESOLVED"
+    }
+  ],
+  "premise_check": {
+    "ran": true,
+    "presuppositions": [
+      {
+        "text": "The base Transformer architecture includes attention heads",
+        "centrality": "core",
+        "verdict": "SUPPORTED",
+        "reasoning": "Passages describe the Transformer using multiple attention heads, e.g., multi‑head attention and the original model having 8 heads",
+        "correction": "",
+        "cited_passage_ids": [
+          "Pec91280db362",
+          "P435755508a2a"
+        ]
+      },
+      {
+        "text": "An ablation study on the number of attention heads for the base Transformer was conducted",
+        "centrality": "core",
+        "verdict": "UNVERIFIABLE",
+        "reasoning": "No passage reports an ablation study on the number of attention heads for the base Transformer",
+        "correction": "",
+        "cited_passage_ids": []
+      }
+    ],
+    "grounding_score": 0.75,
+    "failed": false,
+    "correction": "",
+    "rationale": "1 of 2 presuppositions confirmed, 1 unverified (f7=0.75)",
+    "error": null
+  },
+  "budget": {
+    "llm_calls_used": 14,
+    "llm_calls_max": 25,
+    "retrieval_calls_used": 12,
+    "retrieval_calls_max": 20,
+    "allocation": {},
+    "elapsed_s": 104.715
+  },
+  "node_visits": [
+    "premise_checker",
+    "planner",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "retriever",
+    "planner",
+    "retriever",
+    "planner",
+    "synthesizer",
+    "critic",
+    "critic_router",
+    "retriever",
+    "synthesizer",
+    "decider",
+    "finalizer"
+  ],
+  "trace_path": "/Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/eval/traces/agent-calibration-A06-a0-1795699243.jsonl",
+  "error": null,
+  "finished_at": "2026-11-26T13:22:29+00:00"
+}

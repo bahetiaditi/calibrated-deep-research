@@ -1,0 +1,13 @@
+{
+  "config": "agent",
+  "isolates": "the full system",
+  "overrides": {},
+  "pins": {
+    "llm.pin.judgment": "openai/gpt-oss-120b",
+    "llm.pin.mechanical": "openai/gpt-oss-20b"
+  },
+  "split": "calibration",
+  "split_hash": "708266628ff97636c41d50093666d898bf77076b5d4c0e8049fe825d7d707e21",
+  "scorer": "auto",
+  "started_at": "2026-11-26T13:04:42+00:00"
+}

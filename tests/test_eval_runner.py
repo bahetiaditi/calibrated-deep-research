@@ -167,10 +167,14 @@ def test_the_test_split_forces_the_calibrated_scorer(tmp_path):
     assert runner(tmp_path, FakeRun()).cfg.get("sufficiency.scorer") == "auto"
 
 
-def test_unbuilt_baselines_are_refused_by_name(tmp_path):
-    for name in ("B0", "B3"):
-        with pytest.raises(EvalRefused, match="C34"):
-            runner(tmp_path, FakeRun(), name=name)
+def test_derived_baselines_are_refused_by_the_runner(tmp_path):
+    """B3 is computed from the agent's runs, never run (C34)."""
+    with pytest.raises(EvalRefused, match="derive_baselines"):
+        runner(tmp_path, FakeRun(), name="B3")
+
+
+def test_b0_is_runnable(tmp_path):
+    assert runner(tmp_path, FakeRun(), name="B0").cfg is not None
 
 
 def test_an_unfrozen_split_is_refused(tmp_path):

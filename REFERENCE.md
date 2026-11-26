@@ -4316,3 +4316,51 @@ total waiting stays bounded; an unpinned chain still switches as before.
 
 The C32 acceptance check — interrupt, restart, completed questions skipped —
 is re-run after this commit.
+
+**2026-11-26 — Budget decision, and C34: the baselines.**
+
+**The paid tier is unavailable, so the eval stays on the free tier.** The
+first live run measured ~4–5 questions per day on one pinned gpt-oss-120b
+(200K TPD). Groq's Developer tier (~$0.15/$0.60 per million tokens; an
+estimated $3–10 for the whole remaining eval) would have compressed it to
+days, but upgrades were "temporarily unavailable due to high demand". The
+daily routine continues; the end is ~mid-January 2027. Noted for if the
+tier opens: the system sizes prompts to the TPM limit (C27.3), so raising
+the limit would change system behaviour mid-eval — the prompt budget must
+first become a fixed constant (planned as C32.2, not built).
+
+**C34. B2 and B3 are DERIVED from the agent's runs, not re-run.** Their
+pipelines are the agent's up to D5; only the decision differs. Re-running
+would re-sample every upstream call — and the same question has gone PARTIAL
+in one run and ABSTAIN in the next (C27.7) — so the comparison would carry
+run-to-run noise into exactly the difference it exists to measure. Derived,
+**the comparisons are paired**: same research, same evidence, same draft
+(a test asserts B2's output is the agent's draft byte for byte). It also
+saves ~10 quota-days.
+
+- **B2 (always answer):** the agent's critiqued *answer-mode* draft — for
+  an ANSWER, the final draft; for an ABSTAIN or a PARTIAL rewrite, the draft
+  the decision record withheld. No LLM call. Where the agent skipped research
+  on a refuted premise there is no draft, so B2 runs live under its own
+  configuration (which turns skipping off) — two such questions in the test
+  split.
+- **B3 (verbalized confidence):** the same draft, with D5's score replaced
+  by the pinned model's stated confidence in it — one judgment call per
+  question. It keeps the agent's hard rules (refuted premise, system failure,
+  no evidence): B3 swaps the *scorer*, not the policy. Its threshold is
+  chosen on the calibration split exactly as the calibrated model's is, so
+  the comparison is threshold-fair.
+- **B0 (single shot):** one retrieval over the frozen corpus (top 10), one
+  synthesis call, no planner, critic or decision. Runs through the same
+  runner, so it gets the same pinning, resumption and records.
+- **B1** was already a configuration (C32).
+
+Records now store the raw `draft` and `draft_mode` (the final report has
+already been rewritten with verification marks). The five agent records
+written before this commit are covered by reading their final state from the
+eval's checkpoint database. `benchmark/derive_baselines.py` is idempotent;
+the runner refuses B3 by name and points to it.
+
+**Phase 5 order, given this:** calibration runs (daily) → C33 fit and τ for
+the agent *and* B3 → freeze tag → test-split runs (agent, B0, B1, live B2,
+A1–A5) → derive B2/B3 on the test split → C37 scoring.

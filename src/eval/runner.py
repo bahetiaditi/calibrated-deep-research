@@ -84,6 +84,8 @@ def eval_config(base: Config, name: str, split: str, out_root: Path) -> Config:
         raise EvalRefused(f"unknown configuration {name!r}; known: {sorted(CONFIGS)}")
     if not spec.available:
         raise EvalRefused(f"{name} ({spec.isolates}) is not built yet — {spec.note}")
+    if spec.pipeline == "derived":
+        raise EvalRefused(f"{name} is not run; it is {spec.note}")
     overrides: dict[str, Any] = {
         **spec.overrides,
         **EVAL_PINS,
@@ -205,6 +207,10 @@ class EvalRunner:
         if self._run_fn is not None:
             return self._run_fn(question, config=self.cfg, thread_id=thread_id,
                                 trace_id=trace_id, resume=True)
+        if CONFIGS[self.name].pipeline == "single_shot":
+            from src.eval.baselines import single_shot_run
+            return single_shot_run(question, config=self.cfg, thread_id=thread_id,
+                                   trace_id=trace_id)
         from src.graph import run_research
 
         if self._components is None:
@@ -230,6 +236,11 @@ class EvalRunner:
             "calibrated": decision.get("calibrated"),
             "decision": decision,
             "final_report": state.get("final_report", ""),
+            # The raw draft and its mode (C34): B2/B3 are derived from the
+            # agent's answer-mode draft, which final_report has already
+            # rewritten with verification marks.
+            "draft": state.get("draft", ""),
+            "draft_mode": state.get("draft_mode", ""),
             "critic_findings": state.get("critic_findings", []),
             "premise_check": state.get("premise_check", {}),
             "budget": budget.to_state() if budget is not None else state.get("budget"),

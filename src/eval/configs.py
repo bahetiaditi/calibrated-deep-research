@@ -15,9 +15,10 @@ the five-way critic routing, and keeps D5 live.
 on, B2 "answers" a refuted premise with no draft at all — not an answer, a
 hole. Always-answer means the system researches and answers.
 
-B0 (single-shot) and B3 (verbalized confidence) need components that do not
-exist yet; they are declared so the runner can name them, and refused until
-C34 builds them.
+B0 runs its own single-shot pipeline. B2 and B3 are DERIVED from the
+agent's runs (src/eval/baselines.py explains why: paired comparisons). B2 is
+also a runnable graph configuration, used live only for questions where the
+agent skipped research on a refuted premise.
 """
 from __future__ import annotations
 
@@ -32,6 +33,10 @@ class EvalConfig:
     overrides: dict[str, Any] = field(default_factory=dict)
     available: bool = True
     note: str = ""
+    # graph: the full graph with overrides | single_shot: B0's one-call
+    # pipeline | derived: computed from the agent's runs, never run by the
+    # runner (benchmark/derive_baselines.py)
+    pipeline: str = "graph"
 
 
 _D1_D4_AND_ROUTING_OFF = {
@@ -45,14 +50,15 @@ _D1_D4_AND_ROUTING_OFF = {
 CONFIGS: dict[str, EvalConfig] = {c.name: c for c in [
     EvalConfig("agent", "the full system"),
     EvalConfig("B0", "value of the entire system (single-shot LLM + retrieval)",
-               available=False, note="built at C34"),
+               pipeline="single_shot"),
     EvalConfig("B1", "value of agency (D1-D4 and five-way routing frozen; D5 live)",
                dict(_D1_D4_AND_ROUTING_OFF)),
     EvalConfig("B2", "value of the abstention layer (always answer)",
                {"agency.d5_terminal_decision": False,
                 "agency.skip_research_on_failed_premise": False}),
     EvalConfig("B3", "value of calibration (verbalized confidence gates D5)",
-               available=False, note="built at C34"),
+               pipeline="derived",
+               note="derived from the agent's runs: benchmark.derive_baselines"),
     EvalConfig("A1", "D1 plan revision", {"agency.d1_plan_revision": False}),
     EvalConfig("A2", "D2 route and query", {"agency.d2_adaptive_route_and_query": False}),
     EvalConfig("A3", "D3 depth and stopping", {"agency.d3_adaptive_depth_and_stopping": False}),

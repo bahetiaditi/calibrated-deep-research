@@ -1,0 +1,15 @@
+You are judging your confidence in an answer to a research question.
+
+Question:
+{question}
+
+Answer (written from retrieved evidence; citations in brackets):
+{answer}
+
+How confident are you that this answer is correct and fully answers the
+question as asked? Consider whether the question rests on a false premise,
+is underspecified, or has no consensus answer — if so, a confident answer
+deserves LOW confidence.
+
+Respond with JSON only:
+{{"confidence": <integer 0-100>, "reason": "<one sentence>"}}

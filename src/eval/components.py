@@ -14,9 +14,28 @@ from src.config import Config
 COLLECTION = "retrieval_eval"
 
 
-def frozen_components(cfg: Config):
+def frozen_retrieval(cfg: Config):
+    """Hybrid retrieval + reranker over the frozen collection (C29)."""
     from qdrant_client import QdrantClient
 
+    from src.rag.fusion import HybridRetriever
+    from src.rag.rerank import Reranker
+    from src.rag.sparse import BM25Index
+    from src.rag.store import EvidenceStore
+
+    path = Path(cfg.get("retrieval.store.path")) / COLLECTION
+    store = EvidenceStore(cfg, client=QdrantClient(path=str(path)), collection=COLLECTION)
+    hybrid = HybridRetriever(cfg, store=store, sparse=BM25Index(cfg))
+    records, _ = store.client.scroll(collection_name=COLLECTION, limit=10_000, with_payload=True)
+    passages = [dict(r.payload) for r in records if r.payload]
+    if not passages:
+        raise RuntimeError(f"frozen corpus is empty at {path}; "
+                           f"run `python -m scripts.retrieval_labels build`")
+    hybrid.sparse.build(passages)
+    return hybrid, Reranker(cfg)
+
+
+def frozen_components(cfg: Config):
     from src.graph import Components
     from src.nodes.adaptive_retriever import AdaptiveRetriever
     from src.nodes.critic import Critic, critic_node
@@ -28,22 +47,9 @@ def frozen_components(cfg: Config):
     from src.nodes.retriever import StaticRetriever, retriever_node
     from src.nodes.synthesizer import Synthesizer, synthesizer_node
     from src.rag.contradiction import ContradictionDetector
-    from src.rag.fusion import HybridRetriever
-    from src.rag.rerank import Reranker
-    from src.rag.sparse import BM25Index
-    from src.rag.store import EvidenceStore
     from src.sufficiency.allocation import get_allocator
 
-    path = Path(cfg.get("retrieval.store.path")) / COLLECTION
-    store = EvidenceStore(cfg, client=QdrantClient(path=str(path)), collection=COLLECTION)
-    hybrid = HybridRetriever(cfg, store=store, sparse=BM25Index(cfg))
-    records, _ = store.client.scroll(collection_name=COLLECTION, limit=10_000, with_payload=True)
-    passages = [dict(r.payload) for r in records if r.payload]
-    if not passages:
-        raise RuntimeError(f"frozen corpus is empty at {path}; "
-                           f"run `python -m scripts.retrieval_labels build`")
-    hybrid.sparse.build(passages)
-    reranker = Reranker(cfg)
+    hybrid, reranker = frozen_retrieval(cfg)
     detector = ContradictionDetector(cfg)
 
     adaptive = bool(cfg.get("agency.d2_adaptive_route_and_query", True)

@@ -322,7 +322,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "Near-copy of the development smoke question (C27-C28); report results with and without it.",
+      "dev_exposed": true
     },
     {
       "id": "B02",
@@ -872,6 +873,266 @@
         }
       ],
       "notes": "The corpus supports parity at the scales tested and hybrids in practice, not obsolescence."
+    },
+    {
+      "id": "D1-01",
+      "tier": "D",
+      "subtype": "D1",
+      "question": "Why does LoRA add inference latency compared with adapter layers?",
+      "abstain_reason": "Inverts the paper: LoRA adds no inference latency; it is adapter layers that do.",
+      "expected_behavior": "Identify and correct the false premise.",
+      "correction": "LoRA's update can be merged into the weights (W = W0 + BA), so it adds no inference latency; adapter layers are the ones that add it.",
+      "refutation_passage_ids": [
+        "P0efddc1f0a3f",
+        "Pe8d5b646c220",
+        "P91995c1f3443"
+      ]
+    },
+    {
+      "id": "D1-02",
+      "tier": "D",
+      "subtype": "D1",
+      "question": "Why does FlashAttention-2 reach 73% of theoretical peak FLOPs on H100 GPUs?",
+      "abstain_reason": "The 73% figure is for A100 GPUs; on H100, FlashAttention-2 reaches only about 35% utilization.",
+      "expected_behavior": "Identify and correct the false premise.",
+      "correction": "FlashAttention-2 reaches up to 73% of peak on A100; on H100 its utilization is only about 35%.",
+      "refutation_passage_ids": [
+        "P39f68425d53e",
+        "P2f2c3398a8a8"
+      ]
+    },
+    {
+      "id": "D1-03",
+      "tier": "D",
+      "subtype": "D1",
+      "question": "Why did the Chinchilla authors conclude that model size should be scaled much faster than training data?",
+      "abstain_reason": "Chinchilla concluded the opposite of the premise: scale model size and tokens equally.",
+      "expected_behavior": "Identify and correct the false premise.",
+      "correction": "Chinchilla found model size and training tokens should be scaled in equal proportions; scaling model size faster was the earlier practice it argued against.",
+      "refutation_passage_ids": [
+        "Pbcc634befd2e",
+        "P6b4994dbafeb"
+      ]
+    },
+    {
+      "id": "D1-04",
+      "tier": "D",
+      "subtype": "D1",
+      "question": "Why must PagedAttention store each request's KV cache in contiguous memory?",
+      "abstain_reason": "PagedAttention exists precisely to store the KV cache in non-contiguous blocks.",
+      "expected_behavior": "Identify and correct the false premise.",
+      "correction": "PagedAttention stores KV blocks in non-contiguous physical memory, which is the point of its paged design.",
+      "refutation_passage_ids": [
+        "P1bf94a39c0a1",
+        "P8c27e92af85b"
+      ]
+    },
+    {
+      "id": "D1-05",
+      "tier": "D",
+      "subtype": "D1",
+      "question": "How does QLoRA update the weights of the 4-bit quantized base model during finetuning?",
+      "abstain_reason": "QLoRA keeps the quantized base model frozen; only the LoRA adapters are trained.",
+      "expected_behavior": "Identify and correct the false premise.",
+      "correction": "QLoRA backpropagates through a frozen 4-bit base model into LoRA adapters; the base weights are not updated.",
+      "refutation_passage_ids": [
+        "P45d9f67ab112",
+        "P58d6821b15e8"
+      ]
+    },
+    {
+      "id": "D2-01",
+      "tier": "D",
+      "subtype": "D2",
+      "question": "Is the newer attention kernel faster?",
+      "abstain_reason": "Names no kernel, no baseline, no hardware or sequence length.",
+      "expected_behavior": "Ask which kernels, compared on what, or answer only conditionally.",
+      "missing": [
+        "which kernel",
+        "compared with what",
+        "hardware and sequence length"
+      ]
+    },
+    {
+      "id": "D2-02",
+      "tier": "D",
+      "subtype": "D2",
+      "question": "What rank should I use?",
+      "abstain_reason": "No method, model, task or data size; 'rank' alone is not even tied to LoRA.",
+      "expected_behavior": "Ask for the method, model and task.",
+      "missing": [
+        "which method",
+        "which model",
+        "task and data size"
+      ]
+    },
+    {
+      "id": "D2-03",
+      "tier": "D",
+      "subtype": "D2",
+      "question": "How much memory does it save?",
+      "abstain_reason": "'It' has no referent.",
+      "expected_behavior": "Ask what 'it' refers to.",
+      "missing": [
+        "the technique 'it' refers to",
+        "the baseline it is compared with"
+      ]
+    },
+    {
+      "id": "D2-04",
+      "tier": "D",
+      "subtype": "D2",
+      "question": "Which model performs better on the benchmark?",
+      "abstain_reason": "Names neither the models nor the benchmark.",
+      "expected_behavior": "Ask which models and which benchmark.",
+      "missing": [
+        "which models",
+        "which benchmark and metric"
+      ]
+    },
+    {
+      "id": "D2-05",
+      "tier": "D",
+      "subtype": "D2",
+      "question": "What batch size did they use?",
+      "abstain_reason": "'They' has no referent; every paper in the corpus reports different batch sizes.",
+      "expected_behavior": "Ask which paper or experiment.",
+      "missing": [
+        "which paper or experiment"
+      ]
+    },
+    {
+      "id": "D3-01",
+      "tier": "D",
+      "subtype": "D3",
+      "question": "What is the single best LoRA rank for fine-tuning a 7B model?",
+      "abstain_reason": "Sources disagree on whether rank matters and give no single value.",
+      "expected_behavior": "Present the disagreement; decline a single number.",
+      "side_passage_ids": [
+        "Pe6bea725c65e",
+        "P85a370298db4",
+        "Pde14ada873fc",
+        "Paaefce55d766"
+      ]
+    },
+    {
+      "id": "D3-02",
+      "tier": "D",
+      "subtype": "D3",
+      "question": "What is the one correct number of training tokens per parameter for any LLM?",
+      "abstain_reason": "Chinchilla's ~20 is revised by inference-aware analysis and questioned by replication; no universal number.",
+      "expected_behavior": "Present the disagreement; decline a single number.",
+      "side_passage_ids": [
+        "P1bff5a5e81b4",
+        "Pe44e9ae00164",
+        "Pae18b42662f1"
+      ]
+    },
+    {
+      "id": "D3-03",
+      "tier": "D",
+      "subtype": "D3",
+      "question": "Which is the better fine-tuning method overall: LoRA or full fine-tuning?",
+      "abstain_reason": "Sources make it conditional on task, data and placement; there is no overall winner.",
+      "expected_behavior": "Present the conditions; decline to name a winner.",
+      "side_passage_ids": [
+        "Paaefce55d766",
+        "Pc250ff2653c3",
+        "P85a370298db4"
+      ]
+    },
+    {
+      "id": "D3-04",
+      "tier": "D",
+      "subtype": "D3",
+      "question": "Which architecture is better for language modelling: Mamba or the Transformer?",
+      "abstain_reason": "Parity at tested scales, recall-heavy tasks favour attention, shipping models are hybrids.",
+      "expected_behavior": "Present the trade-off; decline to name a winner.",
+      "side_passage_ids": [
+        "P37c05e216866",
+        "P5076483751c7",
+        "Pe4cda082558e"
+      ]
+    },
+    {
+      "id": "D3-05",
+      "tier": "D",
+      "subtype": "D3",
+      "question": "Exactly how much accuracy does quantizing a model to 4 bits cost?",
+      "abstain_reason": "It depends on data type and task: NF4 matches 16-bit, FP4 trails by a point, reports vary by task.",
+      "expected_behavior": "Present the dependence; decline a single number.",
+      "side_passage_ids": [
+        "P6bd971390235",
+        "P5d7a9bf2b58f"
+      ]
+    },
+    {
+      "id": "D4-01",
+      "tier": "D",
+      "subtype": "D4",
+      "question": "What throughput does vLLM achieve when serving Llama-3-70B on H100 GPUs?",
+      "abstain_reason": "The corpus has no vLLM measurement on H100.",
+      "expected_behavior": "State that the evidence does not contain it.",
+      "absence_patterns": [
+        [
+          "vLLM|PagedAttention",
+          "H100"
+        ]
+      ]
+    },
+    {
+      "id": "D4-02",
+      "tier": "D",
+      "subtype": "D4",
+      "question": "How many GitHub stars does the vLLM repository have today?",
+      "abstain_reason": "Time-dependent and absent from the corpus.",
+      "expected_behavior": "State that the evidence does not contain it and that it changes over time.",
+      "absence_patterns": [
+        [
+          "vLLM",
+          "\\bstars?\\b"
+        ]
+      ]
+    },
+    {
+      "id": "D4-03",
+      "tier": "D",
+      "subtype": "D4",
+      "question": "Which model currently holds the top score on the MMLU leaderboard?",
+      "abstain_reason": "'Currently' is time-dependent; the corpus has no leaderboard.",
+      "expected_behavior": "State that the evidence does not contain it and that it changes over time.",
+      "absence_patterns": [
+        [
+          "MMLU",
+          "leaderboard"
+        ]
+      ]
+    },
+    {
+      "id": "D4-04",
+      "tier": "D",
+      "subtype": "D4",
+      "question": "What tokens-per-parameter ratio will be recommended for models trained in 2028?",
+      "abstain_reason": "Asks about the future; nothing in the corpus can establish it.",
+      "expected_behavior": "State that it cannot be established.",
+      "absence_patterns": [
+        [
+          "\\b2028\\b"
+        ]
+      ]
+    },
+    {
+      "id": "D4-05",
+      "tier": "D",
+      "subtype": "D4",
+      "question": "What speedup does FlashAttention-4 report over FlashAttention-3?",
+      "abstain_reason": "FlashAttention-4 is absent from the corpus.",
+      "expected_behavior": "State that the evidence does not contain it.",
+      "absence_patterns": [
+        [
+          "FlashAttention-?4"
+        ]
+      ]
     }
   ],
   "review": {
@@ -885,5 +1146,8 @@
       "B10.4 (aggregate >99% recovery attributed to 4-bit)",
       "C05.3 (inference replaced by what the source says)"
     ]
-  }
+  },
+  "contamination_excluded": [
+    "'Why does Mamba interleave multi-head attention layers…' — the worked example inside the premise-verify prompt since C28.1; using it would test the system on its own prompt."
+  ]
 }

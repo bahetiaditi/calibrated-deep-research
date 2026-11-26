@@ -71,7 +71,19 @@ def mark(text: str) -> str:
 def main() -> int:
     cfg = get_config().with_overrides({"llm.pin.judgment": PIN})
     checker = wire(cfg)
-    cases = [(sys.argv[1], None)] if len(sys.argv) > 1 else CASES
+    if "--tier-d1" in sys.argv:
+        # C30: every benchmark false premise, which the corpus refutes by
+        # construction. A MISS here does not invalidate the item — it is
+        # still ill-posed — but it means the run will reach abstention, if
+        # at all, the slow way (research, then threshold) instead of by rule.
+        import json
+        questions = json.loads((Path(__file__).resolve().parents[1]
+                                / "benchmark" / "questions.json").read_text())["questions"]
+        cases = [(q["question"], "CONTRADICTED") for q in questions if q.get("subtype") == "D1"]
+    elif len(sys.argv) > 1:
+        cases = [(sys.argv[1], None)]
+    else:
+        cases = CASES
     misses = 0
 
     for question, expected in cases:

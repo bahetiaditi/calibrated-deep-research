@@ -4068,3 +4068,58 @@ does not guarantee better results on small data. The review is recorded in
 Lesson for C30 and for grading at C37: a claim's support must be read in
 the passage, not inferred from a matched sentence — the same discipline the
 critic is held to.
+
+**2026-11-26 — C30. Tier D: 20 should-abstain questions, each carrying the
+evidence that abstention is correct.**
+
+Five per sub-type (§6.1), mirroring AbstentionBench's taxonomy in this
+corpus's domain:
+
+- **D1 false premise.** Each premise is *refuted* by a corpus passage, not
+  merely absent from it — C27.1's constraint, now enforced. LoRA "adds
+  inference latency" (the paper: "unlike adapters, no additional inference
+  latency"); FlashAttention-2 "reaches 73% of peak on H100" (73% is A100;
+  Tri Dao's FlashAttention-3 post: "only 35% utilization … on the H100");
+  Chinchilla "scaled model size faster than data" (it says equally);
+  PagedAttention "must be contiguous" (non-contiguous is its point); QLoRA
+  "updates the 4-bit base weights" (frozen). Each item carries its
+  correction and refutation passages; all ten were read in full.
+- **D2 underspecified.** A missing referent or parameter the answer depends
+  on ("Is the newer attention kernel faster?", "What batch size did they
+  use?"), with the missing pieces listed. Chosen so the referent is absent,
+  not merely vague — "How many tokens should I train on?" was rejected
+  because a conditional Chinchilla answer would be defensible.
+- **D3 no consensus.** The corpus holds sides that do not reduce to one
+  answer (single best LoRA rank; one universal tokens-per-parameter ratio;
+  LoRA *or* full fine-tuning; Mamba *or* Transformer; exactly how much 4-bit
+  costs). Each cites sides from at least two sources. **Grading note for
+  C37:** several share topics with Tier C (C01, C02, C08, B10); the
+  difference is the demand — Tier C asks for the shape of a disagreement,
+  D3 asks for a winner where none exists. A D3 answer that presents the
+  disagreement and declines a single answer is *correct*, whether the
+  decision label is PARTIAL or ABSTAIN; committing to a winner is the error.
+- **D4 unresolvable.** Time-dependent or absent from the frozen corpus.
+  **Absence is verified, not asserted**: each item lists co-occurrence
+  patterns, and the checker fails if any passage matches all of them.
+  Keyword absence would have been wrong — "H100" and "MMLU" both appear in
+  the corpus, and "Llama 3" in six passages — so the vLLM item keys on vLLM
+  *and* H100 together.
+
+**Contamination, handled.** The Mamba-attention false premise is excluded:
+it is the worked example inside the premise-verify prompt (C28.1), and
+testing on it would test the system on its own prompt. B01 is a near-copy
+of the development smoke question and is tagged `dev_exposed`; results are
+reported with and without it. Both recorded in `questions.json`.
+
+The checker enforces the sub-type rules (correction and refutation for D1,
+missing pieces for D2, two-source sides for D3, verified absence for D4);
+the tests break each rule and confirm the checker catches it, including an
+absence claim keyed on "Mamba" — present in the corpus — being rejected.
+
+**Live check available:** `python -m scripts.probe_premise --tier-d1` runs
+the real premise checker on all five D1 items (~10 judgment calls). A miss
+does not invalidate an item, which is still ill-posed, but it means that
+run reaches abstention the slow way, if at all.
+
+Benchmark: 48 questions (A 10, B 10, C 8, D 20). C31 next: stratified
+24/24 splits, frozen and committed before any result exists.

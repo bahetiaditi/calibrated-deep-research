@@ -36,7 +36,8 @@ CORPUS = ROOT / "benchmark" / "retrieval_corpus.json"
 RETRIEVAL_QS = ROOT / "benchmark" / "retrieval_questions.json"
 SHEET = ROOT / "benchmark" / "review_questions.md"
 
-EXPECTED = {"A": 10, "B": 10, "C": 8}
+EXPECTED = {"A": 10, "B": 10, "C": 8, "D": 20}
+EXPECTED_D = {"D1": 5, "D2": 5, "D3": 5, "D4": 5}
 MIN_SOURCES = {"B": 2, "C": 2}
 OVERLAP_WARN = 0.5
 STOP = set("the a an of to in and or for on with what how does do is are by as at from "
@@ -74,8 +75,16 @@ def validate(data, corpus, retrieval_questions=()) -> tuple[list[str], list[str]
         if tiers.get(tier, 0) != n:
             errors.append(f"tier {tier}: {tiers.get(tier, 0)} questions, expected {n}")
 
+    subtypes = Counter(q.get("subtype") for q in questions if q.get("tier") == "D")
+    for sub, n in EXPECTED_D.items():
+        if subtypes.get(sub, 0) != n:
+            errors.append(f"Tier D {sub}: {subtypes.get(sub, 0)} questions, expected {n}")
+
     for q in questions:
         qid, tier = q.get("id"), q.get("tier")
+        if tier == "D":
+            errors += _validate_d(q, corpus)
+            continue
         claims = q.get("gold_claims") or []
         if not 3 <= len(claims) <= 5:
             errors.append(f"{qid}: {len(claims)} gold claims (need 3-5)")
@@ -102,6 +111,53 @@ def validate(data, corpus, retrieval_questions=()) -> tuple[list[str], list[str]
     return errors, warnings
 
 
+def _validate_d(q, corpus) -> list[str]:
+    """Tier D rules (C30). The object of study is abstention, so each item
+    must PROVE it should be abstained on — a Tier D question that turns out
+    answerable poisons the headline metric (§6.1, C30's check)."""
+    errors, qid, sub = [], q.get("id"), q.get("subtype")
+    for field in ("question", "abstain_reason", "expected_behavior"):
+        if not (q.get(field) or "").strip():
+            errors.append(f"{qid}: missing {field}")
+    if sub == "D1":
+        # A false premise must be REFUTED in the corpus, not merely absent —
+        # silence is UNVERIFIABLE by design (C15), and the hard rule cannot
+        # fire on it (C27.1).
+        if not (q.get("correction") or "").strip():
+            errors.append(f"{qid}: D1 needs a correction")
+        refs = q.get("refutation_passage_ids") or []
+        if not refs:
+            errors.append(f"{qid}: D1 needs refutation_passage_ids")
+        errors += [f"{qid}: refutation passage {pid} not in corpus" for pid in refs if pid not in corpus]
+    elif sub == "D2":
+        if not q.get("missing"):
+            errors.append(f"{qid}: D2 needs the list of what is missing")
+    elif sub == "D3":
+        sides = q.get("side_passage_ids") or []
+        errors += [f"{qid}: side passage {pid} not in corpus" for pid in sides if pid not in corpus]
+        if len({_source(corpus[pid]) for pid in sides if pid in corpus}) < 2:
+            errors.append(f"{qid}: D3 needs sides from at least 2 sources")
+    elif sub == "D4":
+        patterns = q.get("absence_patterns") or []
+        if not patterns:
+            errors.append(f"{qid}: D4 needs absence_patterns")
+        for group in patterns:
+            found = absent_violations(group, corpus)
+            if found:
+                errors.append(f"{qid}: corpus may answer it — {group} matches {found[:3]}")
+    else:
+        errors.append(f"{qid}: unknown Tier D subtype {sub!r}")
+    return errors
+
+
+def absent_violations(patterns, corpus) -> list[str]:
+    """Passages in which EVERY pattern matches: evidence the question might
+    be answerable after all."""
+    rx = [re.compile(pt, re.I) for pt in patterns]
+    return [pid for pid, p in corpus.items()
+            if all(r.search(" ".join((p.get("text") or "").split())) for r in rx)]
+
+
 def _source(passage) -> str:
     sid = passage.get("source_id") or ""
     m = re.search(r"(\d{4}\.\d{4,5})", sid)        # arXiv id, any version or URL form
@@ -124,6 +180,9 @@ def review_sheet(data, corpus) -> str:
            "Mark `[x]` to accept; edit or delete the claim in "
            "`benchmark/questions.json` otherwise, then re-run the checker.", ""]
     for q in data["questions"]:
+        if q["tier"] == "D":
+            out += _review_d(q, corpus)
+            continue
         out += [f"## {q['id']} (Tier {q['tier']}) — {q['question']}", ""]
         if q.get("notes"):
             out += [f"_{q['notes']}_", ""]
@@ -138,6 +197,27 @@ def review_sheet(data, corpus) -> str:
     return "\n".join(out) + "\n"
 
 
+def _review_d(q, corpus) -> list[str]:
+    out = [f"## {q['id']} (Tier D, {q['subtype']}) — {q['question']}", "",
+           f"- [ ] **Abstain because:** {q['abstain_reason']}",
+           f"- **Expected:** {q['expected_behavior']}"]
+    if q.get("correction"):
+        out.append(f"- **Correction:** {q['correction']}")
+        for pid in q.get("refutation_passage_ids") or []:
+            p = corpus.get(pid)
+            if p:
+                out.append(f"    - `{pid}` {_source(p)}: \"{best_sentence(q['correction'], p['text'])}\"")
+    if q.get("missing"):
+        out.append(f"- **Missing:** {', '.join(q['missing'])}")
+    for pid in q.get("side_passage_ids") or []:
+        p = corpus.get(pid)
+        if p:
+            out.append(f"    - side `{pid}` {_source(p)}: \"{best_sentence(q['question'] + ' ' + q['abstain_reason'], p['text'])}\"")
+    if q.get("absence_patterns"):
+        out.append(f"- **Verified absent:** no passage matches all of {q['absence_patterns']}")
+    return out + [""]
+
+
 def main() -> int:
     data, corpus, rqs = load()
     errors, warnings = validate(data, corpus, rqs)
@@ -147,7 +227,7 @@ def main() -> int:
         print(f"WARN    {w}")
     SHEET.write_text(review_sheet(data, corpus))
     n = len(data["questions"])
-    claims = sum(len(q["gold_claims"]) for q in data["questions"])
+    claims = sum(len(q.get("gold_claims") or []) for q in data["questions"])
     print(f"\n{n} questions, {claims} gold claims; {len(errors)} error(s), "
           f"{len(warnings)} warning(s). Review sheet: {SHEET.relative_to(ROOT)}")
     if errors or ("--strict" in sys.argv and warnings):

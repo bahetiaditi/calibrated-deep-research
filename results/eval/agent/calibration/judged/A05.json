@@ -1,0 +1,19 @@
+{
+  "coverage_delivered": [
+    "PRESENT",
+    "ABSENT",
+    "PRESENT"
+  ],
+  "coverage_answer": [
+    "PRESENT",
+    "PRESENT",
+    "PRESENT"
+  ],
+  "grounding": [
+    "SUPPORTED",
+    "SUPPORTED",
+    "SUPPORTED",
+    "UNSUPPORTED",
+    "UNSUPPORTED"
+  ]
+}

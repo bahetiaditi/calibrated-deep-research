@@ -806,8 +806,8 @@ Draft now, fill numbers only when they exist. **Every bracketed placeholder is c
 | 1 — RAG substrate | C6–C13 | ☑ | R1–R4 retrieval table generated |
 | 2 — Agentic core | C14–C22 | ☑ | Trace shows route escalation + query reformulation |
 | 3 — Verification & decision | C23–C28 (+C27.1–.9, C28.1–.4) | ☑ | System refuses a false-premise question correctly |
-| 4 — Benchmark | C29–C32 | ☐ | 48 questions frozen, splits committed, runners resumable |
-| 5 — Calibration & eval | C33–C37 | ☐ | All metrics computed on held-out test split |
+| 4 — Benchmark | C29–C32 (+C30.1, C32.1) | ☑ | 48 questions frozen, splits committed, runners resumable |
+| 5 — Calibration & eval | C33–C37 | ◐ C34, C37 code done; C33 runs in progress | All metrics computed on held-out test split |
 | 6 — Analysis & shipping | C38–C42 | ☐ | Writeup, README, demo, tests green |
 
 ---
@@ -4411,3 +4411,21 @@ the agreement rate is reported beside the metrics.
 `analysis/score.py` caches each judgment per question, so re-running costs
 nothing; `--no-judge` recomputes metrics from cached judgments. Output:
 `results/metrics_<split>.md` and `.json` (committed).
+
+**2026-11-26 — First scoring run; a suspect number; handoff written.**
+
+`analysis.score --split calibration --configs agent` ran end to end on the
+five decided calibration questions (pipeline check, not a result): A–C
+accuracy on answered 1.000, false abstention 0.200 (A06), coverage 0.917,
+**hallucination 0.484**, AURC 0.040, ECE 0.200, 15.3 LLM calls/question.
+
+**The hallucination rate is suspect, and probably the grader's.** The
+grounding judge sees each cited passage cut at 900 characters mid-sentence
+(341 of 982 passages are longer) — C30.1's defect class — and any sentence
+the judge leaves unlabelled defaults to UNSUPPORTED, so an output truncated
+at the judge's 1,024-token cap inflates the rate. Diagnose and fix before
+any score is trusted (HANDOFF.md, N1); a grading correction made before test
+results exist is legitimate under C37's rule, and will be recorded.
+
+Phase 4 ticked in §13. `HANDOFF.md` (repo root) consolidates state, open
+items, plan and timeline for continuing in a new conversation.

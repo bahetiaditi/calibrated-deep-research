@@ -1,0 +1,14 @@
+You are checking whether each sentence of a report is supported by the
+passages it cites. Judge each sentence against ITS OWN cited passages only.
+
+{items}
+
+For each sentence:
+- SUPPORTED: its cited passage(s) state it.
+- PARTIAL: they state part of it.
+- UNSUPPORTED: they do not state it, or it cites nothing yet makes a factual claim.
+- GAP: the sentence only says something could not be established (no claim).
+- NOT_A_CLAIM: a heading, transition or question, not a factual claim.
+
+Respond with JSON only:
+{{"sentences": [{{"i": <sentence number>, "label": "SUPPORTED|PARTIAL|UNSUPPORTED|GAP|NOT_A_CLAIM"}}]}}

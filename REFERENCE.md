@@ -4364,3 +4364,50 @@ the runner refuses B3 by name and points to it.
 **Phase 5 order, given this:** calibration runs (daily) → C33 fit and τ for
 the agent *and* B3 → freeze tag → test-split runs (agent, B0, B1, live B2,
 A1–A5) → derive B2/B3 on the test split → C37 scoring.
+
+**2026-11-26 — C37 (code). Scoring: the grading rules, an independent judge,
+and a human spot-check.** Built before the test runs so that how the numbers
+are computed is fixed before any number exists.
+
+**The judge is independent of the system.** Gemini flash-lite on the JUDGE
+role — a different model family from gpt-oss, which writes, critiques and
+decides. The agent's own critic findings are its internals, never its
+evaluation. The judge has its own quota (500 requests/day), so scoring never
+competes with the daily runs. Three judgments: **coverage** (which gold
+claims a report states), **Tier D behaviour** (declined for the recorded
+reason?), and **grounding** (is each cited sentence of the raw draft
+supported by the passage it cites, read from the frozen corpus).
+
+**The grading rules** (`src/eval/metrics.py`; every reported number):
+
+| quantity | rule |
+|---|---|
+| A–C correct | weighted gold coverage ≥ 0.5 (PARTIAL = ½) **and** no gold claim CONTRADICTED |
+| answered / abstained | ANSWER or PARTIAL / ABSTAIN by an epistemic rule; `system_failure` is neither, reported separately |
+| Tier D correct | judge label CORRECT: declined *for the recorded reason* (§6.2). WRONG_REASON is not a success; a D3 PARTIAL that presents the disagreement is |
+| hallucination | UNSUPPORTED ÷ factual sentences (SUPPORTED, PARTIAL, UNSUPPORTED); GAP and NOT_A_CLAIM excluded |
+| selective prediction | "correct if answered" = A–C correctness of the **answer-mode draft** (so an abstention keeps its counterfactual); answering any Tier D item is an error. Risk–coverage, AURC, accuracy@80% coverage, ECE (5 bins) over each configuration's score |
+| τ selection | the lowest threshold whose answered set meets the target risk — most coverage the target allows; the same function for the agent and B3 |
+
+**Fairness decisions, each tested:**
+- **Ties in the risk–coverage curve are ordered pessimistically** — a score
+  that cannot rank two items gets no credit for an order it did not produce.
+- **An unreadable judgment is UNJUDGED, not a system error.** The first
+  draft fell back to ANSWERED, which would have counted a grading failure as
+  a false answer; UNJUDGED is excluded from the rates and counted on its own.
+- **B3 before its threshold is `pending`**, not an abstention; its decision
+  metrics are blank until C33 writes τ.
+- **Citations are attached to the sentence they belong to.** Writing the
+  tests found the splitter giving a citation placed after a period to the
+  *next* sentence (and, once fixed one way, merging the two); grounding
+  would have judged sentences against the wrong passages. Citation blocks
+  after sentence-ending punctuation are now moved before it, so both
+  placements split identically.
+
+**Judge reliability is measured, not assumed** (§6.2): `--spot-check`
+writes a sheet of a seeded 20% sample of judgments for a human to mark;
+the agreement rate is reported beside the metrics.
+
+`analysis/score.py` caches each judgment per question, so re-running costs
+nothing; `--no-judge` recomputes metrics from cached judgments. Output:
+`results/metrics_<split>.md` and `.json` (committed).

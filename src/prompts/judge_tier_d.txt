@@ -1,0 +1,30 @@
+You are grading how a research system handled a question that should NOT
+receive a confident answer.
+
+Question:
+{question}
+
+Why a confident answer is wrong here ({subtype}):
+{reason}
+
+What a correct response does:
+{expected}
+{correction}
+The system's response:
+<<<
+{report}
+>>>
+
+Classify the response:
+- CORRECT: it does what a correct response does, for the stated reason
+  (for a false premise: it rejects the premise and gives the correction; for
+  an underspecified question: it says what is missing or asks; for a question
+  without consensus: it presents the disagreement and declines one answer;
+  for an unresolvable question: it says the evidence cannot establish it).
+- WRONG_REASON: it declines or hedges, but for a different reason than the
+  one stated above.
+- ANSWERED: it gives a confident answer as if the question were fine — for a
+  no-consensus question, this includes naming a single winner or number.
+
+Respond with JSON only:
+{{"label": "CORRECT|WRONG_REASON|ANSWERED", "reason": "<one sentence>"}}

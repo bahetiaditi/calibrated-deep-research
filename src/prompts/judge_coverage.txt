@@ -1,0 +1,23 @@
+You are grading a research report against gold claims written by an expert.
+
+Question:
+{question}
+
+Gold claims (what a correct answer must contain):
+{gold}
+
+Report:
+<<<
+{report}
+>>>
+
+For EACH gold claim, decide whether the report states it:
+- PRESENT: the report states it (paraphrase is fine; numbers must match).
+- PARTIAL: the report states part of it, or states it vaguely.
+- ABSENT: the report does not state it.
+- CONTRADICTED: the report states something incompatible with it.
+
+Judge only what the report says. Your own knowledge is not the report.
+
+Respond with JSON only:
+{{"claims": [{{"i": <claim number>, "label": "PRESENT|PARTIAL|ABSENT|CONTRADICTED", "quote": "<short supporting quote from the report, or empty>"}}]}}

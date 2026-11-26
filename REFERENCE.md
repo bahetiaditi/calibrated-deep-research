@@ -4123,3 +4123,53 @@ run reaches abstention the slow way, if at all.
 
 Benchmark: 48 questions (A 10, B 10, C 8, D 20). C31 next: stratified
 24/24 splits, frozen and committed before any result exists.
+
+**2026-11-26 — C30.1. The premise verifier was reading passages with their
+endings cut off. Found by the first live run of the benchmark's false
+premises.**
+
+`probe_premise --tier-d1` on the five false premises: four refuted
+correctly, by explicit evidence (LoRA "no additional inference latency";
+FlashAttention-2 "only about 35%" on H100; PagedAttention "not necessarily
+stored in contiguous space"; QLoRA's "frozen" base). The fifth, **D1-03**
+("Why did the Chinchilla authors conclude model size should be scaled much
+faster than training data?"), came back **SUPPORTED**, citing a passage from
+the Chinchilla paper's Related Work section.
+
+That passage, in full, describes Kaplan et al.'s methodology, says it
+"contributes to the conclusion that model size should increase faster than
+training data size", and ends: **"In contrast, our analysis predicts that
+both quantities should scale at roughly the same rate."** It refutes the
+premise in its last sentence. The verifier never saw that sentence: the
+premise checker cut every passage at 700 characters, and the cut fell
+inside it — "…In contrast, our analysis predicts that both quantities".
+What remained read as support. **63% of corpus passages exceed 700
+characters** (median 782), so the verifier has been reasoning over passages
+with their endings removed since C15. The C28.1 Mamba fix happened to work
+because its refuting phrase sat early in its passage.
+
+Two failures compounded — truncation, and attribution: the passage was in
+Related Work, and it reported *another paper's* conclusion. §4.2 predicted
+exactly that misattribution; the critic's prompt had a rule for it, the
+premise prompt did not.
+
+**Fixes.** (1) Evidence is fitted to the prompt budget (C27.3's
+`prompt_token_budget`) instead of cut at a fixed length: whole passages when
+they fit — the usual case at 8–13 passages — and otherwise trimmed **at a
+sentence boundary**, never mid-sentence, with a `[…]` marker the prompt
+explains ("a passage ending in […] continues; do not treat its last visible
+sentence as where it lands"). (2) An attribution rule in the premise prompt:
+a Related Work or Background passage often reports other authors'
+conclusions in order to disagree; a claim about what a paper's authors
+concluded is supported only where it is stated as their own finding, and a
+passage that reports a conclusion and then says "in contrast, we find…"
+contradicts it.
+
+Test: the real Chinchilla passage, rendered into the real verify prompt,
+now contains "should scale at roughly the same rate"; with the old
+700-character cut monkeypatched back in, the same test fails.
+
+**The benchmark did its job before a single eval run.** A Tier D item built
+to test the hard rule exposed a defect in the component the hard rule
+depends on — and one that had been silently affecting every premise check
+on long passages.

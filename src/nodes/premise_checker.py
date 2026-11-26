@@ -51,7 +51,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Sequence
 
 from src.config import Config, get_config
-from src.llm.provider import LLMProvider, Role
+from src.llm.provider import LLMProvider, Role, estimate_tokens
 from src.llm.structured import StructuredOutputError
 from src.prompts import render
 from src.state import Passage
@@ -71,7 +71,12 @@ _GROUNDING = {SUPPORTED: 1.0, UNVERIFIABLE: 0.5, CONTRADICTED: 0.0}
 
 MAX_PRESUPPOSITIONS = 4
 EVIDENCE_PER_PRESUPPOSITION = 4
-MAX_EVIDENCE_CHARS = 700
+# Fallback cap when no prompt budget is known. Not the normal path since
+# C30.1 — see `_fit_evidence`.
+MAX_EVIDENCE_CHARS = 1200
+# Never trim a passage below this, however many there are.
+MIN_EVIDENCE_CHARS = 400
+TRIM_MARKER = " […]"
 
 
 @dataclass
@@ -264,6 +269,50 @@ class PremiseChecker:
                 labelled.append((f"P{len(labelled) + 1:02d}", passage))
         return labelled
 
+    def _fit_evidence(
+        self,
+        question: str,
+        claims: str,
+        evidence: list[tuple[str, Passage]],
+    ) -> list[str]:
+        """Each passage's text for the verify prompt: whole if the budget
+        allows, otherwise trimmed at a sentence boundary (C30.1).
+
+        Until C30.1 every passage was cut at 700 characters, mid-sentence.
+        63% of corpus passages are longer (median 782). On the C30 live
+        probe, a Chinchilla passage describing Kaplan et al.'s conclusion
+        ("model size should increase faster than training data") and then
+        refuting it ("In contrast, our analysis predicts that both
+        quantities should scale at roughly the same rate") was cut inside
+        that last sentence. The verifier saw the description without the
+        refutation, called a false premise SUPPORTED, and cited the very
+        passage that refutes it.
+
+        Trimmed text ends in TRIM_MARKER, and the prompt says a passage so
+        marked continues — a fragment must not be read as a conclusion.
+        """
+        texts = [" ".join((p.get("text") or "").split()) for _, p in evidence]
+        if not texts:
+            return texts
+        budget = None
+        if hasattr(self.provider, "prompt_token_budget"):
+            budget = self.provider.prompt_token_budget(Role.JUDGMENT)
+        if budget is None:
+            cap = MAX_EVIDENCE_CHARS
+        else:
+            empty = render("premise_verify", question=question, claims=claims, evidence="")
+            overhead = estimate_tokens(
+                "You are a precise evidence checker. Output only JSON.", empty, 0)
+            headers = 60 * len(texts)     # label, source id, section per passage
+            available = max(0.0, (budget - overhead) * 3.5 * 0.95 - headers)
+            cap = max(MIN_EVIDENCE_CHARS, int(available // len(texts)))
+        out = [_trim_at_sentence(t, cap) for t in texts]
+        trimmed = sum(1 for a, b in zip(texts, out) if a != b)
+        if trimmed and self.tracer is not None:
+            self.tracer.note("premise_evidence_trimmed", passages=len(texts),
+                             trimmed=trimmed, cap_chars=cap)
+        return out
+
     def _verify(
         self,
         question: str,
@@ -273,11 +322,12 @@ class PremiseChecker:
         claims = "\n".join(
             f"[{i}] {p.text}" for i, p in enumerate(presuppositions)
         )
+        texts = self._fit_evidence(question, claims, evidence)
         rendered = "\n\n".join(
             f"{label} ({p.get('source_id', '?')}"
             f"{', ' + p['section'] if p.get('section') else ''})\n"
-            f"{(p.get('text') or '')[:MAX_EVIDENCE_CHARS]}"
-            for label, p in evidence
+            f"{text}"
+            for (label, p), text in zip(evidence, texts)
         )
         label_to_id = {label: p["id"] for label, p in evidence}
 
@@ -404,3 +454,21 @@ def premise_checker_node(checker: PremiseChecker):
 def _mean(values) -> float:
     values = list(values)
     return sum(values) / len(values) if values else 1.0
+
+
+def _trim_at_sentence(text: str, cap: int) -> str:
+    """Cut at the last sentence end within `cap`, never mid-sentence (C30.1).
+
+    A mid-sentence cut can invert a passage: "...contributes to the
+    conclusion that X. In contrast, our analysis predicts that both" reads
+    as support for X. Falls back to a word boundary only when no sentence
+    ends in the second half of the window.
+    """
+    if len(text) <= cap:
+        return text
+    window = text[:cap]
+    end = max(window.rfind(". "), window.rfind("? "), window.rfind("! "),
+              window.rfind(".\n"))
+    if end >= cap // 2:
+        return window[: end + 1] + TRIM_MARKER
+    return window.rsplit(" ", 1)[0] + TRIM_MARKER

@@ -30,6 +30,16 @@ judgment you make, and they are not interchangeable:
 Before answering UNVERIFIABLE, check every passage that describes the
 subject itself for a statement of what it does NOT contain.
 
+ATTRIBUTION (C30.1). A passage from a paper's Related Work or Background
+section often reports OTHER authors' conclusions, frequently in order to
+disagree with them. A claim about what a paper's authors concluded is
+SUPPORTED only by a passage stating it as their own finding. If the passage
+reports a conclusion and then says "in contrast, we find…", the passage
+CONTRADICTS a claim that the authors held the reported conclusion.
+
+A passage ending in "[…]" was trimmed and continues; do not treat its last
+visible sentence as where the passage lands.
+
 When in doubt between the two, choose UNVERIFIABLE. Calling silence a
 contradiction causes the system to refuse questions it could have answered.
 

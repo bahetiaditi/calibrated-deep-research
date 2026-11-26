@@ -68,6 +68,9 @@ llm:
     # A 429 is never retried on the same model — it switches. This bounds how
     # long we block on a minute-window limit before falling through.
     max_quota_wait_s: 90.0
+    # C32.1: per call, total minute-window waiting allowed when a role is
+    # pinned to one model (nothing to switch to). Ten minutes.
+    max_pinned_wait_s: 600
 
   roles:
     # Planner, critic, decider, synthesizer. Groq only, and now exclusively so:

@@ -431,6 +431,11 @@ class LLMProvider:
         self.initial_backoff = float(retry.get("initial_backoff_s", 2.0))
         self.backoff_multiplier = float(retry.get("backoff_multiplier", 2.0))
         self.retry_statuses = list(retry.get("retry_on_status", [500, 502, 503, 504]))
+        # Total minute-window waiting allowed per call when the role's chain
+        # is a single pinned model (C32.1).
+        self.max_pinned_wait_s = float(
+            self.cfg.get("llm.retry.max_pinned_wait_s", 600.0)
+        )
         self.max_quota_wait_s = float(
             self.cfg.get("llm.retry.max_quota_wait_s", 90.0)
         )
@@ -524,7 +529,12 @@ class LLMProvider:
 
             backoff = self.initial_backoff
             enforce_json = json_mode
-            for attempt in range(1, self.max_attempts + 1):
+            # A while loop so a pinned model's minute-window waits need not
+            # consume retry attempts (C32.1); see the "wait" branch.
+            attempt = 0
+            minute_waited = 0.0
+            while attempt < self.max_attempts:
+                attempt += 1
                 try:
                     text, prompt_tok, completion_tok = self._backend(spec.provider).complete(
                         spec, system, user, temperature, budget, enforce_json
@@ -574,6 +584,21 @@ class LLMProvider:
                         # the C27 smoke had both syntheses written by
                         # fallbacks, one by gpt-oss-20b.
                         wait = retry_after_seconds(exc) + 0.5
+                        # Pinned (a one-model chain, C27.6/7): there is
+                        # nothing to switch to, so "switching" after three
+                        # attempts just fails the call — and an eval run
+                        # under pinning waits on the minute window dozens of
+                        # times a question (C32 live: 30 waits in 2
+                        # questions). Minute waits then do not consume
+                        # attempts; a total cap per call bounds them.
+                        if (len(chain) == 1 and wait <= self.max_quota_wait_s
+                                and minute_waited + wait <= self.max_pinned_wait_s):
+                            log.warning("minute-window 429 on %s (pinned) — waiting %.1fs",
+                                        spec.model, wait)
+                            self._sleep(wait)
+                            minute_waited += wait
+                            attempt -= 1
+                            continue
                         if wait <= self.max_quota_wait_s and attempt < self.max_attempts:
                             log.warning("minute-window 429 on %s — waiting %.1fs",
                                         spec.model, wait)

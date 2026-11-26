@@ -56,8 +56,9 @@ def main(argv=None) -> int:
     if s.stopped_on_quota:
         print(f"  stopped at {s.stopped_on_quota}: a pinned model is out of day quota. "
               f"Run the same command after the reset (00:00 UTC).")
-    remaining = len(runner.questions) - len(s.done) - len(s.skipped)
-    print(f"  {remaining} question(s) remaining in this split")
+    remaining = runner.remaining()
+    print(f"  {len(remaining)} question(s) remaining in this split"
+          + (f": {', '.join(remaining)}" if 0 < len(remaining) <= 12 else ""))
     return 0
 
 

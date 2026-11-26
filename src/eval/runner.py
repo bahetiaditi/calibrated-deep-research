@@ -45,7 +45,12 @@ log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
 QUESTIONS = ROOT / "benchmark" / "questions.json"
-QUOTA_MARKERS = ("out of quota", "per day", "(tpd)", "(rpd)", "daily")
+# DAY-quota markers only (C32.1). "out of quota" was here, and it appears in
+# every chain-exhausted error — including a MINUTE-window failure on a pinned
+# model, which would have stopped the whole batch as if the day were gone.
+# These name the day explicitly: Groq's "(TPD)"/"(RPD)", Gemini's
+# "...PerDay...", and the local ledger's "tokens used today".
+QUOTA_MARKERS = ("per day", "(tpd)", "(rpd)", "perday", "used today")
 
 
 class EvalRefused(RuntimeError):
@@ -131,11 +136,15 @@ class EvalRunner:
         todo = [q for q in self.questions if not only or q["id"] in only]
         attempted = 0
         for q in todo:
+            # Completed questions are counted before the limit is checked: a
+            # limit counts ATTEMPTS. Until C32.1 the limit came first, so
+            # `--limit 0` reported nothing at all, not the completed ones.
+            if self._completed(q["id"]):
+                summary.skipped.append(q["id"])
+                continue
             if limit is not None and attempted >= limit:
                 break
             outcome = self._one(q, summary)
-            if outcome == "skipped":
-                continue
             attempted += 1
             if outcome == "quota":
                 summary.stopped_on_quota = q["id"]
@@ -144,15 +153,30 @@ class EvalRunner:
                 break
         return summary
 
+    def remaining(self) -> list[str]:
+        """Questions in this split without a successful result ON DISK.
+
+        From the files, not from one invocation's tallies: C32's CLI printed
+        "24 remaining" with 2 complete, because it subtracted only what that
+        invocation had done or skipped.
+        """
+        return [q["id"] for q in self.questions if not self._completed(q["id"])]
+
+    def _completed(self, qid: str) -> bool:
+        path = self.dir / f"{qid}.json"
+        if not path.exists():
+            return False
+        try:
+            return not _is_failure(json.loads(path.read_text()))
+        except (OSError, json.JSONDecodeError):
+            return False
+
     # -- one question ---------------------------------------------------------
 
     def _one(self, q: dict, summary: EvalSummary) -> str:
         qid = q["id"]
         path = self.dir / f"{qid}.json"
         previous = json.loads(path.read_text()) if path.exists() else None
-        if previous and not _is_failure(previous):
-            summary.skipped.append(qid)
-            return "skipped"
 
         attempt = (previous or {}).get("attempt", 0) + (1 if previous else 0)
         thread = f"{self.name}:{self.split}:{qid}:a{attempt}"

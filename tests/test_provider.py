@@ -666,3 +666,42 @@ def test_the_real_judgment_chain_has_room_for_a_prompt():
 
     budget = LLMProvider(get_config(reload=True)).prompt_token_budget(Role.JUDGMENT)
     assert budget is not None and 4000 < budget < 8000
+
+
+
+# --- C32.1: a pinned model waits out minute windows ------------------------
+
+
+def test_a_pinned_model_waits_past_the_attempt_limit(tmp_path):
+    """C32 live: 'minute-window 429 — switching' on a pinned chain had
+    nothing to switch to, and the critic's call failed. With one model,
+    minute waits do not consume attempts."""
+    minute = lambda: FakeStatusError(429, "tokens per minute (TPM) ... try again in 2s")
+    backend = FakeBackend(script=[minute(), minute(), minute(), minute(), '{"ok": true}'])
+    provider, backend, _, slept = build(tmp_path, backend=backend, pin={"judgment": "primary"})
+    provider._sleep = slept.append
+    resp = provider.complete("s", "u", role=Role.JUDGMENT)
+    assert resp.model == "primary"
+    assert len(slept) == 4
+
+
+def test_pinned_minute_waits_are_bounded_by_the_total_cap(tmp_path):
+    minute = lambda: FakeStatusError(429, "tokens per minute (TPM) ... try again in 50s")
+    backend = FakeBackend(script=[minute() for _ in range(30)])
+    provider, backend, _, slept = build(tmp_path, backend=backend, pin={"judgment": "primary"})
+    provider._sleep = slept.append
+    provider.max_pinned_wait_s = 120.0
+    with pytest.raises(Exception):
+        provider.complete("s", "u", role=Role.JUDGMENT)
+    # Pinned waits stop at the cap; the ordinary path then allows its usual
+    # (max_attempts - 1) waits before failing. Bounded either way.
+    bound = provider.max_pinned_wait_s + (provider.max_attempts - 1) * provider.max_quota_wait_s
+    assert sum(slept) <= bound
+
+
+def test_an_unpinned_chain_still_switches_after_its_attempts(tmp_path):
+    minute = lambda: FakeStatusError(429, "tokens per minute (TPM) ... try again in 2s")
+    backend = FakeBackend(script=[minute(), minute(), minute(), '{"ok": true}'])
+    provider, backend, _, slept = build(tmp_path, backend=backend)
+    provider._sleep = slept.append
+    assert provider.complete("s", "u").model == "secondary"

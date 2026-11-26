@@ -4282,3 +4282,37 @@ reported number. Not the cache, checkpoints or traces: large and
 regeneratable.
 
 Open table: items 2 (budget on resume) and 3 (runner rules) closed.
+
+**2026-11-26 — C32.1. Three defects from the first live eval run, fixed
+before the long calibration run.**
+
+The first live run completed two calibration questions under full pinning
+(30 minute-window waits on gpt-oss-120b, all handled). It also showed:
+
+**1. The skip check could not be seen, and "remaining" was wrong.** The
+runner checked `--limit` before counting completed questions, so
+`--limit 0` reported nothing at all — not the two completed ones; and the
+CLI's "24 remaining" subtracted only what one invocation had done or
+skipped. Completed questions are now counted before the limit applies (the
+limit counts attempts), and `remaining()` reads the result files on disk.
+
+**2. A minute-window failure would have stopped the batch.** One critic
+call ended "minute-window 429 … switching" — on a pinned, one-model chain,
+switching goes nowhere — and failed with the chain-exhausted error, whose
+text reads "every model in the chain failed **or is out of quota**". The
+runner's stop-on-quota markers included "out of quota", so a transient
+failure would have stopped the whole calibration run as if the day's quota
+were gone. The critic's split-on-failure (C28.3) rescued this call, which is
+why the defect showed only as a warning. The markers now name the day
+explicitly ("(TPD)", "(RPD)", "per day", "used today").
+
+**3. Under pinning, minute waits must not run out.** With a fallback chain,
+three attempts then switching was right; with one pinned model there is
+nothing to switch to. Minute-window waits on a one-model chain no longer
+consume attempts; they are bounded by `llm.retry.max_pinned_wait_s` (600s
+per call), after which the ordinary retry path applies. Tests: four
+consecutive minute 429s on a pinned model now succeed on the fifth call;
+total waiting stays bounded; an unpinned chain still switches as before.
+
+The C32 acceptance check — interrupt, restart, completed questions skipped —
+is re-run after this commit.

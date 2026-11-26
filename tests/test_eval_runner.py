@@ -106,9 +106,37 @@ def test_each_invocation_gets_its_own_trace_id(tmp_path):
 def test_a_day_quota_failure_stops_the_batch(tmp_path):
     q = first_questions(tmp_path, 1)[0]
     run = FakeRun(outcomes={q: ("ABSTAIN", "system_failure",
-                                "role 'judgment': every model in the chain failed or is out of quota")})
+        "role 'judgment': every model in the chain failed or is out of quota. Details: "
+        "['openai/gpt-oss-120b: 200000/200000 tokens used today, need 8092']")})
     s = runner(tmp_path, run).run(limit=5)
     assert s.stopped_on_quota and len(run.calls) == 1
+
+
+def test_a_minute_window_exhaustion_does_not_stop_the_batch(tmp_path):
+    """C32.1: the chain-exhausted error says 'out of quota' for a MINUTE
+    window too. Matching that stopped the batch as if the day were gone."""
+    q = first_questions(tmp_path, 1)[0]
+    run = FakeRun(outcomes={q: ("ABSTAIN", "system_failure",
+        "role 'judgment': every model in the chain failed or is out of quota. Details: "
+        "['Rate limit reached ... on tokens per minute (TPM): Limit 8000']")})
+    s = runner(tmp_path, run).run(limit=3)
+    assert not s.stopped_on_quota and len(run.calls) == 3
+
+
+def test_limit_zero_still_reports_completed_questions(tmp_path):
+    """C32 live: `--limit 0` printed nothing — the limit was checked before
+    completed questions were counted."""
+    runner(tmp_path, FakeRun()).run(limit=2)
+    run = FakeRun()
+    s = runner(tmp_path, run).run(limit=0)
+    assert len(s.skipped) == 2 and run.calls == []
+
+
+def test_remaining_is_counted_from_disk(tmp_path):
+    """C32 live: '24 remaining' was printed with two complete."""
+    r = runner(tmp_path, FakeRun())
+    r.run(limit=2)
+    assert len(runner(tmp_path, FakeRun()).remaining()) == len(r.questions) - 2
 
 
 def test_an_ordinary_failure_does_not_stop_the_batch(tmp_path):

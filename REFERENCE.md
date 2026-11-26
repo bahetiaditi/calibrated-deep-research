@@ -3971,3 +3971,65 @@ and a new evaluation of its own. That is a project inside the project, and
 nothing downstream is blocked by its absence: the decision layer already
 works without f5. **Recorded as future work; no further investment in
 contradiction detection before Phase 4.**
+
+**2026-11-26 — C29 (draft). Tiers A–C: 28 questions, 101 gold claims, every
+claim tied to corpus passages. Hand review pending.**
+
+**Decision first: the eval retrieves from a frozen corpus.** The 982-passage
+C13 corpus (extended later only if a question needs it), not live web or
+arXiv search. Three reasons: results cannot drift as the web changes (the
+FutureSearch argument, §1.2); the C30 constraint — a Tier D1 refutation must
+be retrievable — becomes checkable rather than hoped for; and a 6–7-week
+eval spends no search quota. It is also what every smoke test since C19 has
+run on: the retriever's routes are payload filters over the stored corpus.
+Recorded as a departure from §7.2's live Tavily/arXiv tooling; the live
+tools remain for development.
+
+**What the set covers.** Eight papers and the web writing around them:
+FlashAttention-2, PagedAttention/vLLM, LoRA, QLoRA, Chinchilla, Mamba, RAG,
+the Transformer. Tier A: ten single-source lookups (A01–A10). Tier B: ten
+multi-source syntheses (B01–B10). Tier C: eight judgment questions, each
+built where sources genuinely pull in different directions — does LoRA
+match full fine-tuning (C01: the LoRA paper, QLoRA's all-layers condition,
+practitioner guidance, a task-dependent empirical study); is ~20 tokens per
+parameter still right (C02: Chinchilla, Epoch's replication, the
+inference-aware revision); is PagedAttention's 20–26% kernel overhead worth
+2–4× throughput (C04); FlashAttention-2 *or* PagedAttention (C07, gold
+rejects the either/or); do SSMs make Transformers obsolete (C08, gold is
+"parity at tested scales, hybrids in practice").
+
+**Every gold claim cites the passages that support it** (`passage_ids`), so
+grading at C37 can check a claim against the evidence it came from, and a
+reader of the benchmark can audit it.
+
+**`scripts/check_questions.py`** validates the file against the frozen
+corpus — tier counts, 3–5 claims, real passage ids, at least two distinct
+sources for Tiers B and C (§6.1: synthesis and judgment are multi-source),
+and a warning for near-copies of the 30 retrieval sub-questions. It writes
+`benchmark/review_questions.md`: every claim beside the best-matching
+sentence of each passage it cites, with a checkbox. `tests/test_questions.py`
+runs the same validator on the committed file, so the set cannot rot under
+hand edits.
+
+**What building it caught.** The checker's first run found three Tier C
+questions resting on a single paper (C03 and C08 on Mamba, C04 on vLLM) and
+one near-copy of a retrieval sub-question (B05). Each Tier C question now
+cites an independent second source; B05 is reworded. Two content findings:
+the corpus's "LoRA Without Regret" passages hold only that post's methods,
+not its conclusion — so no gold claim relies on it; and there is no
+independent source on RAG beyond the paper itself, so a single-source RAG
+judgment question was replaced (C06, pre- vs post-Chinchilla training). And
+reading a cited passage corrected a claim: the practitioner source on SSMs
+recommends full attention *or a hybrid*, and notes most shipping "Mamba"
+models are hybrids — the gold now says so.
+
+**Known overlap, stated.** The corpus was built around the 30 retrieval
+sub-questions, so benchmark *topics* overlap theirs; wording near-copies are
+excluded by the checker. Retrieval quality (C13) and answer quality (C37)
+are therefore not measured on independent topics — a limitation for the
+writeup.
+
+**C29's check is still open:** "every question is answerable from
+accessible sources — verify by hand". The review sheet makes that fast; the
+judgment is the author's, and C29 is final when every box is ticked or the
+claim fixed.

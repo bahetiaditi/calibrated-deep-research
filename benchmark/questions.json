@@ -1,0 +1,876 @@
+{
+  "version": 1,
+  "corpus": "retrieval_eval (982 passages, frozen)",
+  "questions": [
+    {
+      "id": "A01",
+      "tier": "A",
+      "question": "By how much does LoRA reduce the number of trainable parameters and the GPU memory needed to adapt GPT-3 175B, and does it add inference latency?",
+      "gold_claims": [
+        {
+          "claim": "Compared with GPT-3 175B fine-tuned with Adam, LoRA reduces the number of trainable parameters by 10,000 times.",
+          "passage_ids": [
+            "P2646ca0395b3",
+            "Pb0f2a56ecf63"
+          ]
+        },
+        {
+          "claim": "LoRA reduces the GPU memory requirement by about 3 times.",
+          "passage_ids": [
+            "P2646ca0395b3",
+            "P91995c1f3443"
+          ]
+        },
+        {
+          "claim": "LoRA's low-rank matrices can be merged into the frozen weights, so it adds no inference latency.",
+          "passage_ids": [
+            "Pe09a41a5a3a5"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "A02",
+      "tier": "A",
+      "question": "What techniques does QLoRA introduce to reduce memory use during finetuning?",
+      "gold_claims": [
+        {
+          "claim": "QLoRA introduces 4-bit NormalFloat (NF4), a data type suited to normally distributed weights.",
+          "passage_ids": [
+            "P6bd00d9ba477",
+            "P7c52cdc40305"
+          ]
+        },
+        {
+          "claim": "Double Quantization quantizes the quantization constants, saving about 0.37 bits per parameter (roughly 3 GB for a 65B model).",
+          "passage_ids": [
+            "P7c52cdc40305"
+          ]
+        },
+        {
+          "claim": "Paged Optimizers use NVIDIA unified memory to avoid memory spikes during gradient checkpointing.",
+          "passage_ids": [
+            "P7c52cdc40305",
+            "P6bd00d9ba477"
+          ]
+        },
+        {
+          "claim": "QLoRA backpropagates gradients through a frozen 4-bit quantized model into LoRA adapters.",
+          "passage_ids": [
+            "P45d9f67ab112"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "A03",
+      "tier": "A",
+      "question": "How large is Chinchilla, how was it trained relative to Gopher, and how does it perform against larger models?",
+      "gold_claims": [
+        {
+          "claim": "Chinchilla has 70B parameters.",
+          "passage_ids": [
+            "Pbcc634befd2e",
+            "Pce1d70b4ba6e"
+          ]
+        },
+        {
+          "claim": "Chinchilla uses the same compute budget as Gopher but with 4 times more training data.",
+          "passage_ids": [
+            "Pbcc634befd2e"
+          ]
+        },
+        {
+          "claim": "Chinchilla uniformly and significantly outperforms Gopher (280B), GPT-3 (175B) and Jurassic-1 (178B).",
+          "passage_ids": [
+            "Pbcc634befd2e"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "A04",
+      "tier": "A",
+      "question": "What inference throughput and quality does Mamba report relative to Transformers?",
+      "gold_claims": [
+        {
+          "claim": "Mamba achieves about 5 times higher inference throughput than Transformers.",
+          "passage_ids": [
+            "P37c05e216866",
+            "P702fb650b24e"
+          ]
+        },
+        {
+          "claim": "Mamba scales linearly in sequence length.",
+          "passage_ids": [
+            "P37c05e216866"
+          ]
+        },
+        {
+          "claim": "Mamba-3B outperforms Transformers of the same size and matches Transformers twice its size.",
+          "passage_ids": [
+            "P37c05e216866",
+            "P702fb650b24e"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "A05",
+      "tier": "A",
+      "question": "What BLEU scores did the original Transformer achieve on the WMT 2014 translation tasks, and at what training cost?",
+      "gold_claims": [
+        {
+          "claim": "The big Transformer achieves 28.4 BLEU on WMT 2014 English-to-German.",
+          "passage_ids": [
+            "P25b038f40d30",
+            "P320a97d802b1"
+          ]
+        },
+        {
+          "claim": "This improves over the existing best results, including ensembles, by over 2 BLEU.",
+          "passage_ids": [
+            "P25b038f40d30"
+          ]
+        },
+        {
+          "claim": "On English-to-French it reaches 41.8 BLEU, a new single-model state of the art, after 3.5 days of training on eight GPUs.",
+          "passage_ids": [
+            "P25b038f40d30",
+            "P320a97d802b1"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "A06",
+      "tier": "A",
+      "question": "How many attention heads does the base Transformer use, and what did the ablation on the number of heads show?",
+      "gold_claims": [
+        {
+          "claim": "The Transformer uses h = 8 parallel attention heads, each with key and value dimension 64.",
+          "passage_ids": [
+            "Pb6eeca1bdcd7"
+          ]
+        },
+        {
+          "claim": "Single-head attention is 0.9 BLEU worse than the best setting.",
+          "passage_ids": [
+            "P58e7cc6e15d2"
+          ]
+        },
+        {
+          "claim": "Quality also drops off with too many heads.",
+          "passage_ids": [
+            "P58e7cc6e15d2"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "A07",
+      "tier": "A",
+      "question": "According to the vLLM paper, how much of the KV cache memory in existing serving systems actually stores token states, and why?",
+      "gold_claims": [
+        {
+          "claim": "Only 20.4% to 38.2% of KV cache memory stores actual token states in existing systems.",
+          "passage_ids": [
+            "P3367ea1ac7de",
+            "P76b9ca93dce0"
+          ]
+        },
+        {
+          "claim": "The waste comes from reserved slots for future tokens, internal fragmentation from over-provisioning for maximum length, and external fragmentation.",
+          "passage_ids": [
+            "Pe94eaf2fb658"
+          ]
+        },
+        {
+          "claim": "vLLM improves throughput by 2-4x at the same latency compared with systems such as FasterTransformer and Orca.",
+          "passage_ids": [
+            "P0e0bee546fc5",
+            "P13e5ccd0a1b7"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "A08",
+      "tier": "A",
+      "question": "What knowledge source does RAG retrieve from, and how do RAG-Sequence and RAG-Token behave differently?",
+      "gold_claims": [
+        {
+          "claim": "RAG uses a single Wikipedia dump (December 2018) as its non-parametric knowledge source.",
+          "passage_ids": [
+            "P0422bbcac7bb"
+          ]
+        },
+        {
+          "claim": "RAG-Sequence's generations are more diverse than RAG-Token's.",
+          "passage_ids": [
+            "Pbeba8a496825"
+          ]
+        },
+        {
+          "claim": "Retrieving more documents monotonically improves open-domain QA for RAG-Sequence, while RAG-Token peaks at 10 retrieved documents.",
+          "passage_ids": [
+            "Pd322df20ff9c"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "A09",
+      "tier": "A",
+      "question": "What changes does FlashAttention-2 make to the FlashAttention algorithm, and what speedup results?",
+      "gold_claims": [
+        {
+          "claim": "FlashAttention-2 tweaks the algorithm to reduce the number of non-matmul FLOPs.",
+          "passage_ids": [
+            "Pe2f66d5714a1",
+            "Pe9cfc6c56161"
+          ]
+        },
+        {
+          "claim": "It parallelizes the attention computation across thread blocks, even for a single head, to increase occupancy.",
+          "passage_ids": [
+            "Pe2f66d5714a1"
+          ]
+        },
+        {
+          "claim": "It distributes work between warps within a thread block to reduce communication through shared memory.",
+          "passage_ids": [
+            "P4f463279a6c3"
+          ]
+        },
+        {
+          "claim": "FlashAttention-2 is around 2x faster than FlashAttention.",
+          "passage_ids": [
+            "P4f463279a6c3",
+            "P0a41a5c02ef3"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "A10",
+      "tier": "A",
+      "question": "How does vLLM share KV cache memory across parallel samples and beams?",
+      "gold_claims": [
+        {
+          "claim": "Multiple output samples share the physical blocks of the prompt's KV cache.",
+          "passage_ids": [
+            "P402025ed7055"
+          ]
+        },
+        {
+          "claim": "The final logical block is managed with a copy-on-write mechanism, using reference counts.",
+          "passage_ids": [
+            "P402025ed7055",
+            "Pbe8811fbeba5"
+          ]
+        },
+        {
+          "claim": "In beam search, sharing can save up to 55% of KV cache memory.",
+          "passage_ids": [
+            "Pf50ce35e4c88"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "B01",
+      "tier": "B",
+      "question": "How do FlashAttention-2 and PagedAttention differ in what they optimise about attention's use of GPU memory?",
+      "gold_claims": [
+        {
+          "claim": "FlashAttention-2 tiles attention across the GPU memory hierarchy, loading blocks from HBM into on-chip SRAM.",
+          "passage_ids": [
+            "P795e20101baf",
+            "P581d3308eb95"
+          ]
+        },
+        {
+          "claim": "FlashAttention-2 repartitions work across thread blocks and warps to reduce shared-memory communication.",
+          "passage_ids": [
+            "Pe2f66d5714a1",
+            "P4f463279a6c3"
+          ]
+        },
+        {
+          "claim": "PagedAttention stores the KV cache in fixed-size blocks that need not be contiguous in memory.",
+          "passage_ids": [
+            "P7ade6bba7ef1",
+            "P0e0bee546fc5"
+          ]
+        },
+        {
+          "claim": "The PagedAttention kernel fetches KV blocks separately and fuses block reads with the attention computation.",
+          "passage_ids": [
+            "P1bf94a39c0a1",
+            "P20f1b50b0f8b"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "B02",
+      "tier": "B",
+      "question": "How does QLoRA build on LoRA, and what does it find about where the adapters must be placed?",
+      "gold_claims": [
+        {
+          "claim": "LoRA freezes the pretrained weights and injects trainable low-rank decomposition matrices into the Transformer's layers.",
+          "passage_ids": [
+            "P2646ca0395b3",
+            "P364fd276edbd"
+          ]
+        },
+        {
+          "claim": "QLoRA backpropagates gradients through a frozen 4-bit quantized model into LoRA adapters.",
+          "passage_ids": [
+            "P45d9f67ab112"
+          ]
+        },
+        {
+          "claim": "QLoRA finds that applying LoRA to all transformer layers is critical to match 16-bit finetuning performance.",
+          "passage_ids": [
+            "P35c76980fc42",
+            "P85a370298db4"
+          ]
+        },
+        {
+          "claim": "The original LoRA experiments applied it only to the query and value projections (Wq and Wv).",
+          "passage_ids": [
+            "P141e6da498dc"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "B03",
+      "tier": "B",
+      "question": "How do the Chinchilla scaling conclusions differ from the approach of Kaplan et al. that earlier large models followed?",
+      "gold_claims": [
+        {
+          "claim": "Chinchilla finds that model size and training tokens should be scaled in equal proportions: each doubling of model size should come with a doubling of tokens.",
+          "passage_ids": [
+            "Pbcc634befd2e",
+            "P6b4994dbafeb"
+          ]
+        },
+        {
+          "claim": "Many recent large models followed Kaplan et al. and the GPT-3 training setup, and Chinchilla concludes that current large models are significantly undertrained.",
+          "passage_ids": [
+            "P6b4994dbafeb",
+            "P1826d72a8cac"
+          ]
+        },
+        {
+          "claim": "In a head-to-head comparison at 1e21 FLOPs, the model Chinchilla's approach predicted outperformed the one Kaplan et al. predicted.",
+          "passage_ids": [
+            "P0dfeb13900a1",
+            "Pca94d488b211"
+          ]
+        },
+        {
+          "claim": "GPT-3 was trained at under 2 tokens per parameter, whereas Chinchilla indicates roughly 20.",
+          "passage_ids": [
+            "P916998575d96"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "B04",
+      "tier": "B",
+      "question": "How do the Transformer and Mamba differ in how their cost grows with sequence length?",
+      "gold_claims": [
+        {
+          "claim": "A self-attention layer's complexity per layer is O(n^2 * d) in sequence length n.",
+          "passage_ids": [
+            "P46b4ee7316e4"
+          ]
+        },
+        {
+          "claim": "Mamba is attention-free (without attention or even MLP blocks) and scales linearly in sequence length.",
+          "passage_ids": [
+            "P37c05e216866"
+          ]
+        },
+        {
+          "claim": "As a recurrent model, Mamba achieves about 5 times higher generation throughput than Transformers of similar size.",
+          "passage_ids": [
+            "P702fb650b24e",
+            "Pe5e2d277c52d"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "B05",
+      "tier": "B",
+      "question": "Why did Mamba make its state space parameters depend on the input, and what did that require?",
+      "gold_claims": [
+        {
+          "claim": "Prior state space models could not efficiently select data in an input-dependent manner.",
+          "passage_ids": [
+            "P6ee4936e0935"
+          ]
+        },
+        {
+          "claim": "Mamba's selection mechanism makes the SSM parameters (A, B, C) input- or context-dependent rather than static.",
+          "passage_ids": [
+            "Pcdd4f800bbbe",
+            "P268d0e13492e"
+          ]
+        },
+        {
+          "claim": "Selectivity lets each token be written into the state in a way specific to that token.",
+          "passage_ids": [
+            "Pb98c0a0cf346"
+          ]
+        },
+        {
+          "claim": "Input-dependent dynamics require a hardware-aware algorithm that materializes expanded states only in faster GPU memory.",
+          "passage_ids": [
+            "Pcdd4f800bbbe"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "B06",
+      "tier": "B",
+      "question": "Which LoRA hyperparameters matter most for matching full finetuning, according to the LoRA and QLoRA papers?",
+      "gold_claims": [
+        {
+          "claim": "The LoRA paper finds that a very low rank suffices: adapting Wq and Wv gives similar results from r = 1 to r = 64.",
+          "passage_ids": [
+            "Pe6bea725c65e",
+            "P34a586c47048"
+          ]
+        },
+        {
+          "claim": "QLoRA finds the most critical LoRA hyperparameter is how many adapters are used, with LoRA on all linear transformer block layers required to match full finetuning.",
+          "passage_ids": [
+            "P85a370298db4"
+          ]
+        },
+        {
+          "claim": "QLoRA reports that other LoRA hyperparameters, such as the projection dimension (rank), matter less.",
+          "passage_ids": [
+            "P85a370298db4"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "B07",
+      "tier": "B",
+      "question": "What memory problem in LLM serving does PagedAttention solve, and how does it borrow from operating systems?",
+      "gold_claims": [
+        {
+          "claim": "The KV cache can be significantly wasted by fragmentation and redundant duplication, limiting batch size.",
+          "passage_ids": [
+            "P0e0bee546fc5"
+          ]
+        },
+        {
+          "claim": "PagedAttention is inspired by virtual memory and paging in operating systems.",
+          "passage_ids": [
+            "P0e0bee546fc5",
+            "P8c27e92af85b"
+          ]
+        },
+        {
+          "claim": "It partitions each sequence's KV cache into fixed-size blocks (pages).",
+          "passage_ids": [
+            "P7ade6bba7ef1",
+            "P547cbbd0fc2a"
+          ]
+        },
+        {
+          "claim": "vLLM mitigates the overhead of memory indirection by fusing memory-access kernels with other operations such as attention.",
+          "passage_ids": [
+            "Paddfd3b983f3"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "B08",
+      "tier": "B",
+      "question": "How do LoRA and adapter layers compare in inference cost?",
+      "gold_claims": [
+        {
+          "claim": "Adapter layers introduce inference latency that can be significant in online, short-sequence-length scenarios.",
+          "passage_ids": [
+            "P44e748cd17e5",
+            "P8035ae5c2aed"
+          ]
+        },
+        {
+          "claim": "LoRA's matrices can be merged into the weights, eliminating additional inference latency.",
+          "passage_ids": [
+            "Pe09a41a5a3a5"
+          ]
+        },
+        {
+          "claim": "In a comparison on XLM-RoBERTa, which method performed best depended on the sub-task: full finetuning and adapters on longer texts, LoRA on shorter ones.",
+          "passage_ids": [
+            "Pc250ff2653c3",
+            "P674fe8c207de"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "B09",
+      "tier": "B",
+      "question": "Why is attention's memory traffic, not only its arithmetic, the target of FlashAttention-2's design?",
+      "gold_claims": [
+        {
+          "claim": "Self-attention's per-layer complexity grows quadratically with sequence length: O(n^2 * d).",
+          "passage_ids": [
+            "P46b4ee7316e4"
+          ]
+        },
+        {
+          "claim": "GPU memory is hierarchical: large high-bandwidth memory (HBM) and small, faster on-chip SRAM.",
+          "passage_ids": [
+            "P795e20101baf"
+          ]
+        },
+        {
+          "claim": "FlashAttention-2 processes Q, K and V in blocks, loading them from HBM into on-chip SRAM.",
+          "passage_ids": [
+            "P581d3308eb95",
+            "Pcab13e40e71a"
+          ]
+        },
+        {
+          "claim": "Non-matmul FLOPs are a small fraction of total FLOPs but take disproportionately long, so FlashAttention-2 reduces them.",
+          "passage_ids": [
+            "Pe9cfc6c56161"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "B10",
+      "tier": "B",
+      "question": "How much accuracy is retained when models are quantized to 4 bits, according to QLoRA and to later benchmark reports?",
+      "gold_claims": [
+        {
+          "claim": "QLoRA's NF4 with double quantization matches BFloat16 performance on 5-shot MMLU.",
+          "passage_ids": [
+            "P6bd971390235"
+          ]
+        },
+        {
+          "claim": "FP4 is consistently about one percentage point behind NF4 and BFloat16.",
+          "passage_ids": [
+            "P6bd971390235"
+          ]
+        },
+        {
+          "claim": "NF4 improves accuracy over regular 4-bit floats.",
+          "passage_ids": [
+            "P7862f06aabfb"
+          ]
+        },
+        {
+          "claim": "A later report on Llama 3.1 found 4-bit models kept 98.9% accuracy on coding tasks and over 99% accuracy recovery on OpenLLM v1.",
+          "passage_ids": [
+            "P5d7a9bf2b58f",
+            "Pdf5312010d26"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "C01",
+      "tier": "C",
+      "question": "Does LoRA match the performance of full fine-tuning?",
+      "gold_claims": [
+        {
+          "claim": "The LoRA paper reports adapting GPT-3 175B with up to 10,000x fewer trainable parameters without adversely affecting task performance.",
+          "passage_ids": [
+            "Pb0f2a56ecf63"
+          ]
+        },
+        {
+          "claim": "QLoRA finds LoRA matches full 16-bit finetuning only when applied to all linear transformer layers.",
+          "passage_ids": [
+            "P85a370298db4",
+            "P35c76980fc42"
+          ]
+        },
+        {
+          "claim": "Practitioner guidance holds there is no automatic winner: LoRA matches full finetuning when the required weight changes are well represented by low-rank updates.",
+          "passage_ids": [
+            "Paaefce55d766"
+          ]
+        },
+        {
+          "claim": "An empirical comparison found results task-dependent: full finetuning and adapters did better on longer texts, LoRA on shorter texts.",
+          "passage_ids": [
+            "Pc250ff2653c3",
+            "P674fe8c207de"
+          ]
+        }
+      ],
+      "notes": "Gold is the shape of the disagreement: conditional, not a yes or no."
+    },
+    {
+      "id": "C02",
+      "tier": "C",
+      "question": "Is the Chinchilla rule of about 20 training tokens per parameter still the right target?",
+      "gold_claims": [
+        {
+          "claim": "Chinchilla's compute-optimal result corresponds to about 20 tokens per parameter (70B parameters on 1.4 trillion tokens).",
+          "passage_ids": [
+            "P1bff5a5e81b4"
+          ]
+        },
+        {
+          "claim": "An independent replication found its scaling policy consistent with Chinchilla's, but Hoffmann et al.'s parametric-model estimates were not.",
+          "passage_ids": [
+            "P1bff5a5e81b4"
+          ]
+        },
+        {
+          "claim": "Accounting for inference cost, developers expecting large inference demand should train models smaller and longer than Chinchilla-optimal.",
+          "passage_ids": [
+            "Pe44e9ae00164",
+            "Pfcb5e50ce286"
+          ]
+        },
+        {
+          "claim": "Chinchilla's fits used only runs at typical token ratios (at most about 100 tokens per parameter).",
+          "passage_ids": [
+            "Pae18b42662f1"
+          ]
+        }
+      ],
+      "notes": "Valid answers present the revisions, not a single number."
+    },
+    {
+      "id": "C03",
+      "tier": "C",
+      "question": "What are the trade-offs of Mamba's selection mechanism?",
+      "gold_claims": [
+        {
+          "claim": "Selection overcomes earlier SSMs' weaknesses on discrete modalities such as text and DNA.",
+          "passage_ids": [
+            "Pe4cda082558e"
+          ]
+        },
+        {
+          "claim": "Selection can conversely impede performance on data that linear time-invariant SSMs excel on.",
+          "passage_ids": [
+            "Pe4cda082558e"
+          ]
+        },
+        {
+          "claim": "Recurrent models like SSMs always balance a trade-off between expressivity and speed.",
+          "passage_ids": [
+            "P8bf4c67f17bb"
+          ]
+        },
+        {
+          "claim": "Input-dependent dynamics require a hardware-aware algorithm to remain efficient.",
+          "passage_ids": [
+            "Pcdd4f800bbbe"
+          ]
+        },
+        {
+          "claim": "Selectivity moves beyond vanilla SSMs, which apply the same A (forgetting) and B (remembering) matrices to every input.",
+          "passage_ids": [
+            "Pb98c0a0cf346"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "C04",
+      "tier": "C",
+      "question": "Is PagedAttention's overhead worth its memory savings?",
+      "gold_claims": [
+        {
+          "claim": "PagedAttention's attention kernel has 20-26% higher latency than the highly optimized FasterTransformer kernel.",
+          "passage_ids": [
+            "P5d184b5aec2f"
+          ]
+        },
+        {
+          "claim": "Despite that, vLLM achieves 2-4x higher serving throughput at the same latency.",
+          "passage_ids": [
+            "P0e0bee546fc5",
+            "P13e5ccd0a1b7"
+          ]
+        },
+        {
+          "claim": "Existing systems use only 20.4%-38.2% of KV cache memory for actual token states.",
+          "passage_ids": [
+            "P3367ea1ac7de"
+          ]
+        },
+        {
+          "claim": "A larger block size improves hardware utilization but increases memory fragmentation.",
+          "passage_ids": [
+            "Pc5791d347a07"
+          ]
+        },
+        {
+          "claim": "With paging, physical GPU memory for the KV cache is not pre-allocated; blocks are allocated in non-contiguous memory as new entries are saved.",
+          "passage_ids": [
+            "P2fe0adb13812"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "C05",
+      "tier": "C",
+      "question": "Is a higher LoRA rank always better?",
+      "gold_claims": [
+        {
+          "claim": "The LoRA paper finds very low ranks suffice: on GPT-3 with Wq and Wv adapted, ranks from 1 to 64 perform similarly.",
+          "passage_ids": [
+            "Pe6bea725c65e",
+            "P34a586c47048"
+          ]
+        },
+        {
+          "claim": "QLoRA identifies adapter placement across all layers, not rank, as the critical hyperparameter.",
+          "passage_ids": [
+            "P85a370298db4"
+          ]
+        },
+        {
+          "claim": "LoRA matches full finetuning when the required weight change is well represented by a low-rank update, implying tasks needing higher-rank changes may not be served by low rank.",
+          "passage_ids": [
+            "Paaefce55d766"
+          ]
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "C06",
+      "tier": "C",
+      "question": "Were large language models before Chinchilla undertrained, and is training beyond the Chinchilla-optimal amount of data a mistake?",
+      "gold_claims": [
+        {
+          "claim": "Chinchilla concludes that current large language models are significantly undertrained, a consequence of scaling model size while keeping training data constant.",
+          "passage_ids": [
+            "P1826d72a8cac"
+          ]
+        },
+        {
+          "claim": "GPT-3 was trained on about 300B tokens at 175B parameters, under 2 tokens per parameter, against Chinchilla's roughly 20.",
+          "passage_ids": [
+            "P916998575d96"
+          ]
+        },
+        {
+          "claim": "Once inference cost is counted, developers expecting large inference demand should train models smaller and longer than Chinchilla-optimal.",
+          "passage_ids": [
+            "Pe44e9ae00164"
+          ]
+        },
+        {
+          "claim": "For example, a developer expecting a 30B-Chinchilla-quality model to see 10^13 inference tokens can cut total FLOPs by 28% by training a 13.6B model on 2.84x the data.",
+          "passage_ids": [
+            "Pfcb5e50ce286"
+          ]
+        }
+      ],
+      "notes": "Two-sided: undertrained relative to training compute, yet 'overtraining' can be optimal once inference is counted. Replaced a single-source RAG question (no independent RAG source in the corpus)."
+    },
+    {
+      "id": "C07",
+      "tier": "C",
+      "question": "Should a practitioner use FlashAttention-2 or PagedAttention to speed up LLM inference?",
+      "gold_claims": [
+        {
+          "claim": "They target different bottlenecks: FlashAttention-2 the attention computation's memory traffic and work partitioning, PagedAttention the KV cache's memory waste in serving.",
+          "passage_ids": [
+            "Pe2f66d5714a1",
+            "P3367ea1ac7de"
+          ]
+        },
+        {
+          "claim": "FlashAttention-2 reaches up to 73% of theoretical peak throughput in the forward pass on A100.",
+          "passage_ids": [
+            "P66d270e11334",
+            "P2f2c3398a8a8"
+          ]
+        },
+        {
+          "claim": "vLLM with PagedAttention improves serving throughput 2-4x, even though its attention kernel is 20-26% slower than FasterTransformer's.",
+          "passage_ids": [
+            "P0e0bee546fc5",
+            "P5d184b5aec2f"
+          ]
+        }
+      ],
+      "notes": "A correct answer rejects the either/or framing."
+    },
+    {
+      "id": "C08",
+      "tier": "C",
+      "question": "Do attention-free models such as Mamba make Transformers obsolete for language modelling?",
+      "gold_claims": [
+        {
+          "claim": "Mamba-3B outperforms Transformers of the same size and matches Transformers twice its size.",
+          "passage_ids": [
+            "P37c05e216866"
+          ]
+        },
+        {
+          "claim": "Mamba is the first attention-free model to match a strong Transformer++ recipe, particularly as sequence length grows.",
+          "passage_ids": [
+            "P29ef36493590"
+          ]
+        },
+        {
+          "claim": "Mamba's selection mechanism can impede performance on data where linear time-invariant SSMs excel.",
+          "passage_ids": [
+            "Pe4cda082558e"
+          ]
+        },
+        {
+          "claim": "Practitioner guidance reserves SSMs for long sequences where throughput or memory is the bottleneck; for precise recall over short-to-medium context it recommends full softmax attention or a hybrid that keeps a few attention layers, and notes that most shipping 'Mamba' models are hybrids.",
+          "passage_ids": [
+            "P5076483751c7"
+          ]
+        }
+      ],
+      "notes": "The corpus supports parity at the scales tested and hybrids in practice, not obsolescence."
+    }
+  ]
+}

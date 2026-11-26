@@ -181,6 +181,12 @@ class SubQuestion(TypedDict):
     # written for one comparison sentence, the round scored lower, D3's
     # marginal test stopped it, and it ended ABANDONED.
     reopened_from: Status | None
+    # C28.5. The sub-question's contradiction scan: pairs scored, how many
+    # contradicted, which passages. None = not scanned (f5 is then None —
+    # "nobody looked" is not "sources agree"). Written each time the
+    # sub-question reaches a terminal status, over its top passages by its
+    # own scores.
+    contradiction_scan: dict[str, Any] | None
 
 
 class ClaimVerification(TypedDict):
@@ -364,6 +370,7 @@ def new_sub_question(
         evidence_scores={},
         covered_by=None,
         reopened_from=None,
+        contradiction_scan=None,
     )
 
 

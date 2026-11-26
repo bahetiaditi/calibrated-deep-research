@@ -391,7 +391,7 @@ def features_for_sub_question(
         for p in evidence_for(state, sub_question_id)
     ]
 
-    return extract_features(
+    features = extract_features(
         sub_question,
         passages,  # type: ignore[arg-type]
         contradictions=state.get("contradictions"),
@@ -400,3 +400,18 @@ def features_for_sub_question(
         critic_findings=state.get("critic_findings") or None,
         today=today,
     )
+
+    # f5 from the sub-question's own scan (C28.5): contradictions found over
+    # pairs actually SCORED. `_contradiction_rate` divides by every pair
+    # among the passages, most of which the detector never scores — a
+    # denominator that capped f5 near 0.08. No scan record means not
+    # scanned, and f5 stays None: "nobody looked" is not "sources agree".
+    scan = sub_question.get("contradiction_scan")
+    if scan is not None:
+        pairs = int(scan.get("pairs") or 0)
+        features["f5_contradiction_rate"] = (
+            int(scan.get("found") or 0) / pairs if pairs else 0.0
+        )
+    else:
+        features["f5_contradiction_rate"] = None
+    return features

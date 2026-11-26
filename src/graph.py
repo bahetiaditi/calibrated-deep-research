@@ -228,6 +228,11 @@ def default_components(config: Config | None = None) -> Components:
     from src.nodes.critic_router import CriticRouter, critic_router_node
     from src.nodes.decider import Decider, decider_node
     from src.nodes.finalizer import Finalizer, finalizer_node
+    from src.rag.contradiction import ContradictionDetector
+
+    # Not an agency surface — deterministic retrieval plumbing (§2.5) — so
+    # every configuration, baselines and ablations included, scans.
+    detector = ContradictionDetector(cfg)
     from src.nodes.planner import Planner, planner_node
     from src.nodes.premise_checker import PremiseChecker, premise_checker_node
     from src.nodes.retriever import StaticRetriever, retriever_node
@@ -241,7 +246,8 @@ def default_components(config: Config | None = None) -> Components:
     d2 = bool(cfg.get("agency.d2_adaptive_route_and_query", True))
     d3 = bool(cfg.get("agency.d3_adaptive_depth_and_stopping", True))
     retriever = (
-        StaticRetriever(cfg) if not (d2 or d3) else AdaptiveRetriever(cfg)
+        StaticRetriever(cfg, detector=detector) if not (d2 or d3)
+        else AdaptiveRetriever(cfg, detector=detector)
     )
 
     from src.sufficiency.allocation import get_allocator

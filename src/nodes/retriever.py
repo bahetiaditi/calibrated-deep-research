@@ -83,8 +83,15 @@ class StaticRetriever:
         tracer: Any = None,
         budget: Any = None,
         now: Any = time.time,
+        detector: Any = None,
     ) -> None:
         self.cfg = config or get_config()
+        # The C12 contradiction detector (§4.6), wired at C28.5. None means
+        # no scan, and f5 stays None — honestly unscanned.
+        self._detector = detector
+        self.scan_top_k = int(
+            self.cfg.get("retrieval.contradiction.scan_top_k", 8)
+        )
         self._retriever = retriever
         self._reranker = reranker
         self._ingestor = ingestor
@@ -227,11 +234,57 @@ class StaticRetriever:
         self._trace(sub_question, route, query, outcome, updated["status"],
                     features=updated["sufficiency_features"])
 
+        contradictions = self._scan(state, updated, outcome)
+
         plan = [
             updated if sq["id"] == sub_question_id else sq
             for sq in (state.get("plan") or [])
         ]
-        return {"plan": plan, "evidence": outcome.passages}
+        update: dict[str, Any] = {"plan": plan, "evidence": outcome.passages}
+        if contradictions:
+            update["contradictions"] = contradictions   # merge_contradictions dedups
+        return update
+
+    def _scan(
+        self,
+        state: ResearchState,
+        updated: dict[str, Any],
+        outcome: RetrievalOutcome,
+    ) -> list[dict[str, Any]]:
+        """Contradiction scan when a sub-question reaches a terminal status.
+
+        Wired at C28.5 — the C12 detector was built and tested but never
+        called, so f5 was None on every run, the critic's contradiction flag
+        never fired, and Tier D3 ("no consensus") had no signal at all.
+
+        Once per terminal status, not per round: the scan is about the
+        evidence the sub-question ended with, and NLI over 15 pairs twice
+        each is the most expensive local step. Over the top `scan_top_k`
+        passages by THIS sub-question's own scores (C27.9), cumulative across
+        rounds. A reopened sub-question is rescanned when it terminates again,
+        over its grown evidence.
+        """
+        if self._detector is None or updated.get("status") not in STATUS_RANK:
+            return []
+        pool = {p["id"]: p for p in state.get("evidence") or []}
+        pool.update({p["id"]: p for p in outcome.passages})
+        own = updated.get("evidence_scores") or {}
+        mine = [pool[pid] for pid in updated.get("evidence_ids") or [] if pid in pool]
+        mine.sort(key=lambda p: own.get(p["id"], p.get("rerank_score") or 0.0),
+                  reverse=True)
+        top = mine[: self.scan_top_k]
+
+        result = self._detector.scan(top, sub_question_id=updated["id"])
+        if result.failed:
+            # Leave it unscanned: f5 None, not 0.0.
+            updated["contradiction_scan"] = None
+            return []
+        updated["contradiction_scan"] = {
+            "pairs": result.pairs,
+            "found": len(result.records),
+            "passages": [p["id"] for p in top],
+        }
+        return [r.to_dict() for r in result.records]
 
     def retrieve_all(self, state: ResearchState) -> ResearchState:
         """Run every pending sub-question. Used before the graph exists (C19).
@@ -239,7 +292,7 @@ class StaticRetriever:
         Applies updates in sequence rather than returning one patch, because
         each round's `plan` replaces the previous one.
         """
-        from src.state import merge_evidence
+        from src.state import merge_contradictions, merge_evidence
 
         working = dict(state)
         while True:
@@ -256,6 +309,11 @@ class StaticRetriever:
             working["plan"] = update["plan"]
             working["evidence"] = merge_evidence(
                 working.get("evidence"), update.get("evidence")
+            )
+            # Scan results ride on the update too since C28.5; dropping them
+            # here would make every caller of retrieve_all look unscanned.
+            working["contradictions"] = merge_contradictions(
+                working.get("contradictions"), update.get("contradictions")
             )
         return working  # type: ignore[return-value]
 

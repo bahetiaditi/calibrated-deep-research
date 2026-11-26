@@ -263,6 +263,9 @@ retrieval:
     # symmetric in principle. Score both directions and take the stronger
     # signal: missing a real contradiction costs more than the forward pass.
     symmetric: true
+    # C28.5. Passages scanned per sub-question, by its own rerank scores. 8
+    # leaves room for 15 CROSS-source pairs after same-source pairs drop out.
+    scan_top_k: 8
 
 chunking:
   web:

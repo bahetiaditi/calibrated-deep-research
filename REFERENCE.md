@@ -3534,7 +3534,7 @@ by how much it could distort a reported number.
 
 | # | item | source | blocks |
 |---|---|---|---|
-| 1 | **Contradiction scanning not wired.** No node writes `state["contradictions"]`; f5 is always `None`; the critic's contradiction flag never fires. Tier D3 ("no consensus") has no live signal. §4.6 is built and tested but not called. | C27 | C33 |
+| 1 | ~~Contradiction scanning not wired.~~ **Wired at C28.5.** Remaining: the heuristic scorer does not read f5 (the calibrated stage 1 does); the synthesizer does not yet present disagreement as disagreement (§4.6's second payoff). | C27 → C28.5 | C33 (heuristic/stage 1), C29 (synthesis) |
 | 2 | **Resumed runs get their whole budget back.** The Budget object is not checkpointed and `state["budget"]` is written once, at run start. | C27.1 | C32 |
 | 3 | **Eval runner rules:** pin every role; fresh cache directory; re-run (not resume) `system_failure` runs. | C27.6, C27.7 | C32 |
 | 4 | **Judgment budget:** ~30–45K tokens/question, ~4–6 runs/day pinned. Recommendation: pin gpt-oss-120b, measure on the first batch, then decide. | C27.6 | C32 |
@@ -3833,3 +3833,52 @@ models expose their interactions.
 
 **Next, before Phase 4:** open item 1 — wire contradiction scanning (§4.6),
 so Tier D3 ("no consensus") questions have the signal they test.
+
+
+**2026-11-13 — C28.5. Contradiction scanning wired (open item 1). Two
+latent defects found on the way.**
+
+The C12 detector was built and tested but never called: f5 was `None` on
+every run, the critic's contradiction flag (C23) never fired, and Tier D3
+("no consensus") questions would have been tested against a signal that did
+not exist. Now the retriever scans each sub-question **once per terminal
+status**, over its top `scan_top_k` (8) passages by its **own** rerank
+scores (C27.9), cumulative across rounds; a reopened sub-question is
+rescanned when it terminates again. Results ride on the update into
+`state["contradictions"]` (deduplicated by unordered pair) and a per-
+sub-question `contradiction_scan` record. Not an agency surface — §2.5's
+deterministic plumbing — so every configuration scans, baselines and
+ablations included. The model is local; a scan costs no API quota.
+
+**Defect 1 — f5's denominator.** `_contradiction_rate` divided by every pair
+among a sub-question's passages, n(n−1)/2, but the detector scores at most
+15 pairs, cross-source only. With 20 passages: 190 in the denominator
+against at most 15 scored, so f5 could never exceed ~0.08 whatever the
+sources said — a near-constant feature, systematically deflated, that C33
+would have fit on. It never surfaced because f5 had never been computed.
+f5 is now found ÷ pairs **actually scored**, from the scan record.
+
+**Defect 2 — a failed scan read as a clean one.** `detect()` returns `[]`
+when the NLI model fails, indistinguishable from "scanned, nothing found" —
+C20's unscanned-versus-clean confusion in miniature. `scan()` returns a
+`ScanResult` with pairs scored and a `failed` flag; a failed scan leaves the
+sub-question unscanned (f5 `None`), never 0.0. `detect()` keeps its old
+contract for existing callers.
+
+**Also:** `retrieve_all` merged only `plan` and `evidence` from each update,
+so any caller using it would have lost every scan result.
+
+11 tests (`tests/test_contradiction_wiring.py`); restoring the old f5
+computation fails three of them. **`scripts/probe_contradiction.py`** runs
+the real NLI checkpoint on real retrieved passages with zero API calls,
+scoring every pair so near-misses show: two queries where the corpus
+plausibly disagrees (LoRA rank; compute-optimal tokens per parameter —
+Chinchilla revises Kaplan) and a consensus control (PagedAttention's KV
+layout). If the control scores as high as the contested queries, f5 is
+measuring NLI noise — known before C33 fits on it, not after.
+
+**Still open under item 1:** the heuristic scorer does not read f5 (the
+calibrated stage 1 does), and the synthesizer does not yet present
+disagreement as disagreement (§4.6's second payoff). Both are recorded on
+the row rather than built now; the probe's result decides whether f5 is
+worth building on.

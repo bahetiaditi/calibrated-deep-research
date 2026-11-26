@@ -118,6 +118,7 @@ def wire(cfg):
     from src.nodes.premise_checker import PremiseChecker, premise_checker_node
     from src.nodes.retriever import retriever_node
     from src.nodes.synthesizer import Synthesizer, synthesizer_node
+    from src.rag.contradiction import ContradictionDetector
     from src.rag.fusion import HybridRetriever
     from src.rag.rerank import Reranker
     from src.rag.sparse import BM25Index
@@ -144,7 +145,8 @@ def wire(cfg):
             PremiseChecker(cfg, retriever=hybrid, reranker=reranker)),
         planner=planner_node(Planner(cfg)),
         retriever=retriever_node(
-            AdaptiveRetriever(cfg, retriever=hybrid, reranker=reranker),
+            AdaptiveRetriever(cfg, retriever=hybrid, reranker=reranker,
+                              detector=ContradictionDetector(cfg)),
             get_allocator(cfg)),
         synthesizer=synthesizer_node(Synthesizer(cfg)),
         critic=critic_node(Critic(cfg)),

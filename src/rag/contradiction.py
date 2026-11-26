@@ -82,6 +82,30 @@ def _softmax(values: Sequence[float]) -> list[float]:
     return [e / total for e in exps]
 
 
+@dataclass
+class ScanResult:
+    """What one scan did — not only what it found (C28.5).
+
+    `pairs` is the number of pairs actually scored: f5's denominator. Before
+    C28.5, f5 divided by every pair among a sub-question's passages, n(n-1)/2,
+    while the detector scores at most `max_pairs` cross-source pairs — with 20
+    passages that is 190 against at most 15, capping f5 near 0.08 whatever
+    the sources said. `failed` separates "the model could not run" from "it
+    ran and found nothing", which `detect` (returning []) cannot.
+    """
+
+    pairs: int
+    records: list[ContradictionRecord]
+    failed: bool = False
+    error: str | None = None
+
+    @property
+    def rate(self) -> float | None:
+        if self.failed:
+            return None
+        return len(self.records) / self.pairs if self.pairs else 0.0
+
+
 class ContradictionDetector:
     """Pairwise NLI over the top reranked passages for a sub-question."""
 
@@ -157,12 +181,23 @@ class ContradictionDetector:
         """Score pairs of passages and return those above the threshold.
 
         Passages are assumed to arrive in rerank order, so truncating to the
-        pair budget keeps the strongest evidence.
+        pair budget keeps the strongest evidence. A failed model returns []
+        here; use `scan` where a failure must not read as a clean result.
         """
+        return self.scan(passages, sub_question_id=sub_question_id,
+                         max_pairs=max_pairs).records
+
+    def scan(
+        self,
+        passages: Sequence[Passage],
+        *,
+        sub_question_id: str = "",
+        max_pairs: int | None = None,
+    ) -> ScanResult:
         max_pairs = max_pairs if max_pairs is not None else self.max_pairs
         usable = [p for p in passages if (p.get("text") or "").strip()]
         if len(usable) < 2 or max_pairs <= 0:
-            return []
+            return ScanResult(pairs=0, records=[])
 
         pairs = [
             (a, b)
@@ -170,7 +205,7 @@ class ContradictionDetector:
             if not (self.cross_source_only and a["source_id"] == b["source_id"])
         ][:max_pairs]
         if not pairs:
-            return []
+            return ScanResult(pairs=0, records=[])
 
         inputs = [
             (_window(a["text"]), _window(b["text"])) for a, b in pairs
@@ -185,11 +220,13 @@ class ContradictionDetector:
         try:
             raw = self.model.predict(inputs)
         except Exception as exc:  # noqa: BLE001
-            # No contradiction data is a weaker signal, not a broken run.
+            # No contradiction data is a weaker signal, not a broken run —
+            # but it must not be recorded as "scanned, nothing found".
             log.warning("NLI scoring failed: %s", exc)
             if self.tracer is not None:
                 self.tracer.note("contradiction_failed", error=str(exc))
-            return []
+            return ScanResult(pairs=len(pairs), records=[], failed=True,
+                              error=str(exc))
 
         index = self.contradiction_index()
         scores = [_contradiction_probability(row, index) for row in raw]
@@ -220,7 +257,7 @@ class ContradictionDetector:
                 rate=round(len(records) / len(pairs), 4) if pairs else 0.0,
                 top_score=round(records[0].score, 4) if records else None,
             )
-        return records
+        return ScanResult(pairs=len(pairs), records=records)
 
     # -- feature f5 ---------------------------------------------------------
 

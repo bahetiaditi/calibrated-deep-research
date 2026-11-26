@@ -6,7 +6,15 @@ Agreement rate = agreed / total; report it with the metrics (§6.2).
 ## agent · B01 — How do FlashAttention-2 and PagedAttention differ in what they optimise about attention's use of GPU memory?
 
 - decision: `ABSTAIN` (system_failure)
-- judge: `{"coverage_answer": ["ABSENT", "PRESENT", "PRESENT", "ABSENT"]}`
+
+**Coverage of the answer draft**
+
+| label | gold claim |
+|---|---|
+| ABSENT | FlashAttention-2 tiles attention across the GPU memory hierarchy, loading blocks from HBM into on-chip SRAM. |
+| PRESENT | FlashAttention-2 repartitions work across thread blocks and warps to reduce shared-memory communication. |
+| PRESENT | PagedAttention stores the KV cache in fixed-size blocks that need not be contiguous in memory. |
+| ABSENT | The PagedAttention kernel fetches KV blocks separately and fuses block reads with the attention computation. |
 
 <details><summary>output</summary>
 

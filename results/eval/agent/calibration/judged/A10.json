@@ -1,4 +1,7 @@
 {
+  "judge_version": "C37.2",
+  "record_thread": "agent:calibration:A10:a0",
+  "record_finished_at": "2026-11-26T13:29:29+00:00",
   "coverage_delivered": [
     "PRESENT",
     "PRESENT",
@@ -9,12 +12,101 @@
     "PRESENT",
     "PRESENT"
   ],
+  "grounding_items": [
+    {
+      "i": 0,
+      "sentence": "vLLM reduces KV‑cache memory by letting multiple output sequences reuse the same physical blocks that store the prompt’s key and value states.",
+      "cites": [],
+      "label": "UNSUPPORTED"
+    },
+    {
+      "i": 1,
+      "sentence": "The system represents the cache as logical KV blocks that are mapped to physical blocks managed by a single KV‑cache manager shared across all GPU workers.",
+      "cites": [
+        "P5c9f646ffa37"
+      ],
+      "label": "SUPPORTED"
+    },
+    {
+      "i": 2,
+      "sentence": "When a request is decoded with parallel sampling, vLLM “forks’’ the original prompt sequence into several samples; each forked sequence initially points to the same physical blocks, so the prompt KV cache is shared.",
+      "cites": [
+        "P34cd29a8ebec",
+        "Pbe8811fbeba5"
+      ],
+      "label": "SUPPORTED"
+    },
+    {
+      "i": 3,
+      "sentence": "As generation proceeds, new tokens are appended to each sample.",
+      "cites": [],
+      "label": "UNSUPPORTED"
+    },
+    {
+      "i": 4,
+      "sentence": "For tokens that belong to the shared prompt region, the existing physical blocks are read without duplication, while the newly generated KV entries are written into newly allocated physical blocks that are added to the block table.",
+      "cites": [
+        "P98b2a98bf6c3"
+      ],
+      "label": "UNSUPPORTED"
+    },
+    {
+      "i": 5,
+      "sentence": "To keep the shared region consistent, vLLM uses a copy‑on‑write scheme.",
+      "cites": [],
+      "label": "UNSUPPORTED"
+    },
+    {
+      "i": 6,
+      "sentence": "If a sample needs to modify the last logical block of the shared prompt, the manager checks the reference count of the underlying physical block; when the count exceeds one it allocates a fresh physical block, copies the data, and decrements the count, after which the sample writes its new KV entries to the private block.",
+      "cites": [
+        "P402025ed7055"
+      ],
+      "label": "SUPPORTED"
+    },
+    {
+      "i": 7,
+      "sentence": "The other sample can then continue writing directly to the original block because its reference count has dropped to one.",
+      "cites": [],
+      "label": "UNSUPPORTED"
+    },
+    {
+      "i": 8,
+      "sentence": "This mechanism enables most of the prompt KV cache to be shared across parallel samples, with only the final logical block being duplicated as needed.",
+      "cites": [
+        "P402025ed7055",
+        "Pf50ce35e4c88"
+      ],
+      "label": "SUPPORTED"
+    },
+    {
+      "i": 9,
+      "sentence": "Beam search follows the same pattern: all beams start from a common prompt and therefore share its KV cache; as beams diverge, each creates its own physical blocks for newly generated tokens, yielding larger overall sharing (up to about 55 % memory saving) compared with independent sampling.",
+      "cites": [
+        "P6fb6ea0c7fc7",
+        "Pf50ce35e4c88"
+      ],
+      "label": "SUPPORTED"
+    },
+    {
+      "i": 10,
+      "sentence": "The evidence does not establish how vLLM guarantees safe concurrent access to the shared KV cache when multiple samples or beams are processed in parallel, nor does it explain how updates are coordinated when beams diverge to keep shared entries consistent.",
+      "cites": [],
+      "label": "GAP"
+    },
+    {
+      "i": 11,
+      "sentence": "These aspects remain unresolved because the cited sources provide no details on synchronization or consistency mechanisms for concurrent writes.",
+      "cites": [],
+      "label": "GAP"
+    }
+  ],
   "grounding": [
     "UNSUPPORTED",
     "SUPPORTED",
     "SUPPORTED",
     "UNSUPPORTED",
-    "SUPPORTED",
+    "UNSUPPORTED",
     "UNSUPPORTED",
     "SUPPORTED",
     "UNSUPPORTED",
@@ -22,5 +114,6 @@
     "SUPPORTED",
     "GAP",
     "GAP"
-  ]
+  ],
+  "grounding_trimmed": 0
 }

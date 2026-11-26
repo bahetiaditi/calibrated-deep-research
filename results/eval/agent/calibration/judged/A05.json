@@ -1,4 +1,7 @@
 {
+  "judge_version": "C37.2",
+  "record_thread": "agent:calibration:A05:a0",
+  "record_finished_at": "2026-11-26T13:14:48+00:00",
   "coverage_delivered": [
     "PRESENT",
     "ABSENT",
@@ -9,11 +12,50 @@
     "PRESENT",
     "PRESENT"
   ],
+  "grounding_items": [
+    {
+      "i": 0,
+      "sentence": "The original Transformer reported a BLEU score of 28.4 on the WMT 2014 English‑to‑German translation task and a BLEU score of 41.8 on the WMT 2014 English‑to‑French task.",
+      "cites": [
+        "P25b038f40d30"
+      ],
+      "label": "SUPPORTED"
+    },
+    {
+      "i": 1,
+      "sentence": "For the English‑to‑French experiment the paper states that the model was trained for 3.5 days on eight GPUs.",
+      "cites": [
+        "P25b038f40d30"
+      ],
+      "label": "SUPPORTED"
+    },
+    {
+      "i": 2,
+      "sentence": "The abstract also notes that the Transformer required “significantly less time to train” than prior models, but it does not give a precise overall training‑cost figure such as total GPU‑days, FLOPs, or a compute budget for either language pair.",
+      "cites": [
+        "P25b038f40d30"
+      ],
+      "label": "SUPPORTED"
+    },
+    {
+      "i": 3,
+      "sentence": "Consequently, the evidence does not establish a complete training‑cost metric for the original Transformer model.",
+      "cites": [],
+      "label": "GAP"
+    },
+    {
+      "i": 4,
+      "sentence": "The lack of reported aggregate compute usage means the training cost remains unresolved.",
+      "cites": [],
+      "label": "GAP"
+    }
+  ],
   "grounding": [
     "SUPPORTED",
     "SUPPORTED",
     "SUPPORTED",
-    "UNSUPPORTED",
-    "UNSUPPORTED"
-  ]
+    "GAP",
+    "GAP"
+  ],
+  "grounding_trimmed": 0
 }

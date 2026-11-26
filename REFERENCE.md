@@ -4508,3 +4508,71 @@ the group pattern fails 7 tests, including the A03 effect test (the critic
 sees passages); replacing the `synthesis_log` reducer with replacement
 semantics fails the two-synthesis graph test; removing the re-run bypass or
 the `supersedes` write each fails the re-run test.
+
+**2026-11-26 — C37.2. Grading corrections, before any test result.**
+Legitimate under C37's rule (grading may be corrected until test results
+exist); each is recorded here and each has a test that fails without it.
+
+1. **A label the judge does not return is UNJUDGED, never a verdict.** C37
+   defaulted missing grounding labels to UNSUPPORTED and missing coverage
+   labels to ABSENT — a grading failure counted as the system's (lesson 7,
+   which Tier D already followed). Missing items are re-asked once, alone (a
+   different prompt, so the cache cannot return the same gap); what is still
+   missing is UNJUDGED, excluded from every rate that needs it, and counted
+   (`unjudged`, `grounding_unjudged`). An A–C question with any unjudged gold
+   claim is not graded partially.
+2. **The judge reads whole passages.** The 900-character mid-sentence cut is
+   gone (C30.1's class; it changed no label in the first run, but
+   "3.5 days on eight GPUs" started at character 872). Only if a batch would
+   exceed the judge's prompt budget are passages trimmed — at sentence ends,
+   with `[…]`, counted in `grounding_trimmed`. At flash-lite's 250K TPM this
+   should never fire; it is a guard, not a mechanism.
+3. **Batches of 15 sentences**, so no single answer approaches the output cap.
+4. **Per-sentence items are stored** (`grounding_items`: sentence, resolvable
+   cited ids, label), and the spot-check sheet prints each label beside what
+   it labels. The C37 sheet showed bare label lists a human could not check —
+   diagnosing N1 meant rebuilding that alignment by hand.
+5. **Hallucination is reported with its parts**: `uncited` (factual sentences
+   citing nothing, judged UNSUPPORTED, over all factual sentences) and
+   `miscitation` (UNSUPPORTED among factual sentences that cite, over those).
+   The §6 total is unchanged. Motivation from N1: every UNSUPPORTED label in
+   the first run was an uncited sentence and every cited sentence was
+   SUPPORTED — an agent that asserts without citing and one that cites wrongly
+   are different failures and need different fixes.
+6. **GAP defined to match C27.5's rule.** The judge labelled A05's
+   "Consequently, the evidence does not establish a complete training-cost
+   metric…" UNSUPPORTED and the same form in A10 GAP. The prompt now names
+   conclusions of that form as GAP, and keeps C27.5's purity condition (a
+   sentence that also asserts something is judged on the assertion). This is
+   aligning the grader with a rule fixed at C27.5, not tuning to calibration
+   outcomes; its live check is the re-score of A05.
+7. **Judgments are tied to the grader version and to the record they judge**
+   (`judge_version`, `record_thread`, `record_finished_at`). A judgment from
+   an older grader, or of a record since replaced by a C37.1 re-run, is
+   re-judged; with `--no-judge` it is skipped and listed. This replaces
+   "delete the cached judged files" — the cache can no longer be stale
+   silently.
+8. **Dead config removed.** `evaluation.judge` named gemini-2.5-flash with
+   the cache off; nothing read it. The judge is `llm.roles.judge` and uses
+   the prompt cache (safe: no system prompt equals a judge prompt).
+
+Tests: `tests/test_c37_2.py` (13). Mutation checks, each failing ≥1 test:
+missing → UNSUPPORTED default; reinstating the 900 cut; removing the re-ask;
+accepting stale judgments; ignoring the record tie; not excluding unjudged
+A–C questions.
+
+**Still not implemented (found while doing this):** `evaluation.
+bootstrap_iterations: 1000` exists in config but no confidence interval is
+computed anywhere, though §9 promises bootstrap CIs and n = 24 per split
+makes them essential. `evaluation.spot_check_fraction` is also unread
+(score.py hard-codes 0.2). Both → C37.4, before C33.
+
+**A06's false abstention is a provenance defect (found here; → C37.3).**
+The critic marked "the base Transformer employs eight heads
+[Pb6eeca1bdcd7]" UNSUPPORTED although the passage reads "In this work we
+employ h = 8 parallel attention layers, or heads" — reasoning that the
+passage "describes the authors' model, not the original base Transformer".
+The passage IS the original paper; the critic is shown only its arXiv id
+(1706.03762v7), not its title, so it cannot know. C30.1's attribution rule
+("this work" vs Related Work) made it suspicious and nothing let it resolve
+the suspicion. The synthesizer and premise checker are shown no title either.

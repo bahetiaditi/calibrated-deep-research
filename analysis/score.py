@@ -7,7 +7,10 @@
     python -m analysis.score --split calibration --spot-check   # 20% sheet for a human
 
 Judgments are cached per question under <config>/<split>/judged/, so a
-re-run costs nothing and an interrupted one resumes. The judge is Gemini
+re-run costs nothing and an interrupted one resumes. Each judged file is
+stamped with the judge version (C37.2); a judgment made by an older grader
+is re-judged rather than mixed with current ones (with --no-judge it is
+skipped and reported). The judge is Gemini
 flash-lite (its own quota, separate from the runs). Writes
 results/metrics_<split>.md and .json.
 """
@@ -52,7 +55,10 @@ def apply_tau(records: list[dict], tau_path: Path) -> bool:
 
 
 def judge_record(record: dict, question: dict, provider, corpus: dict, db: Path) -> dict:
-    out: dict = {}
+    # Which record this judges: a re-run (C37.1) keeps the question id but is
+    # a different output, and its old judgment must not be reused.
+    out: dict = {"judge_version": J.JUDGE_VERSION, "record_thread": record.get("thread_id"),
+                 "record_finished_at": record.get("finished_at")}
     decision = record.get("terminal_decision")
     delivered = record.get("final_report") or record.get("draft") or ""
     state = None
@@ -76,8 +82,18 @@ def judge_record(record: dict, question: dict, provider, corpus: dict, db: Path)
 
     raw = record.get("draft") if record.get("draft") is not None else (state or {}).get("draft", "")
     if decision in M.ANSWERED and raw:
-        out["grounding"] = J.grounding(provider, raw, corpus)
+        g = J.grounding(provider, raw, corpus)
+        out["grounding_items"] = g["items"]
+        out["grounding"] = [it["label"] for it in g["items"]]
+        out["grounding_trimmed"] = g["trimmed"]
     return out
+
+
+def is_current(judged: dict, record: dict) -> bool:
+    """Made by this grader, of this record."""
+    return (judged.get("judge_version") == J.JUDGE_VERSION
+            and judged.get("record_thread") == record.get("thread_id")
+            and judged.get("record_finished_at") == record.get("finished_at"))
 
 
 def score_config(config: str, split: str, out: Path, questions: dict, corpus: dict,
@@ -87,17 +103,27 @@ def score_config(config: str, split: str, out: Path, questions: dict, corpus: di
     jdir = out / config / split / "judged"
     jdir.mkdir(parents=True, exist_ok=True)
     db = out / "checkpoints.sqlite"
-    outcomes = []
+    outcomes, stale, skipped = [], [], []
     for r in records:
         path = jdir / f"{r['id']}.json"
-        if path.exists():
-            judged = json.loads(path.read_text())
-        elif judge:
+        judged = json.loads(path.read_text()) if path.exists() else None
+        if judged is not None and not is_current(judged, r):
+            stale.append(r["id"])
+            judged = None
+        if judged is None:
+            if not judge:
+                skipped.append(r["id"])
+                continue
             judged = judge_record(r, questions[r["id"]], provider, corpus, db)
             _write_atomic(path, judged)
-        else:
-            continue
         outcomes.append(M.grade(r, judged))
+    if stale:
+        print(f"  {config}: {len(stale)} judgment(s) from an older grader "
+              f"{'re-judged' if judge else 'SKIPPED (run without --no-judge)'}: "
+              f"{', '.join(stale)}", file=sys.stderr)
+    elif skipped:
+        print(f"  {config}: {len(skipped)} record(s) not yet judged, skipped: "
+              f"{', '.join(skipped)}", file=sys.stderr)
     return outcomes, decided
 
 
@@ -105,6 +131,8 @@ COLUMNS = [("n", "n"), ("failures", "fail"), ("ac_accuracy_answered", "A–C acc
            ("ac_false_abstention", "A–C false abstain"), ("ac_mean_coverage", "A–C coverage"),
            ("d_correct", "D correct"), ("d_false_answer", "D false answer"),
            ("d_wrong_reason", "D wrong reason"), ("hallucination", "halluc."),
+           ("halluc_uncited", "of which uncited"), ("miscitation", "miscitation"),
+           ("unjudged", "unjudged"),
            ("aurc", "AURC"), ("acc_at_80_coverage", "acc@80%"), ("ece", "ECE"),
            ("mean_llm_calls", "LLM calls")]
 
@@ -134,14 +162,46 @@ def spot_check(split: str, out: Path, configs: list[str], questions: dict) -> Pa
         rec = json.loads((out / c / split / f"{qid}.json").read_text())
         q = questions[qid]
         lines += [f"## {c} · {qid} — {q['question']}", "",
-                  f"- decision: `{rec.get('terminal_decision')}` ({rec.get('rule')})",
-                  f"- judge: `{json.dumps(j)[:600]}`", "",
-                  "<details><summary>output</summary>", "",
+                  f"- decision: `{rec.get('terminal_decision')}` ({rec.get('rule')})", ""]
+        lines += _judgment_tables(j, q)
+        lines += ["<details><summary>output</summary>", "",
                   (rec.get("final_report") or rec.get("draft") or "")[:3000], "", "</details>", "",
                   "- [ ] agree with all labels", ""]
     path = RESULTS / f"spot_check_{split}.md"
     path.write_text("\n".join(lines))
     return path
+
+
+def _cell(text: str, n: int = 220) -> str:
+    text = " ".join(str(text).split()).replace("|", "\\|")
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+
+def _judgment_tables(j: dict, q: dict) -> list[str]:
+    """Each label beside what it labels (C37.2). The C37 sheet printed bare
+    label lists — twelve SUPPORTED/UNSUPPORTED with no sentences — which a
+    human cannot check without rebuilding the alignment by hand."""
+    lines: list[str] = []
+    if "tier_d" in j:
+        lines += [f"**Tier D:** `{j['tier_d'].get('label')}` — {_cell(j['tier_d'].get('reason', ''))}",
+                  f"(expected: {_cell(q.get('expected_behavior', ''))})", ""]
+    gold = [c["claim"] for c in q.get("gold_claims") or []]
+    for key, title in (("coverage_delivered", "Coverage of the delivered report"),
+                       ("coverage_answer", "Coverage of the answer draft")):
+        labels = j.get(key)
+        if not labels or (key == "coverage_answer" and labels == j.get("coverage_delivered")):
+            continue
+        lines += [f"**{title}**", "", "| label | gold claim |", "|---|---|"]
+        lines += [f"| {l} | {_cell(g)} |" for l, g in zip(labels, gold)] + [""]
+    items = j.get("grounding_items")
+    if items:
+        lines += ["**Grounding** (each sentence against the passages it cites)", "",
+                  "| # | label | cites | sentence |", "|---|---|---|---|"]
+        lines += [f"| {it['i']} | {it['label']} | {', '.join(it['cites']) or '—'} | "
+                  f"{_cell(it['sentence'])} |" for it in items] + [""]
+    elif j.get("grounding"):
+        lines += [f"**Grounding (pre-C37.2, labels only):** `{j['grounding']}`", ""]
+    return lines
 
 
 def main(argv=None) -> int:
@@ -178,7 +238,7 @@ def main(argv=None) -> int:
     md = [f"# Metrics — {args.split} split", "", table(rows, notes), ""]
     if notes:
         md.append("¹ decisions pending: B3's threshold is chosen at C33; score metrics only.")
-    md.append("\nRules: REFERENCE.md, C37 entry. Judge: gemini-3.1-flash-lite (JUDGE role).")
+    md.append("\nRules: REFERENCE.md, C37 and C37.2 entries. Judge: gemini-3.1-flash-lite (JUDGE role).")
     RESULTS.mkdir(exist_ok=True)
     (RESULTS / f"metrics_{args.split}.md").write_text("\n".join(md) + "\n")
     (RESULTS / f"metrics_{args.split}.json").write_text(json.dumps(rows, indent=2))

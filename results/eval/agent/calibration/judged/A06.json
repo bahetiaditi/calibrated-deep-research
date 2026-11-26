@@ -1,4 +1,7 @@
 {
+  "judge_version": "C37.2",
+  "record_thread": "agent:calibration:A06:a0",
+  "record_finished_at": "2026-11-26T13:22:29+00:00",
   "coverage_answer": [
     "PRESENT",
     "ABSENT",

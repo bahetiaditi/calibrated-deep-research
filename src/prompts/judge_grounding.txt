@@ -1,14 +1,21 @@
 You are checking whether each sentence of a report is supported by the
 passages it cites. Judge each sentence against ITS OWN cited passages only.
+A passage ending in "[…]" was shortened; judge only the text shown.
 
 {items}
 
 For each sentence:
 - SUPPORTED: its cited passage(s) state it.
 - PARTIAL: they state part of it.
-- UNSUPPORTED: they do not state it, or it cites nothing yet makes a factual claim.
-- GAP: the sentence only says something could not be established (no claim).
+- UNSUPPORTED: they do not state it, or it cites nothing yet makes a factual
+  claim about the topic.
+- GAP: the sentence only reports what the evidence or sources do NOT
+  establish, report or resolve, and asserts nothing else. Conclusions of that
+  kind are GAP too: "Consequently, the evidence does not establish X", "X
+  therefore remains unresolved", "the sources give no figure for Y". A GAP
+  sentence needs no citation. If the sentence also asserts something about
+  the topic, it is not GAP: judge that assertion.
 - NOT_A_CLAIM: a heading, transition or question, not a factual claim.
 
-Respond with JSON only:
+Respond with JSON only, one entry per sentence number shown above:
 {{"sentences": [{{"i": <sentence number>, "label": "SUPPORTED|PARTIAL|UNSUPPORTED|GAP|NOT_A_CLAIM"}}]}}

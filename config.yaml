@@ -387,10 +387,12 @@ evaluation:
   benchmark_path: benchmark/questions.json
   retrieval_labels_path: benchmark/retrieval_labels.json
   splits: [calibration, test]
-  judge:
-    model: gemini-2.5-flash
-    temperature: 0.0
-    cache_enabled: false      # judge runs blind — no cache reuse from the agent
+  # C37.2: this block used to name the judge (gemini-2.5-flash, cache off).
+  # Nothing read it; the judge is llm.roles.judge (gemini-3.1-flash-lite) and
+  # its calls go through the prompt cache like every role. That is safe — no
+  # system prompt equals a judge prompt, so the judge never sees the agent's
+  # responses — and a re-judge of an identical prompt at temperature 0 is the
+  # same judgment at no quota cost. Removed so the file states what runs.
   spot_check_fraction: 0.20
   bootstrap_iterations: 1000  # CIs — n=24 per split, report them honestly
 

@@ -1,4 +1,7 @@
 {
+  "judge_version": "C37.2",
+  "record_thread": "agent:calibration:A09:a0",
+  "record_finished_at": "2026-11-26T13:24:54+00:00",
   "coverage_delivered": [
     "PRESENT",
     "PRESENT",
@@ -11,6 +14,71 @@
     "PRESENT",
     "PRESENT"
   ],
+  "grounding_items": [
+    {
+      "i": 0,
+      "sentence": "FlashAttention‑2 revises the original FlashAttention pipeline by reshaping how work is divided among GPU resources.",
+      "cites": [],
+      "label": "UNSUPPORTED"
+    },
+    {
+      "i": 1,
+      "sentence": "First, the algorithm is altered to cut the number of non‑matrix‑multiply floating‑point operations, which were a dominant source of overhead in the earlier design.",
+      "cites": [
+        "P4f463279a6c3"
+      ],
+      "label": "SUPPORTED"
+    },
+    {
+      "i": 2,
+      "sentence": "Second, attention is parallelized across multiple thread blocks even when a single head is processed, raising occupancy and allowing more of the GPU’s compute units to stay busy.",
+      "cites": [
+        "P4f463279a6c3"
+      ],
+      "label": "SUPPORTED"
+    },
+    {
+      "i": 3,
+      "sentence": "Third, within each thread block the workload is spread among warps, which reduces the amount of data that must pass through shared memory and therefore lowers intra‑block communication costs.",
+      "cites": [
+        "P4f463279a6c3"
+      ],
+      "label": "SUPPORTED"
+    },
+    {
+      "i": 4,
+      "sentence": "These three engineering changes directly address the sub‑optimal work partitioning that limited the original FlashAttention to only 25‑40 % of the theoretical FLOPs / s on A100 GPUs and prevented it from matching the efficiency of dense GEMM kernels.",
+      "cites": [
+        "Pe2f66d5714a1",
+        "P3fc5de2a2483"
+      ],
+      "label": "SUPPORTED"
+    },
+    {
+      "i": 5,
+      "sentence": "The original method relied on tiling and an online soft‑max to cut memory traffic, delivering 2‑4× wall‑clock speedups over baseline attention implementations but still falling short of GEMM performance.",
+      "cites": [
+        "P0d052347f438"
+      ],
+      "label": "SUPPORTED"
+    },
+    {
+      "i": 6,
+      "sentence": "By applying the new partitioning strategy, FlashAttention‑2 doubles the effective throughput of the baseline FlashAttention implementation, achieving roughly a 2× speedup and reaching 50‑73 % of the theoretical maximum FLOPs / s on A100 hardware, which is close to the efficiency of optimized matrix‑multiply operations.",
+      "cites": [
+        "P4f463279a6c3"
+      ],
+      "label": "SUPPORTED"
+    },
+    {
+      "i": 7,
+      "sentence": "In end‑to‑end GPT‑style training this translates to up to 225 TFLOPs / s per A100 GPU, corresponding to a model‑level FLOPs utilization of about 72 %.",
+      "cites": [
+        "P4f463279a6c3"
+      ],
+      "label": "SUPPORTED"
+    }
+  ],
   "grounding": [
     "UNSUPPORTED",
     "SUPPORTED",
@@ -20,5 +88,6 @@
     "SUPPORTED",
     "SUPPORTED",
     "SUPPORTED"
-  ]
+  ],
+  "grounding_trimmed": 0
 }

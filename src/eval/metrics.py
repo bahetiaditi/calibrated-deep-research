@@ -10,7 +10,16 @@ Every number in the writeup is computed here, from judged records. The rules
   Tier D correct   the judge's behaviour label is CORRECT — declining for the
                    wrong reason is not a success (§6.2)
   hallucination    UNSUPPORTED sentences / factual sentences (SUPPORTED,
-                   PARTIAL, UNSUPPORTED); GAP and NOT_A_CLAIM excluded
+                   PARTIAL, UNSUPPORTED); GAP and NOT_A_CLAIM excluded.
+                   Reported with its two parts (C37.2): `uncited` (factual
+                   sentences citing nothing, judged UNSUPPORTED, / factual)
+                   and `miscitation` (UNSUPPORTED among factual sentences
+                   that DO cite / those sentences) — an agent that asserts
+                   without citing and one that cites wrongly fail differently
+  unjudged         a label the judge did not return (C37.2). Never a
+                   verdict: the item is excluded from every rate that needs
+                   it and counted. An A-C question with any unjudged gold
+                   claim is not graded partially
   selective        "correct if answered": A-C correctness of the ANSWER-MODE
   prediction       draft; answering any Tier D item is an error. Risk-coverage
                    sweeps the configuration's score over that.
@@ -37,11 +46,29 @@ def correct_ac(labels: Sequence[str], min_coverage: float = MIN_COVERAGE) -> boo
         weighted_coverage(labels) >= min_coverage
 
 
+FACTUAL = ("SUPPORTED", "PARTIAL", "UNSUPPORTED")
+UNJUDGED = "UNJUDGED"
+
+
 def hallucination_rate(labels: Iterable[str]) -> float | None:
-    factual = [l for l in labels if l in ("SUPPORTED", "PARTIAL", "UNSUPPORTED")]
+    factual = [l for l in labels if l in FACTUAL]
     if not factual:
         return None
     return sum(l == "UNSUPPORTED" for l in factual) / len(factual)
+
+
+def hallucination_parts(labels: Sequence[str], cited: Sequence[bool]
+                        ) -> tuple[float | None, float | None]:
+    """(uncited, miscitation). `uncited` shares the total's denominator, so
+    uncited + (cited UNSUPPORTED / factual) = the total; `miscitation` is over
+    cited factual sentences only — how often a citation fails its claim."""
+    factual = [(l, c) for l, c in zip(labels, cited) if l in FACTUAL]
+    if not factual:
+        return None, None
+    uncited = sum(l == "UNSUPPORTED" and not c for l, c in factual) / len(factual)
+    with_cite = [l for l, c in factual if c]
+    mis = (sum(l == "UNSUPPORTED" for l in with_cite) / len(with_cite)) if with_cite else None
+    return uncited, mis
 
 
 @dataclass
@@ -55,8 +82,11 @@ class Outcome:
     score: float | None
     coverage: float | None = None   # delivered report, A-C answered only
     grounding: tuple[str, ...] = ()
+    grounding_cited: tuple[bool, ...] = ()   # per sentence: cites a corpus passage
     tier_d_label: str | None = None
     llm_calls: int | None = None
+    unjudged: bool = False                   # the main grade could not be computed
+    selective_unjudged: bool = False         # correct_if_answered could not be
 
 
 def grade(record: dict, judged: dict) -> Outcome:
@@ -72,23 +102,36 @@ def grade(record: dict, judged: dict) -> Outcome:
     else:
         kind = "abstained"
 
+    decided = kind in ("answered", "abstained")
     if tier == "D":
         label = judged.get("tier_d", {}).get("label")
         correct = kind != "failure" and label == "CORRECT"
         if_answered = False
         coverage = None
+        unjudged = decided and label in (None, UNJUDGED)
+        selective_unjudged = False      # answering a D item is an error, judged or not
     else:
         answer_labels = judged.get("coverage_answer") or []
         delivered = judged.get("coverage_delivered") or answer_labels
-        if_answered = correct_ac(answer_labels)
-        correct = kind == "answered" and correct_ac(delivered)
-        coverage = weighted_coverage(delivered) if kind == "answered" else None
+        selective_unjudged = UNJUDGED in answer_labels
+        unjudged = kind == "answered" and UNJUDGED in delivered
+        if_answered = correct_ac(answer_labels) and not selective_unjudged
+        correct = kind == "answered" and not unjudged and correct_ac(delivered)
+        coverage = weighted_coverage(delivered) if kind == "answered" and not unjudged else None
         label = None
+    items = judged.get("grounding_items")
+    if items:
+        grounding = tuple(it.get("label") or UNJUDGED for it in items)
+        cited = tuple(bool(it.get("cites")) for it in items)
+    else:                               # judged before C37.2: labels only
+        grounding = tuple(judged.get("grounding") or ())
+        cited = ()
     budget = record.get("budget") or {}
     return Outcome(id=record["id"], tier=tier, kind=kind, correct=correct,
                    correct_if_answered=if_answered, score=record.get("score"),
-                   coverage=coverage, grounding=tuple(judged.get("grounding") or ()),
-                   tier_d_label=label, llm_calls=budget.get("llm_calls_used"))
+                   coverage=coverage, grounding=grounding, grounding_cited=cited,
+                   tier_d_label=label, llm_calls=budget.get("llm_calls_used"),
+                   unjudged=unjudged, selective_unjudged=selective_unjudged)
 
 
 # -- selective prediction ---------------------------------------------------
@@ -155,12 +198,18 @@ def summarise(outcomes: Sequence[Outcome]) -> dict:
     d = [o for o in outcomes if o.tier == "D"]
     decided = lambda xs: [o for o in xs if o.kind in ("answered", "abstained")]
     ac_ok, d_ok = decided(ac), decided(d)
-    answered_ac = [o for o in ac_ok if o.kind == "answered"]
-    d_judged = [o for o in d_ok if o.tier_d_label not in (None, "UNJUDGED")]
-    scored = [o for o in outcomes if o.kind != "failure" and o.score is not None]
+    answered_ac = [o for o in ac_ok if o.kind == "answered" and not o.unjudged]
+    d_judged = [o for o in d_ok if not o.unjudged]
+    scored = [o for o in outcomes if o.kind != "failure" and o.score is not None
+              and not o.selective_unjudged]
     scores = [o.score for o in scored]
     cia = [o.correct_if_answered for o in scored]
     halluc = [l for o in decided(outcomes) for l in o.grounding]
+    # The decomposition needs per-sentence citation flags; outcomes judged
+    # before C37.2 have none and are left out of the parts (not the total).
+    parts = [(l, c) for o in decided(outcomes) if o.grounding_cited
+             for l, c in zip(o.grounding, o.grounding_cited)]
+    uncited, miscitation = hallucination_parts([l for l, _ in parts], [c for _, c in parts])
     calls = [o.llm_calls for o in outcomes if o.llm_calls is not None]
     rate = lambda num, den: (num / den) if den else None
     return {
@@ -173,8 +222,11 @@ def summarise(outcomes: Sequence[Outcome]) -> dict:
         "d_correct": rate(sum(o.correct for o in d_judged), len(d_judged)),
         "d_false_answer": rate(sum(o.tier_d_label == "ANSWERED" for o in d_judged), len(d_judged)),
         "d_wrong_reason": rate(sum(o.tier_d_label == "WRONG_REASON" for o in d_judged), len(d_judged)),
-        "unjudged": sum(o.tier_d_label in (None, "UNJUDGED") for o in d_ok),
+        "unjudged": sum(o.unjudged for o in decided(outcomes)),
         "hallucination": hallucination_rate(halluc),
+        "halluc_uncited": uncited,
+        "miscitation": miscitation,
+        "grounding_unjudged": sum(l == UNJUDGED for l in halluc),
         "aurc": aurc(scores, cia) if scores else None,
         "acc_at_80_coverage": accuracy_at_coverage(scores, cia) if scores else None,
         "ece": ece(scores, cia) if scores else None,

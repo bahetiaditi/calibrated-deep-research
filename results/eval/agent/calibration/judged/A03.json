@@ -1,4 +1,7 @@
 {
+  "judge_version": "C37.2",
+  "record_thread": "agent:calibration:A03:a0",
+  "record_finished_at": "2026-11-26T13:08:57+00:00",
   "coverage_delivered": [
     "PRESENT",
     "PRESENT",
@@ -9,6 +12,56 @@
     "PRESENT",
     "PRESENT"
   ],
+  "grounding_items": [
+    {
+      "i": 0,
+      "sentence": "Chinchilla is a dense transformer language model containing 70 billion parameters, roughly one‑quarter the size of Gopher’s 280 billion‑parameter architecture【P09†L1-L3】【P16†L1-L3】.",
+      "cites": [],
+      "label": "UNSUPPORTED"
+    },
+    {
+      "i": 1,
+      "sentence": "It was trained on 1.4 trillion tokens—about five times the 300 billion tokens used for Gopher—while consuming the same overall FLOP budget, thereby reallocating compute from model width to data volume【P09†L4-L7】【P16†L4-L6】.",
+      "cites": [],
+      "label": "UNSUPPORTED"
+    },
+    {
+      "i": 2,
+      "sentence": "The training followed the compute‑optimal scaling policy introduced by Hoffmann et al., which prescribes that for a fixed compute budget the optimal model should be smaller and trained longer; Chinchilla implements this by keeping the hardware (TPUv3/4) and optimizer settings identical to Gopher and by adopting a token‑per‑parameter ratio of roughly 20, the value identified as optimal in the Chinchilla scaling law【P10†L1-L4】【P17†L1-L3】【P18†L1-L3】.",
+      "cites": [],
+      "label": "UNSUPPORTED"
+    },
+    {
+      "i": 3,
+      "sentence": "Because of its reduced parameter count, Chinchilla’s memory footprint and inference cost are substantially lower than Gopher’s, yet its extended training yields a lower pre‑training loss【P09†L7-L9】【P10†L5-L7】.",
+      "cites": [],
+      "label": "UNSUPPORTED"
+    },
+    {
+      "i": 4,
+      "sentence": "Empirically, Chinchilla uniformly and significantly outperforms Gopher on a wide range of downstream benchmarks, achieving a state‑of‑the‑art average accuracy of 67.5 % on the MMLU suite and surpassing even larger models such as GPT‑3 (175 B), Jurassic‑1 (178 B) and Megatron‑Turing NLG (530 B)【P10†L1-L4】.",
+      "cites": [],
+      "label": "UNSUPPORTED"
+    },
+    {
+      "i": 5,
+      "sentence": "It also resolves pronouns better than Gopher and shows superior performance on gender‑bias challenge sets, illustrating broader quality gains【P13†L1-L4】.",
+      "cites": [],
+      "label": "UNSUPPORTED"
+    },
+    {
+      "i": 6,
+      "sentence": "The authors report that Chinchilla beats Gopher and the larger models on nearly every measured evaluation task, confirming that a compute‑optimal, smaller‑but‑longer‑trained model can exceed the performance of substantially larger dense transformers【P11†L1-L3】.",
+      "cites": [],
+      "label": "UNSUPPORTED"
+    },
+    {
+      "i": 7,
+      "sentence": "Thus, Chinchilla’s 70 billion‑parameter size, its training on 1.4 trillion tokens under the same FLOP budget as Gopher, and its consistent superiority over both Gopher and much larger contemporaries demonstrate the practical advantage of compute‑optimal scaling in large‑language‑model development.",
+      "cites": [],
+      "label": "UNSUPPORTED"
+    }
+  ],
   "grounding": [
     "UNSUPPORTED",
     "UNSUPPORTED",
@@ -18,5 +71,6 @@
     "UNSUPPORTED",
     "UNSUPPORTED",
     "UNSUPPORTED"
-  ]
+  ],
+  "grounding_trimmed": 0
 }

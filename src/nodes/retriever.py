@@ -283,6 +283,7 @@ class StaticRetriever:
             "pairs": result.pairs,
             "found": len(result.records),
             "passages": [p["id"] for p in top],
+            "hubs": list(result.hubs),
         }
         return [r.to_dict() for r in result.records]
 

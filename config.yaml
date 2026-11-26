@@ -266,6 +266,16 @@ retrieval:
     # C28.5. Passages scanned per sub-question, by its own rerank scores. 8
     # leaves room for 15 CROSS-source pairs after same-source pairs drop out.
     scan_top_k: 8
+    # C28.7, chosen from scripts/probe_contradiction.py on real passages.
+    # Both directions must clear the threshold: every one-directional hit
+    # the probe found was an artifact. A passage that "contradicts" at least
+    # hub_fraction of its partners (and at least hub_min_hits of them) is a
+    # hub — topic mismatch, not disagreement — and its pairs are excluded.
+    # Topical similarity was tested and rejected as a filter: everything
+    # retrieved for one query scored 0.65–0.87, so it separated nothing.
+    require_both_directions: true
+    hub_fraction: 0.5
+    hub_min_hits: 3
 
 chunking:
   web:

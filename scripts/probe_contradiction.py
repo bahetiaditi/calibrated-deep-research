@@ -154,6 +154,11 @@ def main() -> int:
             marks = " ".join("x " if test(ab, ba, sim) else ". "
                              for test in RULES.values())
             print(f"  {label[a['id']]}-{label[b['id']]:<4}{ab:>6.2f}{ba:>6.2f}{sim:>6.2f}   {marks}")
+        production = detector.scan(passages, sub_question_id="probe")
+        print(f"\n  production rule (C28.7): {production.pairs} pairs after hub "
+              f"exclusion, {len(production.records)} contradictions, "
+              f"f5 = {production.rate:.3f}, hubs = "
+              f"{[label[h] for h in production.hubs] or 'none'}")
         for a, b, ab, ba, sim in rows[:3]:
             if max(ab, ba) >= THRESHOLD:
                 print(f"\n  {label[a['id']]}-{label[b['id']]}  {DIM}{short(a['text'])}{RESET}")

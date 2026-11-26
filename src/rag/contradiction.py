@@ -41,7 +41,7 @@ from __future__ import annotations
 import itertools
 import logging
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any, Sequence
 
 from src.config import Config, get_config
@@ -98,6 +98,10 @@ class ScanResult:
     records: list[ContradictionRecord]
     failed: bool = False
     error: str | None = None
+    # Passages excluded as hubs (C28.7): each "contradicted" most of the
+    # passages it was paired with. Their pairs leave both numerator and
+    # denominator; listed so the exclusion is visible, not silent.
+    hubs: list[str] = field(default_factory=list)
 
     @property
     def rate(self) -> float | None:
@@ -123,6 +127,12 @@ class ContradictionDetector:
         self.threshold = float(section.get("contradiction_threshold", 0.60))
         self.cross_source_only = bool(section.get("cross_source_only", True))
         self.symmetric = bool(section.get("symmetric", True))
+        # C28.7, from the probe: a pair counts only if BOTH directions clear
+        # the threshold. Every one-directional hit the probe found (0.07/0.99,
+        # 0.01/0.73, …) was an artifact; requiring both removed all of them.
+        self.both_directions = bool(section.get("require_both_directions", True))
+        self.hub_fraction = float(section.get("hub_fraction", 0.5))
+        self.hub_min_hits = int(section.get("hub_min_hits", 3))
         self.tracer = tracer
         self._model = model
         self._contradiction_index: int | None = None
@@ -232,7 +242,8 @@ class ContradictionDetector:
         scores = [_contradiction_probability(row, index) for row in raw]
         if self.symmetric:
             half = len(pairs)
-            scores = [max(scores[i], scores[i + half]) for i in range(half)]
+            combine = min if self.both_directions else max
+            scores = [combine(scores[i], scores[i + half]) for i in range(half)]
 
         records = [
             ContradictionRecord(
@@ -248,6 +259,20 @@ class ContradictionDetector:
         ]
         records.sort(key=lambda r: r.score, reverse=True)
 
+        # Hub suppression (C28.7). Passage-level NLI has no "unrelated"
+        # class: the probe found one passage scoring ~1.0, both directions,
+        # against a glossary bullet list, an XLM-RoBERTa methods paragraph
+        # and an explainer on rank. A passage that "contradicts" most of its
+        # partners is measuring its own difference in subject, and its real
+        # disagreements (if any) cannot be told apart from its false ones —
+        # so all its pairs are excluded, from numerator AND denominator.
+        hubs = self._hubs(pairs, records)
+        if hubs:
+            pairs = [(a, b) for a, b in pairs
+                     if a["id"] not in hubs and b["id"] not in hubs]
+            records = [r for r in records
+                       if r.passage_a not in hubs and r.passage_b not in hubs]
+
         if self.tracer is not None:
             self.tracer.note(
                 "contradiction_scan",
@@ -257,7 +282,21 @@ class ContradictionDetector:
                 rate=round(len(records) / len(pairs), 4) if pairs else 0.0,
                 top_score=round(records[0].score, 4) if records else None,
             )
-        return ScanResult(pairs=len(pairs), records=records)
+        return ScanResult(pairs=len(pairs), records=records, hubs=sorted(hubs))
+
+    def _hubs(self, pairs, records) -> set[str]:
+        partners: dict[str, int] = {}
+        for a, b in pairs:
+            partners[a["id"]] = partners.get(a["id"], 0) + 1
+            partners[b["id"]] = partners.get(b["id"], 0) + 1
+        hits: dict[str, int] = {}
+        for r in records:
+            hits[r.passage_a] = hits.get(r.passage_a, 0) + 1
+            hits[r.passage_b] = hits.get(r.passage_b, 0) + 1
+        return {
+            pid for pid, n in hits.items()
+            if n >= self.hub_min_hits and n >= self.hub_fraction * partners.get(pid, 0)
+        }
 
     # -- feature f5 ---------------------------------------------------------
 

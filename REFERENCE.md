@@ -3548,7 +3548,7 @@ by how much it could distort a reported number.
 | 12 | D4 allocates without regard to `kind`. Decide with C33's data. | C27.8 | after C33 |
 | 13 | Nodes charge the budget only `if can_spend`, so calls after exhaustion go unrecorded rather than raising. | C27 | — |
 | 14 | **Calibrated stage 2 sees no critic evidence.** Add a run-level verification aggregate (not leaky at stage 2); decide which predictor it replaces. | C28.2 | C33 |
-| 15 | **f5 measures topic mismatch, not disagreement** (probe, C28.6). One passage "contradicted" four unrelated passages at 0.995–1.000. Rule to be chosen from probe v2's data (both-direction agreement and/or topical similarity). Until then the critic's contradiction flag receives false positives. | C28.6 | C33, and before trusting the critic flag |
+| 15 | ~~f5 measures topic mismatch~~ **Resolved C28.7:** both directions required, hubs excluded. Residual limit stated: passage-level NLI cannot tell a hub's genuine disagreement from its false ones; f5 will be near-constant on this corpus. Claim-level NLI is future work. | C28.6 → C28.7 | — |
 
 
 **2026-10-28 — C28. The finalizer and the full graph. Phase 3 complete once the live run confirms it.**
@@ -3925,3 +3925,49 @@ from that run, not from intuition.
 live by C28.5, receives these false positives — a claim citing the hub
 passage is presented to the critic as "contradicted by another source".
 Open item 15.
+
+
+**2026-11-16 — C28.7. f5's rule, chosen from the probe. A negative result,
+stated, and a line drawn.**
+
+Probe v2 on five queries (three contested, two consensus controls):
+
+- **Topical similarity separates nothing.** Every pair, contested or
+  control, scored 0.65–0.87: everything retrieved for one query is on-topic
+  by construction. Rejected as a filter (R2 kept exactly what R0 kept).
+- **Requiring both directions removes every one-directional artifact.**
+  All five non-hub hits were lopsided (0.07/0.99, 0.77/0.01, 0.23/0.93,
+  0.01/0.73, 0.01/0.72); none read as a disagreement. Adopted:
+  `require_both_directions: true` — the reverse of C12's "keep the stronger
+  direction", made on evidence C12 did not have. The test that encoded it is
+  reversed; the old rule stays reachable through config.
+- **The hub survives every rule.** The LoRA passage scored ~1.0 in both
+  directions against a glossary bullet list and an XLM-RoBERTa methods
+  paragraph. One of its pairs — against "LoRA could match full fine-tuning
+  across a broad range of tasks" — may be a *genuine* disagreement, exactly
+  the dispute the "LoRA Without Regret" post is about. Passage-level NLI
+  scores the genuine pair and the bogus ones identically. Adopted: **hub
+  suppression** — a passage that "contradicts" at least half of its partners
+  (and at least three) is excluded, its pairs removed from numerator and
+  denominator, and listed in the scan record so the exclusion is visible.
+
+**The negative result, for the writeup.** Passage-level NLI over retrieved
+chunks does not reliably detect source disagreement: its strongest outputs
+were topic mismatch, and where a real disagreement existed it was
+indistinguishable from the artifacts around it. With both rules applied,
+the probe's contested queries score f5 ≈ 0 — **f5 will be near-constant on
+this corpus.** C33 should expect that; with regularisation its coefficient
+will go to ~0, and if it does, f5 is reported as a measured null rather than
+quietly dropped. **Tier D3 ("no consensus") therefore cannot rest on f5.** It
+rests on the critic (which sees the evidence, and now receives no false
+contradiction flags) and on D5's resolution rule. §4.6's design assumed
+passage-level NLI would carry this signal; it does not, and the writeup says
+so.
+
+**The line.** The proper fix is claim-level NLI: extract the sentence in
+each passage that bears on the sub-question, and compare claims, not
+chunks. It would cost an LLM call or a sentence-selection model per passage
+and a new evaluation of its own. That is a project inside the project, and
+nothing downstream is blocked by its absence: the decision layer already
+works without f5. **Recorded as future work; no further investment in
+contradiction detection before Phase 4.**

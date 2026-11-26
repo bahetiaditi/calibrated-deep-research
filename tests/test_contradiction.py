@@ -178,23 +178,31 @@ def test_both_directions_are_scored():
     assert len(model.calls[0]) == 2      # one pair, both directions
 
 
-def test_contradiction_found_in_one_direction_only_is_kept():
-    """NLI heads are asymmetric in practice; missing a real contradiction
-    costs more than the extra forward pass."""
-    class OneWay(FakeNLI):
-        def predict(self, pairs):
-            self.calls.append(list(pairs))
-            # Only the reversed direction fires.
-            return [
-                [4.0, -2.0, -1.0] if a.startswith("beta") else [-3.0, 3.0, 0.0]
-                for a, b in pairs
-            ]
+class OneWay(FakeNLI):
+    def predict(self, pairs):
+        self.calls.append(list(pairs))
+        # Only the reversed direction fires.
+        return [
+            [4.0, -2.0, -1.0] if a.startswith("beta") else [-3.0, 3.0, 0.0]
+            for a, b in pairs
+        ]
 
-    records = detector(OneWay()).detect([
-        passage("P1", "alpha claim", source="A"),
-        passage("P2", "beta claim", source="B"),
-    ])
-    assert len(records) == 1
+
+ONE_WAY = [passage("P1", "alpha claim", source="A"),
+           passage("P2", "beta claim", source="B")]
+
+
+def test_contradiction_found_in_one_direction_only_is_dropped():
+    """C28.7 reverses C12's rule here. C12 kept the stronger direction on the
+    grounds that NLI heads are asymmetric; on real passages every
+    one-directional hit the probe found was an artifact (0.07/0.99,
+    0.01/0.73, …)."""
+    assert detector(OneWay()).detect(ONE_WAY) == []
+
+
+def test_the_old_rule_is_still_reachable_by_config():
+    cfg = CFG.with_overrides({"retrieval.contradiction.require_both_directions": False})
+    assert len(ContradictionDetector(cfg, model=OneWay()).detect(ONE_WAY)) == 1
 
 
 # --- thresholding and budget -----------------------------------------------
@@ -328,3 +336,27 @@ def test_scan_is_traced():
 
 def test_softmax_normalises():
     assert sum(_softmax([1.0, 2.0, 3.0])) == pytest.approx(1.0)
+
+
+# --- C28.7: hub suppression ------------------------------------------------
+
+
+def test_a_hub_is_excluded_from_numerator_and_denominator():
+    """The live case: one passage 'contradicts' everything around it."""
+    texts = ["HUB claim", "x one", "x two", "x three", "real A", "real B"]
+    ps = [passage(f"P{i}", t, source=f"s{i}") for i, t in enumerate(texts)]
+    conflicts = {frozenset(("HUB", f"x {w}")) for w in ("one", "two", "three")}
+    conflicts.add(frozenset(("real A", "real B")))
+    result = detector(FakeNLI(contradicting=conflicts)).scan(ps)
+    assert result.hubs == ["P0"]
+    assert result.pairs == 10                  # 15 pairs minus the hub's 5
+    assert [(r.passage_a, r.passage_b) for r in result.records] == [("P4", "P5")]
+    assert result.rate == 0.1
+
+
+def test_two_passages_disagreeing_is_not_a_hub():
+    ps = [passage("P1", "rank 8 is optimal", source="a"),
+          passage("P2", "rank 64 is optimal", source="b"),
+          passage("P3", "unrelated", source="c")]
+    result = detector(FakeNLI(contradicting={frozenset(("rank 8", "rank 64"))})).scan(ps)
+    assert result.hubs == [] and len(result.records) == 1

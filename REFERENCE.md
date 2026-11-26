@@ -4173,3 +4173,48 @@ now contains "should scale at roughly the same rate"; with the old
 to test the hard rule exposed a defect in the component the hard rule
 depends on — and one that had been silently affecting every premise check
 on long passages.
+
+**2026-11-26 — C30 verified live; C31: the split, frozen and hashed.**
+
+**C30's false premises, live.** After C30.1, `probe_premise --tier-d1`
+refutes all five. D1-03 is now CONTRADICTED *citing the same passage it had
+cited as support* — "the authors state their analysis predicts model size
+and training tokens should scale equally". Same evidence, read whole. The
+hard rule can fire on every Tier D1 item.
+
+**C31.** `scripts/make_split.py` assigns a deterministic, seeded (31)
+split, stratified by tier and by Tier D sub-type (§6.3):
+
+| stratum | A | B | C | D1 | D2 | D3 | D4 | total |
+|---|---|---|---|---|---|---|---|---|
+| calibration | 5 | 5 | 4 | 3 | 2 | 3 | 2 | 24 |
+| test | 5 | 5 | 4 | 2 | 3 | 2 | 3 | 24 |
+
+Test: A01 A02 A04 A07 A08 · B03 B05 B07 B08 B10 · C02 C03 C04 C05 ·
+D1-01 D1-05 · D2-01 D2-02 D2-03 · D3-03 D3-04 · D4-02 D4-04 D4-05.
+
+**"Provably fixed" is a hash, not a promise.** `split_frozen` records a
+SHA-256 over every test question's full content (question, gold claims,
+Tier D evidence) plus both splits' membership. `check_questions` fails on a
+mismatch: editing a test question or moving one between splits after the
+freeze is *caught*. Calibration questions stay editable — fixing an error
+found while calibrating is legitimate; changing what the reported numbers
+rest on is not. `make_split` refuses to run again without `--refreeze`, and
+says that a re-freeze after results exist invalidates the held-out claim.
+The tests break the test half and confirm the hash catches it, confirm a
+calibration edit does not trip it, and recompute the split from its seed.
+
+**Exposure, handled by rule and recorded.** Questions tagged `dev_exposed`
+are forced into calibration: B01 (near-copy of the development smoke
+question) and **D1-03 (which drove the C30.1 fix — the system was debugged on
+it)**. D1-03 was tagged and the split re-frozen before this commit, the last
+point at which that is legitimate: nothing has been run against either
+split. Two test items, D1-01 and D1-05, were *observed* in the pre-freeze
+probe runs — both refuted correctly, and nothing was changed in response —
+so they stay in test, with the observation recorded in `questions.json`
+(`pre_freeze_observations`) rather than quietly omitted.
+
+Phase 4 remains: C32, the resumable eval runners — and with them the
+runner rules accumulated in the open table (pin every role, fresh cache
+directory, re-run rather than resume `system_failure`, restore the budget on
+resume).

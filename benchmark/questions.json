@@ -28,7 +28,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "test"
     },
     {
       "id": "A02",
@@ -62,7 +63,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "test"
     },
     {
       "id": "A03",
@@ -89,7 +91,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "calibration"
     },
     {
       "id": "A04",
@@ -117,7 +120,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "test"
     },
     {
       "id": "A05",
@@ -145,7 +149,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "calibration"
     },
     {
       "id": "A06",
@@ -171,7 +176,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "calibration"
     },
     {
       "id": "A07",
@@ -199,7 +205,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "test"
     },
     {
       "id": "A08",
@@ -225,7 +232,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "test"
     },
     {
       "id": "A09",
@@ -259,7 +267,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "calibration"
     },
     {
       "id": "A10",
@@ -286,7 +295,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "calibration"
     },
     {
       "id": "B01",
@@ -323,7 +333,8 @@
         }
       ],
       "notes": "Near-copy of the development smoke question (C27-C28); report results with and without it.",
-      "dev_exposed": true
+      "dev_exposed": true,
+      "split": "calibration"
     },
     {
       "id": "B02",
@@ -357,7 +368,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "calibration"
     },
     {
       "id": "B03",
@@ -392,7 +404,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "test"
     },
     {
       "id": "B04",
@@ -419,7 +432,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "calibration"
     },
     {
       "id": "B05",
@@ -452,7 +466,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "test"
     },
     {
       "id": "B06",
@@ -479,7 +494,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "calibration"
     },
     {
       "id": "B07",
@@ -513,7 +529,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "test"
     },
     {
       "id": "B08",
@@ -541,7 +558,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "test"
     },
     {
       "id": "B09",
@@ -574,7 +592,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "calibration"
     },
     {
       "id": "B10",
@@ -607,7 +626,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "test"
     },
     {
       "id": "C01",
@@ -641,7 +661,8 @@
           ]
         }
       ],
-      "notes": "Gold is the shape of the disagreement: conditional, not a yes or no."
+      "notes": "Gold is the shape of the disagreement: conditional, not a yes or no.",
+      "split": "calibration"
     },
     {
       "id": "C02",
@@ -675,7 +696,8 @@
           ]
         }
       ],
-      "notes": "Valid answers present the revisions, not a single number."
+      "notes": "Valid answers present the revisions, not a single number.",
+      "split": "test"
     },
     {
       "id": "C03",
@@ -713,7 +735,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "test"
     },
     {
       "id": "C04",
@@ -752,7 +775,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "test"
     },
     {
       "id": "C05",
@@ -779,7 +803,8 @@
           ]
         }
       ],
-      "notes": ""
+      "notes": "",
+      "split": "test"
     },
     {
       "id": "C06",
@@ -811,7 +836,8 @@
           ]
         }
       ],
-      "notes": "Two-sided: undertrained relative to training compute, yet 'overtraining' can be optimal once inference is counted. Replaced a single-source RAG question (no independent RAG source in the corpus)."
+      "notes": "Two-sided: undertrained relative to training compute, yet 'overtraining' can be optimal once inference is counted. Replaced a single-source RAG question (no independent RAG source in the corpus).",
+      "split": "calibration"
     },
     {
       "id": "C07",
@@ -840,7 +866,8 @@
           ]
         }
       ],
-      "notes": "A correct answer rejects the either/or framing."
+      "notes": "A correct answer rejects the either/or framing.",
+      "split": "calibration"
     },
     {
       "id": "C08",
@@ -872,7 +899,8 @@
           ]
         }
       ],
-      "notes": "The corpus supports parity at the scales tested and hybrids in practice, not obsolescence."
+      "notes": "The corpus supports parity at the scales tested and hybrids in practice, not obsolescence.",
+      "split": "calibration"
     },
     {
       "id": "D1-01",
@@ -886,7 +914,8 @@
         "P0efddc1f0a3f",
         "Pe8d5b646c220",
         "P91995c1f3443"
-      ]
+      ],
+      "split": "test"
     },
     {
       "id": "D1-02",
@@ -899,7 +928,8 @@
       "refutation_passage_ids": [
         "P39f68425d53e",
         "P2f2c3398a8a8"
-      ]
+      ],
+      "split": "calibration"
     },
     {
       "id": "D1-03",
@@ -912,7 +942,10 @@
       "refutation_passage_ids": [
         "Pbcc634befd2e",
         "P6b4994dbafeb"
-      ]
+      ],
+      "split": "calibration",
+      "dev_exposed": true,
+      "notes": "Drove the C30.1 fix (premise verifier truncation): the system was debugged on it. Forced to calibration."
     },
     {
       "id": "D1-04",
@@ -925,7 +958,8 @@
       "refutation_passage_ids": [
         "P1bf94a39c0a1",
         "P8c27e92af85b"
-      ]
+      ],
+      "split": "calibration"
     },
     {
       "id": "D1-05",
@@ -938,7 +972,8 @@
       "refutation_passage_ids": [
         "P45d9f67ab112",
         "P58d6821b15e8"
-      ]
+      ],
+      "split": "test"
     },
     {
       "id": "D2-01",
@@ -951,7 +986,8 @@
         "which kernel",
         "compared with what",
         "hardware and sequence length"
-      ]
+      ],
+      "split": "test"
     },
     {
       "id": "D2-02",
@@ -964,7 +1000,8 @@
         "which method",
         "which model",
         "task and data size"
-      ]
+      ],
+      "split": "test"
     },
     {
       "id": "D2-03",
@@ -976,7 +1013,8 @@
       "missing": [
         "the technique 'it' refers to",
         "the baseline it is compared with"
-      ]
+      ],
+      "split": "test"
     },
     {
       "id": "D2-04",
@@ -988,7 +1026,8 @@
       "missing": [
         "which models",
         "which benchmark and metric"
-      ]
+      ],
+      "split": "calibration"
     },
     {
       "id": "D2-05",
@@ -999,7 +1038,8 @@
       "expected_behavior": "Ask which paper or experiment.",
       "missing": [
         "which paper or experiment"
-      ]
+      ],
+      "split": "calibration"
     },
     {
       "id": "D3-01",
@@ -1013,7 +1053,8 @@
         "P85a370298db4",
         "Pde14ada873fc",
         "Paaefce55d766"
-      ]
+      ],
+      "split": "calibration"
     },
     {
       "id": "D3-02",
@@ -1026,7 +1067,8 @@
         "P1bff5a5e81b4",
         "Pe44e9ae00164",
         "Pae18b42662f1"
-      ]
+      ],
+      "split": "calibration"
     },
     {
       "id": "D3-03",
@@ -1039,7 +1081,8 @@
         "Paaefce55d766",
         "Pc250ff2653c3",
         "P85a370298db4"
-      ]
+      ],
+      "split": "test"
     },
     {
       "id": "D3-04",
@@ -1052,7 +1095,8 @@
         "P37c05e216866",
         "P5076483751c7",
         "Pe4cda082558e"
-      ]
+      ],
+      "split": "test"
     },
     {
       "id": "D3-05",
@@ -1064,7 +1108,8 @@
       "side_passage_ids": [
         "P6bd971390235",
         "P5d7a9bf2b58f"
-      ]
+      ],
+      "split": "calibration"
     },
     {
       "id": "D4-01",
@@ -1078,7 +1123,8 @@
           "vLLM|PagedAttention",
           "H100"
         ]
-      ]
+      ],
+      "split": "calibration"
     },
     {
       "id": "D4-02",
@@ -1092,7 +1138,8 @@
           "vLLM",
           "\\bstars?\\b"
         ]
-      ]
+      ],
+      "split": "test"
     },
     {
       "id": "D4-03",
@@ -1106,7 +1153,8 @@
           "MMLU",
           "leaderboard"
         ]
-      ]
+      ],
+      "split": "calibration"
     },
     {
       "id": "D4-04",
@@ -1119,7 +1167,8 @@
         [
           "\\b2028\\b"
         ]
-      ]
+      ],
+      "split": "test"
     },
     {
       "id": "D4-05",
@@ -1132,7 +1181,8 @@
         [
           "FlashAttention-?4"
         ]
-      ]
+      ],
+      "split": "test"
     }
   ],
   "review": {
@@ -1149,5 +1199,14 @@
   },
   "contamination_excluded": [
     "'Why does Mamba interleave multi-head attention layers…' — the worked example inside the premise-verify prompt since C28.1; using it would test the system on its own prompt."
+  ],
+  "split_frozen": {
+    "date": "2026-11-26",
+    "seed": 31,
+    "method": "stratified by tier and Tier D sub-type; dev_exposed forced to calibration",
+    "hash": "708266628ff97636c41d50093666d898bf77076b5d4c0e8049fe825d7d707e21"
+  },
+  "pre_freeze_observations": [
+    "D1-01 and D1-05 (test split) were run through probe_premise --tier-d1 before the freeze (C30, C30.1). Both refuted correctly both times; nothing was changed in response to them."
   ]
 }

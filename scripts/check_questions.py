@@ -80,6 +80,8 @@ def validate(data, corpus, retrieval_questions=()) -> tuple[list[str], list[str]
         if subtypes.get(sub, 0) != n:
             errors.append(f"Tier D {sub}: {subtypes.get(sub, 0)} questions, expected {n}")
 
+    errors += _validate_split(data)
+
     for q in questions:
         qid, tier = q.get("id"), q.get("tier")
         if tier == "D":
@@ -147,6 +149,31 @@ def _validate_d(q, corpus) -> list[str]:
                 errors.append(f"{qid}: corpus may answer it — {group} matches {found[:3]}")
     else:
         errors.append(f"{qid}: unknown Tier D subtype {sub!r}")
+    return errors
+
+
+def _validate_split(data) -> list[str]:
+    """C31: once frozen, the test half cannot change unnoticed."""
+    frozen = data.get("split_frozen")
+    if not frozen:
+        return []                      # before C31, or deliberately unfrozen
+    from scripts.make_split import CAL_COUNT, CALIBRATION, TEST, split_hash, stratum
+
+    errors = []
+    questions = data.get("questions") or []
+    for q in questions:
+        if q.get("split") not in (CALIBRATION, TEST):
+            errors.append(f"{q.get('id')}: no split assigned")
+        if q.get("dev_exposed") and q.get("split") == TEST:
+            errors.append(f"{q.get('id')}: dev_exposed question in the test split")
+    for name, n_cal in CAL_COUNT.items():
+        items = [q for q in questions if stratum(q) == name]
+        cal = sum(q.get("split") == CALIBRATION for q in items)
+        if cal != n_cal:
+            errors.append(f"stratum {name}: {cal} in calibration, expected {n_cal}")
+    if split_hash(questions) != frozen.get("hash"):
+        errors.append("test split changed after it was frozen (hash mismatch) — "
+                      "a test question, its gold, or split membership was edited")
     return errors
 
 

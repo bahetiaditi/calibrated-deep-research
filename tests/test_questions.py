@@ -115,3 +115,51 @@ def test_the_prompt_example_is_not_a_benchmark_item(loaded):
     worked example; testing on it would test the system on its own prompt."""
     data, _, _ = loaded
     assert not any("interleave multi-head attention" in q["question"] for q in data["questions"])
+
+
+
+# --- the frozen split (C31) ------------------------------------------------
+
+
+def test_the_split_is_frozen_and_balanced(loaded):
+    data, _, _ = loaded
+    assert data["split_frozen"]["hash"]
+    splits = [q["split"] for q in data["questions"]]
+    assert splits.count("calibration") == splits.count("test") == 24
+
+
+def test_editing_a_test_question_after_freezing_is_caught(loaded):
+    """The held-out claim rests on this: the test half cannot drift."""
+    def mutate(qs):
+        q = next(q for q in qs if q["split"] == "test" and q.get("gold_claims"))
+        q["gold_claims"][0]["claim"] += " (edited)"
+    assert any("hash mismatch" in e for e in _break(loaded, mutate))
+
+
+def test_moving_a_question_between_splits_is_caught(loaded):
+    def mutate(qs):
+        cal = next(q for q in qs if q["split"] == "calibration" and not q.get("dev_exposed"))
+        cal["split"] = "test"
+    errors = _break(loaded, mutate)
+    assert any("hash mismatch" in e for e in errors)
+
+
+def test_editing_a_calibration_question_is_allowed(loaded):
+    """Fixing an error found while calibrating is legitimate."""
+    def mutate(qs):
+        q = next(q for q in qs if q["split"] == "calibration" and q.get("gold_claims"))
+        q["gold_claims"][0]["claim"] += " (corrected)"
+    assert not any("hash mismatch" in e for e in _break(loaded, mutate))
+
+
+def test_the_dev_exposed_question_is_held_out_of_test(loaded):
+    data, _, _ = loaded
+    assert all(q["split"] == "calibration" for q in data["questions"] if q.get("dev_exposed"))
+
+
+def test_the_split_is_reproducible_from_its_seed(loaded):
+    from scripts.make_split import assign
+
+    data, _, _ = loaded
+    recomputed = assign(data["questions"], seed=data["split_frozen"]["seed"])
+    assert recomputed == {q["id"]: q["split"] for q in data["questions"]}

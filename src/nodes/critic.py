@@ -52,7 +52,7 @@ from typing import Any, Sequence
 from src.config import Config, get_config
 from src.llm.provider import LLMProvider, Role
 from src.prompts import render
-from src.state import ClaimVerification, Passage, ResearchState
+from src.state import ClaimVerification, Passage, ResearchState, evidence_window, source_label
 
 log = logging.getLogger(__name__)
 
@@ -85,7 +85,9 @@ VERDICTS = (SUPPORTED, PARTIAL, UNSUPPORTED, CONTRADICTED)
 # by the model, which is what the three-category prompt is for.
 MIN_SENTENCE_CHARS = 25
 
-MAX_PASSAGE_CHARS = 800
+# C37.3: the critic's own 800-character cut is gone; it sees exactly the
+# window the synthesizer wrote from (state.EVIDENCE_WINDOW_CHARS). A verifier
+# that sees less than the writer rejects claims for text it was not shown.
 
 
 @dataclass
@@ -341,7 +343,7 @@ class Critic:
             return f"{pid}\n(PASSAGE NOT FOUND — treat any claim citing it "
             f"as unsupported)"
 
-        header = f"{pid}  {passage.get('source_id', '?')}"
+        header = f"{pid}  {source_label(passage)}"
         section = passage.get("section")
         if section:
             # Shown because attribution is one of the three traps in the
@@ -349,8 +351,8 @@ class Critic:
             header += f"  [{section}]"
         if is_contradicted:
             header += "  [CONTRADICTED BY OTHER SOURCES]"
-        text = " ".join((passage.get("text") or "").split())
-        return f"{header}\n{text[:MAX_PASSAGE_CHARS]}"
+        # The writer's window, not a smaller one (C37.3, A05).
+        return f"{header}\n{evidence_window(passage.get('text') or '')}"
 
     # -- plumbing -----------------------------------------------------------
 

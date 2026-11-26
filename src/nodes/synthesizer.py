@@ -43,7 +43,10 @@ from typing import Any, Sequence
 from src.config import Config, get_config
 from src.llm.provider import LLMProvider, Role, estimate_tokens
 from src.prompts import render
-from src.state import draft_digest, Passage, ResearchState, evidence_for, find_sub_question
+from src.state import (
+    EVIDENCE_WINDOW_CHARS, Passage, ResearchState, draft_digest, evidence_for,
+    evidence_window, find_sub_question, source_label,
+)
 
 log = logging.getLogger(__name__)
 
@@ -83,7 +86,7 @@ MAX_RANGE = 10
 # How much of each passage the synthesizer sees. The full text of 20 passages
 # would dominate the context and push the model toward summarising evidence
 # rather than answering the question.
-MAX_PASSAGE_CHARS = 900
+MAX_PASSAGE_CHARS = EVIDENCE_WINDOW_CHARS     # shared with the critic (C37.3)
 MAX_PASSAGES = 24
 
 
@@ -268,13 +271,12 @@ class Synthesizer:
             # The section is shown because a Related Work passage describes
             # someone else's contribution, and the prompt asks the model to
             # distinguish measured from cited results (§4.2).
-            header = f"P{i + 1:02d}  {passage.get('source_id', '?')}"
+            header = f"P{i + 1:02d}  {source_label(passage)}"
             if section:
                 header += f"  [{section}]"
             if passage.get("published"):
                 header += f"  {passage['published']}"
-            text = " ".join((passage.get("text") or "").split())
-            blocks.append(f"{header}\n{text[:MAX_PASSAGE_CHARS]}")
+            blocks.append(f"{header}\n{evidence_window(passage.get('text') or '', MAX_PASSAGE_CHARS)}")
         return "\n\n".join(blocks)
 
     # -- validation ---------------------------------------------------------

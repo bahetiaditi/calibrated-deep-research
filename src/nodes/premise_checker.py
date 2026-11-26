@@ -54,7 +54,7 @@ from src.config import Config, get_config
 from src.llm.provider import LLMProvider, Role, estimate_tokens
 from src.llm.structured import StructuredOutputError
 from src.prompts import render
-from src.state import Passage
+from src.state import Passage, source_label
 
 log = logging.getLogger(__name__)
 
@@ -303,7 +303,10 @@ class PremiseChecker:
             empty = render("premise_verify", question=question, claims=claims, evidence="")
             overhead = estimate_tokens(
                 "You are a precise evidence checker. Output only JSON.", empty, 0)
-            headers = 60 * len(texts)     # label, source id, section per passage
+            # Measured, not estimated: since C37.3 a header carries the
+            # title (up to ~140 characters), and a fixed 60 per passage would
+            # let the prompt overrun the budget it was fitted to.
+            headers = sum(len(_evidence_header(label, p)) + 2 for label, p in evidence)
             available = max(0.0, (budget - overhead) * 3.5 * 0.95 - headers)
             cap = max(MIN_EVIDENCE_CHARS, int(available // len(texts)))
         out = [_trim_at_sentence(t, cap) for t in texts]
@@ -324,9 +327,7 @@ class PremiseChecker:
         )
         texts = self._fit_evidence(question, claims, evidence)
         rendered = "\n\n".join(
-            f"{label} ({p.get('source_id', '?')}"
-            f"{', ' + p['section'] if p.get('section') else ''})\n"
-            f"{text}"
+            f"{_evidence_header(label, p)}\n{text}"
             for (label, p), text in zip(evidence, texts)
         )
         label_to_id = {label: p["id"] for label, p in evidence}
@@ -454,6 +455,12 @@ def premise_checker_node(checker: PremiseChecker):
 def _mean(values) -> float:
     values = list(values)
     return sum(values) / len(values) if values else 1.0
+
+
+def _evidence_header(label: str, passage: Passage) -> str:
+    """`P01 (1706.03762v7 "Attention Is All You Need", Introduction)`."""
+    section = f", {passage['section']}" if passage.get("section") else ""
+    return f"{label} ({source_label(passage)}{section})"
 
 
 def _trim_at_sentence(text: str, cap: int) -> str:

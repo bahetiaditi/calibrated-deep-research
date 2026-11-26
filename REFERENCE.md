@@ -4576,3 +4576,89 @@ The passage IS the original paper; the critic is shown only its arXiv id
 (1706.03762v7), not its title, so it cannot know. C30.1's attribution rule
 ("this work" vs Related Work) made it suspicious and nothing let it resolve
 the suspicion. The synthesizer and premise checker are shown no title either.
+
+**2026-11-26 — C37.2 verified live (re-score of the five calibration records).**
+All six cached judgments were detected as from the older grader and
+re-judged. Hallucination **0.483 = 14/29**, of which **uncited 0.448
+(13/29)** and **miscitation 0.062 (1/16 cited sentences)**; 0 unjudged, 0
+passages trimmed. A05's two gap sentences are now GAP (factual 31 → 29), as
+C37.2's GAP definition intends. The total did not fall, because one cited
+sentence moved the other way: A10's "for tokens in the shared prompt region,
+the existing physical blocks are read without duplication… new KV entries go
+to newly allocated blocks" [P98b2a98bf6c3] went SUPPORTED → UNSUPPORTED. The
+passage (991 characters; the extra 91 the judge now sees are figure-caption
+debris) describes single-sequence block allocation, not prompt sharing, so
+the new label is defensible — PARTIAL would be fairest. A grader-prompt
+change moved a borderline label; it is flagged for the human spot-check.
+Of the 13 uncited, 8 are A03's lost citations (C37.1; its re-run decides
+them) and 5 are sentences the synthesizer wrote without citing.
+
+**2026-11-26 — C37.3. Every node sees a passage the same way: id, title,
+and the same window.**
+
+**What broke — two calibration outcomes traced to evidence presentation.**
+
+*A06, a false abstention.* The critic marked "the base Transformer employs
+eight parallel attention heads [Pb6eeca1bdcd7]" UNSUPPORTED, reasoning that
+the passage "describes the authors' model, not the original base
+Transformer". The passage reads "In this work we employ h = 8 parallel
+attention layers, or heads" and IS the original paper — but the critic was
+shown "1706.03762v7" and no title. C30.1's attribution rule made it
+suspicious of "this work"; nothing let it resolve the suspicion. Both core
+sub-questions ended unresolved; ABSTAIN.
+
+*A05, a PARTIAL that should have been an ANSWER.* The synthesizer saw 900
+characters of each passage, the critic 800 (two constants, set at different
+commits, never compared). The A05 draft's "trained for 3.5 days on eight
+GPUs" cites the Transformer abstract, where that phrase begins at character
+**872** — inside the writer's window, outside the verifier's. The critic
+called it UNSUPPORTED, the training-cost sub-question was left unresolved,
+and the report declared "training cost could not be established" while its
+own evidence stated it. The judge, reading the full passage, labels the
+same sentence SUPPORTED.
+
+**Fix.**
+- `state.source_label(passage)` → `1706.03762v7 "Attention Is All You Need"`
+  (title truncated at 120). Used in the critic's, synthesizer's and premise
+  verifier's passage headers — the three places a model is shown a passage
+  (audited: planner, retriever and router show none).
+- `state.evidence_window(text)`: one window (900, the synthesizer's
+  existing cut) for writer and critic, marked `[…]` when the passage
+  continues. Test: over all 982 corpus passages the critic's text equals the
+  synthesizer's, character for character. The cut stays mid-sentence on
+  purpose: a sentence-boundary trim would drop "3.5 days", whose sentence
+  straddles 900. The premise verifier keeps its C30.1 sentence-boundary
+  fitting.
+- Prompts: critic and premise verifier say that "we"/"in this work" outside
+  Related Work means the paper named in the title; the critic is told a
+  `[…]` passage continues past what is shown.
+- Premise verifier fitting now measures its headers instead of assuming 60
+  characters each (titles made them up to ~140). Found writing the test: the
+  existing 400-character floor can still exceed a very tight budget —
+  pre-existing, not changed here, noted.
+
+**Re-runs.** This changes the prompts of three nodes, so every completed
+calibration run was produced by a different system than the one that will
+be frozen. All five (A03, A05, A06, A09, A10) are re-run with `--rerun`
+before the queue continues; B01 is re-run anyway (system failure). The
+planner and retrieval calls replay from the eval cache (unchanged prompts),
+so a re-run costs roughly the premise, synthesis, critique and routing
+calls. The calibration split stays homogeneous; the test split is
+untouched.
+
+**Re-run batches resume.** The day quota can stop five re-runs half way, and
+re-issuing the same `--rerun` command would have re-run the finished ones a
+second time. A question whose record already `supersedes` an earlier one for
+the same reason is now skipped; a different reason is a new decision and
+re-runs again. (Amends C37.1's `--rerun`.)
+
+Also: `.gitignore` now keeps `results/*.json` (the metrics JSON the C37
+entry says is committed was being ignored).
+
+Live check: `scripts/smoke_c37_3.py` — one critic call on the A05 and A06
+claims against their real passages; both were UNSUPPORTED before.
+
+Tests: `tests/test_c37_3.py` (8), plus one in `test_c37_1.py` for resumable
+re-run batches. Mutation checks, each failing ≥1 test: skipping the
+same-reason check; critic header without the title; critic window back to 800; premise header
+without the title; premise fitting back to a fixed 60 per header.

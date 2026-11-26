@@ -159,8 +159,14 @@ class EvalRunner:
             # Completed questions are counted before the limit is checked: a
             # limit counts ATTEMPTS. Until C32.1 the limit came first, so
             # `--limit 0` reported nothing at all, not the completed ones.
-            if self._completed(q["id"]) and q["id"] not in rerun:
+            if self._completed(q["id"]) and (q["id"] not in rerun
+                                             or self._already_rerun(q["id"], rerun[q["id"]])):
+                # An explicit re-run already done for the same reason is not
+                # repeated: the day's quota can stop a batch of re-runs half
+                # way, and re-issuing the same command must finish the batch,
+                # not re-run its first half a second time (C37.3).
                 summary.skipped.append(q["id"])
+                rerun.pop(q["id"], None)
                 continue
             if limit is not None and attempted >= limit:
                 break
@@ -198,6 +204,13 @@ class EvalRunner:
         blank = sorted(i for i, why in rerun.items() if not (why or "").strip())
         if blank:
             raise EvalRefused(f"a re-run needs a reason, recorded in the result: {', '.join(blank)}")
+
+    def _already_rerun(self, qid: str, reason: str) -> bool:
+        try:
+            record = json.loads((self.dir / f"{qid}.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            return False
+        return (record.get("supersedes") or {}).get("reason") == reason
 
     def _completed(self, qid: str) -> bool:
         path = self.dir / f"{qid}.json"

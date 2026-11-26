@@ -185,3 +185,19 @@ def test_rerun_needs_a_reason_and_an_existing_result(tmp_path):
         make(tmp_path, run).run(rerun={other: "x"})
     with pytest.raises(EvalRefused, match="not in the calibration split"):
         make(tmp_path, run).run(rerun={"ZZ99": "x"})
+
+
+def test_reissuing_the_same_rerun_finishes_the_batch_instead_of_repeating_it(tmp_path):
+    """C37.3: quota can stop a batch of re-runs half way. The same command
+    the next day must skip what it already re-ran for that reason."""
+    run = FakeRun()
+    a, b = make(tmp_path, run).run(limit=2).done
+    reason = "C37.3: homogeneous calibration"
+    make(tmp_path, run).run(rerun={a: reason})            # a done, then quota "stopped"
+    n = len(run.calls)
+    s = make(tmp_path, run).run(rerun={a: reason, b: reason})
+    assert run.calls[n:] == [f"agent:calibration:{b}:a1"]  # only b
+    assert s.skipped == [a]
+    # A NEW reason is a new decision and re-runs again.
+    make(tmp_path, run).run(rerun={a: "a later fix"})
+    assert run.calls[-1] == f"agent:calibration:{a}:a2"

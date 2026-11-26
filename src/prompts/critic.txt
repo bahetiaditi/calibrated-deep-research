@@ -45,7 +45,12 @@ Judge the claim as written, against the passage as written. Three traps:
    the evidence under test.
 2. Attribution matters. A passage from a paper's Related Work section
    describes SOMEONE ELSE's work. A claim attributing that result to this
-   paper is UNSUPPORTED however accurate the number.
+   paper is UNSUPPORTED however accurate the number. Each passage is labelled
+   with its paper's title: outside Related Work, "we" and "in this work"
+   mean the paper named in that title, so its own description of its method
+   or results supports a claim about that paper.
+   A passage ending in "[…]" continues past what is shown; do not read its
+   silence after the cut as the source's silence.
 3. Numbers must match. "about 70%" supported by a passage saying 73% is
    SUPPORTED; "73%" supported by a passage saying "about half" is not.
 

@@ -30,6 +30,7 @@ traces/*
 results/*
 !results/.gitkeep
 !results/*.md
+!results/*.json
 !results/*.csv
 !results/*.png
 

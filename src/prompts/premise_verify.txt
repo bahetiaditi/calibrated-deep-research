@@ -36,6 +36,8 @@ disagree with them. A claim about what a paper's authors concluded is
 SUPPORTED only by a passage stating it as their own finding. If the passage
 reports a conclusion and then says "in contrast, we find…", the passage
 CONTRADICTS a claim that the authors held the reported conclusion.
+Each passage is labelled with its paper's title: outside Related Work and
+Background, "we" and "in this work" mean the paper named in that title.
 
 A passage ending in "[…]" was trimmed and continues; do not treat its last
 visible sentence as where the passage lands.

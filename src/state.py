@@ -422,6 +422,44 @@ def new_state(
     )
 
 
+# C37.3. Every node that shows a model a passage shows it the same way: the
+# source id, the paper's title, and the same window of text. Two defects
+# found on the calibration split came from nodes seeing evidence differently:
+#   A06 — the critic saw only "1706.03762v7", so "In this work we employ
+#         h = 8 heads" read as some other model's design, and a correct claim
+#         about the original Transformer was rejected (a false abstention).
+#   A05 — the synthesizer saw 900 characters of a passage and the critic 800;
+#         "3.5 days on eight GPUs" sits at character 872, so the critic could
+#         not see the support for a claim the writer had read, and the
+#         training-cost sub-question ended unresolved (PARTIAL).
+EVIDENCE_WINDOW_CHARS = 900
+EVIDENCE_TRIM_MARKER = " […]"
+MAX_TITLE_CHARS = 120
+
+
+def source_label(passage: dict) -> str:
+    """`1706.03762v7 "Attention Is All You Need"` — id and title together."""
+    sid = str(passage.get("source_id") or "?")
+    title = " ".join(str(passage.get("title") or "").split())
+    if not title:
+        return sid
+    if len(title) > MAX_TITLE_CHARS:
+        title = title[: MAX_TITLE_CHARS - 1] + "…"
+    return f'{sid} "{title}"'
+
+
+def evidence_window(text: str, chars: int = EVIDENCE_WINDOW_CHARS) -> str:
+    """The text every node is shown, marked when it continues.
+
+    The cut stays where the synthesizer always cut (a sentence-boundary trim
+    would drop facts that straddle the window, and would change every draft).
+    The marker tells a reader the passage goes on, so its silence past the
+    window is not read as the source's silence.
+    """
+    text = " ".join((text or "").split())
+    return text if len(text) <= chars else text[:chars] + EVIDENCE_TRIM_MARKER
+
+
 def find_sub_question(state: ResearchState, sub_question_id: str) -> SubQuestion | None:
     for sub_question in state.get("plan") or []:
         if sub_question["id"] == sub_question_id:

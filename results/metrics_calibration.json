@@ -1,0 +1,22 @@
+{
+  "agent": {
+    "n": 6,
+    "failures": 1,
+    "ac_answered": 4,
+    "ac_accuracy_answered": 1.0,
+    "ac_false_abstention": 0.2,
+    "ac_mean_coverage": 0.9166666666666666,
+    "d_correct": null,
+    "d_false_answer": null,
+    "d_wrong_reason": null,
+    "unjudged": 0,
+    "hallucination": 0.4827586206896552,
+    "halluc_uncited": 0.4482758620689655,
+    "miscitation": 0.0625,
+    "grounding_unjudged": 0,
+    "aurc": 0.04,
+    "acc_at_80_coverage": 1.0,
+    "ece": 0.2,
+    "mean_llm_calls": 15.333333333333334
+  }
+}

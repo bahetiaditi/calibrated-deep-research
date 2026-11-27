@@ -345,6 +345,17 @@ def classify(exc: Exception, retry_statuses: list[int]) -> str:
     return "retry"
 
 
+CHAIN_EXHAUSTED = "llm_chain_exhausted"
+# Day-window markers (C32.1's list, shared with the eval runner): Groq's
+# "(TPD)"/"(RPD)", Gemini's "...PerDay...", the local ledger's "used today".
+DAY_QUOTA_MARKERS = ("per day", "(tpd)", "(rpd)", "perday", "used today")
+
+
+def _mentions_day_quota(text: str) -> bool:
+    low = (text or "").lower()
+    return any(m in low for m in DAY_QUOTA_MARKERS)
+
+
 def estimate_tokens(system: str, user: str, max_output_tokens: int) -> int:
     """Conservative pre-call estimate: ~4 chars/token, plus full output budget.
 
@@ -668,10 +679,22 @@ class LLMProvider:
                     fell_back=index > 0,
                 )
 
-        raise QuotaExhausted(
-            f"role {role.value!r}: every model in the chain failed or is out of "
-            f"quota. Tried {[s.model for s in chain]}. Details: {errors}"
-        )
+        message = (f"role {role.value!r}: every model in the chain failed or is out of "
+                   f"quota. Tried {[s.model for s in chain]}. Details: {errors}")
+        # C37.4.1. Every node catches this and degrades by design (the critic
+        # keeps the verdicts it has, the router marks claims unresolved), so
+        # the exception never reaches the run. Without a trace event, a run
+        # in which half the critique died of quota was recorded as a normal
+        # result (A09, a2). The note is how the run learns it was degraded.
+        if self.tracer is not None:
+            self.tracer.note(
+                CHAIN_EXHAUSTED,
+                role=role.value if hasattr(role, "value") else str(role),
+                models=[spec.model for spec in chain],
+                day_quota=_mentions_day_quota(message),
+                error=message[:400],
+            )
+        raise QuotaExhausted(message)
 
     def complete_json(
         self,

@@ -15,6 +15,7 @@ Outputs under results/eval/<config>/<split>/, one JSON per question.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 from pathlib import Path
@@ -57,6 +58,18 @@ def main(argv=None) -> int:
           f"{len(s.failed)} failed")
     if s.failed:
         print(f"  failed: {', '.join(s.failed)} — re-run the same command to retry")
+        for qid in s.failed:
+            # C37.4.1: a run whose nodes degraded on an exhausted LLM chain is
+            # a failure even though it reached a decision; say where.
+            try:
+                rec = json.loads((runner.dir / f"{qid}.json").read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            infra = rec.get("infra_failures") or []
+            if infra:
+                where = ", ".join(sorted({str(f.get("node")) for f in infra}))
+                why = "day quota" if any(f.get("day_quota") for f in infra) else "provider errors"
+                print(f"    {qid}: ran degraded ({why}) in {where}; not counted as a result")
     for qid, n in s.unparsed.items():
         print(f"  WARNING {qid}: {n} citation(s) could not be parsed — the draft "
               f"lost them; inspect before trusting this result")

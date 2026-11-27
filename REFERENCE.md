@@ -4737,3 +4737,55 @@ missing sentences; dropping the "no verdict" marker on uncited sentences.
 partial success must hand the gap to whoever can fill it; here the repair
 was in the parser and the gap was in the critic, two commits and twenty
 entries apart.
+
+**2026-11-27 — C37.4 live: the re-ask fired; the run it fired in should
+never have been recorded. C37.4.1.**
+
+A09 was re-run under C37.4 after the day's 120b quota was spent. The log
+shows the new path working — "critic returned 5 of 10 verdicts; judging the
+5 missing" — and then the re-ask hitting the day quota, followed by the
+router. Both degraded as designed (C37.4: keep the verdicts returned; C28:
+routing failure marks claims unresolved). The record (a2) was saved as
+**ANSWER, rule `threshold`, error None**, with five claims "no verdict
+returned". The runner had no way to know: every node catches
+`QuotaExhausted`, and the provider emitted nothing when it gave up. Without
+the fix, this record would have been scored as the system's behaviour, and
+because it carried the C37.4 re-run reason, re-issuing the same `--rerun`
+would have skipped it as done.
+
+The same hole existed before C37.4 wherever a node degrades on an exhausted
+chain (the router; the critic's split halves); C32.1's
+stop-on-quota only saw quota errors that ended the run as `system_failure`.
+
+**Fix.** The provider writes a `llm_chain_exhausted` trace note (role,
+models, whether the day quota is named, the error) before raising.
+`run_research` collects these into `RunResult.degraded`; the runner stores
+them as `infra_failures`. A record with any is a **failure**: re-run on a
+new thread by the next plain invocation, stops the batch when the day quota
+is named (C32.1), graded `failure` by `metrics.grade` (never answered or
+abstained), and skipped by `derive_baselines` like `system_failure`.
+`run_eval` names the node and cause. One quota-marker list now serves the
+provider and the runner.
+
+This is lesson 7 again, at a new layer: graceful degradation is right for a
+user-facing system and wrong for a measurement, unless the measurement is
+told.
+
+**Re-runs.** A09 (a2, degraded), and A10 and B01, which the trace probe
+flagged as capped critic calls (A10 a1's first critique at 2048 tokens; B01
+a2's second at 2032). Their records show no cited "no verdict" finding, so
+the gaps fell on uncited sentences or on a critique whose routing shaped the
+later draft; re-run all three under C37.4 + C37.4.1 for a homogeneous
+calibration set.
+
+**Not added:** a preflight refusing to start when the ledger shows the
+pinned model nearly spent. With C37.4.1 starting late is safe (the degraded
+run is a failure and re-runs), only wasteful; recorded as a habit instead —
+run after 05:30 IST.
+
+Tests: `tests/test_c37_4_1.py` (8), end to end with the real provider (an
+exhausted chain inside a node → trace → RunResult → record → failure,
+quota stop, re-run on a1). Mutation checks, each failing ≥1 test: provider
+note removed; `_is_failure` ignoring `infra_failures`; `_is_quota` ignoring
+the day flag; `grade` ignoring `infra_failures`; `RunResult.degraded` not
+wired.

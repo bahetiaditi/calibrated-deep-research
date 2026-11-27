@@ -83,6 +83,9 @@ class RunResult:
     error: str | None = None
     node_visits: list[str] = field(default_factory=list)
     resumed: str = ""          # "" fresh | "resumed" | "complete" (C32)
+    # C37.4.1: every LLM chain that gave up during this invocation, from the
+    # trace. Nodes degrade on these by design; the run must still know.
+    degraded: list[dict] = field(default_factory=list)
 
 
 def build_graph(
@@ -253,10 +256,28 @@ def run_research(
     from src.tracing.tracer import TraceReader
 
     try:
-        result.node_visits = TraceReader.load(tracer.path).nodes_visited()
+        reader = TraceReader.load(tracer.path)
+        result.node_visits = reader.nodes_visited()
+        result.degraded = degraded_calls(reader)
     except OSError:
         pass
     return result
+
+
+def degraded_calls(reader: Any) -> list[dict]:
+    """The run's exhausted LLM chains, with the node each happened in."""
+    from src.llm.provider import CHAIN_EXHAUSTED
+    from src.tracing.tracer import EventType
+
+    out = []
+    for e in reader.of_type(EventType.NOTE):
+        if e.get("name") != CHAIN_EXHAUSTED:
+            continue
+        p = e.get("payload") or {}
+        out.append({"node": p.get("node"), "role": p.get("role"),
+                    "day_quota": bool(p.get("day_quota")),
+                    "error": str(p.get("error") or "")[:200]})
+    return out
 
 
 def default_components(config: Config | None = None) -> Components:

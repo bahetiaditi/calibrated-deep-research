@@ -55,7 +55,7 @@ QUESTIONS = ROOT / "benchmark" / "questions.json"
 # model, which would have stopped the whole batch as if the day were gone.
 # These name the day explicitly: Groq's "(TPD)"/"(RPD)", Gemini's
 # "...PerDay...", and the local ledger's "tokens used today".
-QUOTA_MARKERS = ("per day", "(tpd)", "(rpd)", "perday", "used today")
+from src.llm.provider import DAY_QUOTA_MARKERS as QUOTA_MARKERS  # noqa: E402  (C37.4.1: one list)
 
 
 class EvalRefused(RuntimeError):
@@ -310,6 +310,11 @@ class EvalRunner:
             "node_visits": list(getattr(result, "node_visits", []) or []),
             "trace_path": str(getattr(result, "trace_path", "") or ""),
             "error": getattr(result, "error", None) or state.get("error"),
+            # C37.4.1: LLM chains that gave up mid-run. Non-empty means the
+            # nodes ran degraded (a critique half-judged, routing skipped):
+            # the record is not a measurement of the system, whatever its
+            # decision says, and is re-run like a system failure.
+            "infra_failures": list(getattr(result, "degraded", []) or []),
             "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
 
@@ -341,11 +346,13 @@ class EvalRunner:
 
 
 def _is_failure(record: dict) -> bool:
-    return record.get("rule") == "system_failure" or (
+    return record.get("rule") == "system_failure" or bool(record.get("infra_failures")) or (
         bool(record.get("error")) and not record.get("terminal_decision"))
 
 
 def _is_quota(record: dict) -> bool:
+    if any(f.get("day_quota") for f in record.get("infra_failures") or []):
+        return True
     text = " ".join(str(record.get(k) or "") for k in ("error",)).lower()
     text += " " + str((record.get("decision") or {}).get("rationale") or "").lower()
     return any(marker in text for marker in QUOTA_MARKERS)

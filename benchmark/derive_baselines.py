@@ -31,7 +31,8 @@ def derive(split: str, out: Path, *, provider=None, live_runner=None,
     agent_dir = out / "agent" / split
     records = [json.loads(p.read_text()) for p in sorted(agent_dir.glob("*.json"))
                if p.name != "manifest.json"]
-    records = [r for r in records if r.get("rule") != "system_failure"]
+    records = [r for r in records if r.get("rule") != "system_failure"
+               and not r.get("infra_failures")]          # C37.4.1
     cfg = eval_config(base_config or get_config(), "agent", split, out)
     if provider is None:
         from src.llm.provider import LLMProvider

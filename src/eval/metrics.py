@@ -95,8 +95,8 @@ def grade(record: dict, judged: dict) -> Outcome:
     rule = record.get("rule")
     if rule == "threshold_pending":
         kind = "pending"            # B3 before its tau exists (C33)
-    elif rule == "system_failure" or decision is None:
-        kind = "failure"
+    elif rule == "system_failure" or decision is None or record.get("infra_failures"):
+        kind = "failure"            # C37.4.1: a degraded run is not the system's
     elif decision in ANSWERED:
         kind = "answered"
     else:

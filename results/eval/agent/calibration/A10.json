@@ -4,8 +4,8 @@
   "subtype": null,
   "split": "calibration",
   "config": "agent",
-  "attempt": 0,
-  "thread_id": "agent:calibration:A10:a0",
+  "attempt": 1,
+  "thread_id": "agent:calibration:A10:a1",
   "resumed": "",
   "terminal_decision": "PARTIAL",
   "rule": "threshold",
@@ -53,7 +53,7 @@
           "f7_premise_grounding": 1.0,
           "f8_rounds_consumed": 2.0,
           "f9_route_escalation": 1.0,
-          "f10_recency": 0.5992470910335387
+          "f10_recency": 0.5989048596851472
         },
         "verdicts": [],
         "note": "merged into sq2"
@@ -72,19 +72,20 @@
           "f3_score_gap": 2.7434606552124023,
           "f4_independent_sources": 7.0,
           "f5_contradiction_rate": 0.0,
-          "f6_entailment_strength": 0.5714285714285714,
+          "f6_entailment_strength": 0.6875,
           "f7_premise_grounding": 1.0,
           "f8_rounds_consumed": 3.0,
           "f9_route_escalation": 1.0,
-          "f10_recency": 0.5992470910335387
+          "f10_recency": 0.5989048596851472
         },
         "verdicts": [
+          "PARTIAL",
+          "PARTIAL",
           "SUPPORTED",
           "SUPPORTED",
           "SUPPORTED",
+          "PARTIAL",
           "SUPPORTED",
-          "UNSUPPORTED",
-          "UNSUPPORTED",
           "UNSUPPORTED"
         ],
         "note": ""
@@ -107,7 +108,7 @@
           "f7_premise_grounding": 1.0,
           "f8_rounds_consumed": 3.0,
           "f9_route_escalation": 1.0,
-          "f10_recency": 0.5992470910335387
+          "f10_recency": 0.5989048596851472
         },
         "verdicts": [],
         "note": ""
@@ -130,7 +131,7 @@
           "f7_premise_grounding": 1.0,
           "f8_rounds_consumed": 3.0,
           "f9_route_escalation": 1.0,
-          "f10_recency": 0.5992470910335387
+          "f10_recency": 0.5989048596851472
         },
         "verdicts": [],
         "note": ""
@@ -153,7 +154,7 @@
           "f7_premise_grounding": 1.0,
           "f8_rounds_consumed": 3.0,
           "f9_route_escalation": 1.0,
-          "f10_recency": 0.5992470910335387
+          "f10_recency": 0.5989048596851472
         },
         "verdicts": [],
         "note": ""
@@ -168,106 +169,105 @@
       "no fitted model at /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage1.joblib, /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage2.joblib"
     ],
     "error": null,
-    "withheld_draft": "vLLM reduces KV‑cache waste by treating the cache as a set of logical blocks that are mapped to physical memory pages, a design called PagedAttention that mirrors operating‑system paging [P0e0bee546fc5][P3367ea1ac7de]. When a request generates several output sequences—either through parallel sampling or beam search—the prompt portion of the cache is stored once as physical blocks and referenced by the logical blocks of every new sequence. In parallel sampling the system “forks’’ the original sequence, creating multiple child sequences that all point to the same prompt blocks; each iteration then “appends’’ a new token to each child while the shared prompt cache remains untouched [P34cd29a8ebec][Pbe8811fbeba5]. Because the prompt accounts for roughly 12 % of total KV memory, this sharing yields measurable savings [Pf50ce35e4c88].\n\nWhen a child sequence eventually needs to write into a block that is still shared, vLLM employs a copy‑on‑write scheme. The block engine tracks a reference count for each physical block; if the count exceeds one, a new physical block is allocated, the contents are copied, and the reference count is decremented [P402025ed7055]. The second sample can then write directly to the now‑exclusive block. This mechanism allows the majority of the prompt cache to stay shared while only the final logical block of each sample is duplicated, dramatically cutting memory use for long inputs [P402025ed7055][Pf50ce35e4c88].\n\nBeam search extends the same principle. All beams start from the same prompt and share its KV cache; as beams diverge, additional blocks are allocated only for the differing suffixes. Empirically, vLLM saves 6–10 % of KV blocks in parallel sampling and up to 55 % in beam search with a width of six, because beams can share larger portions of the cache than independent samples [P6fb6ea0c7fc7][Pf50ce35e4c88]. The centralized KV‑cache manager, shared by all GPU workers, maintains the logical‑to‑physical mapping so that each worker can access the same physical pages without redundant copies [P5c9f646ffa37][P98b2a98bf6c3]. Thus, vLLM’s combination of logical block abstraction, reference‑counted sharing, copy‑on‑write, and the fork/append/free workflow enables efficient KV‑cache sharing across both parallel samples and beam search.",
+    "withheld_draft": "vLLM enables KV‑cache sharing by decoupling logical KV blocks from the physical memory that stores them and managing the mapping with a centralized block manager. Each request’s prompt is tokenised once, its KV states are placed in a set of physical blocks, and the logical‑to‑physical table is referenced by all sequences that originate from the same prompt [P5c9f646ffa37][P3367ea1ac7de]. When a request generates multiple output samples, vLLM creates the additional sequences with the **fork** operation, which copies only the logical metadata while keeping the underlying physical blocks shared [P34cd29a8ebec][Pbe8811fbeba5]. Because the prompt portion of the KV cache is identical for all samples, the same physical blocks can be read by every parallel sample, eliminating redundant allocation [Pbe8811fbeba5][Pf50ce35e4c88].\n\nDuring generation, newly produced tokens are appended to each sequence with the **append** operation. For the final logical block of a sequence, vLLM employs a copy‑on‑write scheme: if the physical block’s reference count exceeds one, a new block is allocated, the contents are copied, and the reference count is decremented; subsequent writes then target the exclusive block [P402025ed7055]. This mechanism preserves sharing for the prompt while ensuring correctness for divergent generation paths [P402025ed7055].\n\nBeam search extends the same pattern. Each beam is forked from the common prefix, so all beams share the prompt KV cache and any intermediate layers that remain identical. As decoding proceeds, beams diverge and trigger copy‑on‑write for the blocks that differ, but the shared portion can be as large as 55 % of the total KV cache, yielding measurable memory reductions [Pf50ce35e4c88][P6fb6ea0c7fc7]. Empirically, vLLM saves 6.1 %–9.8 % of KV‑cache blocks in parallel sampling and achieves up to 2.3× throughput improvement in beam search because the shared blocks reduce both memory traffic and fragmentation [P6fb6ea0c7fc7][Pbe8811fbeba5].\n\nOverall, vLLM’s sharing relies on (1) a global KV‑cache manager that maps logical blocks to reusable physical blocks, (2) reference‑counted sharing of prompt blocks across parallel samples and beams, and (3) copy‑on‑write for the last logical block of each divergent sequence, which together allow flexible, low‑overhead KV‑cache reuse in both parallel sampling and beam‑search decoding [P5c9f646ffa37][P402025ed7055][P34cd29a8ebec][Pf50ce35e4c88].",
     "withheld_draft_mode": "answer",
     "partial_rewrite": "requested"
   },
-  "final_report": "# How does vLLM share KV cache memory across parallel samples and beams?\n\n> **PARTIAL ANSWER — some parts of the question could not be established**\n> Evidence-sufficiency score 0.33 (heuristic)\n> _Uncalibrated: decided by the heuristic scorer, not a fitted model._\n\n## What the evidence establishes\n\nvLLM reduces KV‑cache memory by letting multiple output sequences reuse the same physical blocks that store the prompt’s key and value states. *[unverified]* The system represents the cache as logical KV blocks that are mapped to physical blocks managed by a single KV‑cache manager shared across all GPU workers [1]. *[partially supported]* When a request is decoded with parallel sampling, vLLM “forks’’ the original prompt sequence into several samples; each forked sequence initially points to the same physical blocks, so the prompt KV cache is shared [2][3]. As generation proceeds, new tokens are appended to each sample. *[unverified]* For tokens that belong to the shared prompt region, the existing physical blocks are read without duplication, while the newly generated KV entries are written into newly allocated physical blocks that are added to the block table [4].\n\nTo keep the shared region consistent, vLLM uses a copy‑on‑write scheme. *[unverified]* If a sample needs to modify the last logical block of the shared prompt, the manager checks the reference count of the underlying physical block; when the count exceeds one it allocates a fresh physical block, copies the data, and decrements the count, after which the sample writes its new KV entries to the private block [5]. The other sample can then continue writing directly to the original block because its reference count has dropped to one. *[unverified]* This mechanism enables most of the prompt KV cache to be shared across parallel samples, with only the final logical block being duplicated as needed [5][6].\n\nBeam search follows the same pattern: all beams start from a common prompt and therefore share its KV cache; as beams diverge, each creates its own physical blocks for newly generated tokens, yielding larger overall sharing (up to about 55 % memory saving) compared with independent sampling [7][6]. *[partially supported]*\n\nThe evidence does not establish how vLLM guarantees safe concurrent access to the shared KV cache when multiple samples or beams are processed in parallel, nor does it explain how updates are coordinated when beams diverge to keep shared entries consistent. These aspects remain unresolved because the cited sources provide no details on synchronization or consistency mechanisms for concurrent writes.\n\n## What could not be established\n\n- How does vLLM ensure safe concurrent access to the shared KV cache when multiple samples or beams are processed in parallel?\n- How does vLLM handle updates to the KV cache when beams diverge during beam search, ensuring that shared entries remain consistent?\n\n## Verification\n\n4 of 10 claims are supported by the passages they cite.\n2 marked *partially supported*.\n4 marked *unverified*.\n\n## Sources\n\n[1] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — Method — 2023-09-12\n[2] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n[3] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n[4] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n[5] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n[6] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n[7] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n",
+  "final_report": "# How does vLLM share KV cache memory across parallel samples and beams?\n\n> **PARTIAL ANSWER — some parts of the question could not be established**\n> Evidence-sufficiency score 0.33 (heuristic)\n> _Uncalibrated: decided by the heuristic scorer, not a fitted model._\n\n## What the evidence establishes\n\nvLLM reduces KV‑cache memory by allowing multiple output sequences to reuse the same cached states. *[unverified]* The system’s PagedAttention engine stores KV entries in logical blocks that are mapped to physical blocks managed by a single KV‑cache manager, and this mapping is shared by all GPU workers [1]. In parallel sampling, the prompt’s KV blocks are allocated once and referenced by every sample; the block engine tracks a reference count and only copies a block when a sample must write to the last logical block, using a copy‑on‑write step [2][3]. The “fork” operation creates new sequences from an existing one, so the new sequences initially point to the same physical blocks, and subsequent “append” steps add tokens while preserving the shared prefix [4]. Beam search follows the same pattern: all beams share the prompt KV cache and early decoding steps, and because beams diverge later, additional physical blocks are allocated only for the divergent portions, yielding up to 55 % memory savings in the experiments [5][6]. *[partially supported]* The amount of sharing grows with the number of parallel sequences, as shown by the larger improvements observed for beam search versus basic sampling [5]. Overall, vLLM’s sharing relies on logical‑to‑physical block mapping, reference counting, and copy‑on‑write to keep most of the KV cache common across samples and beams [2][4][1].\n\nThe evidence does not establish how vLLM ensures safe concurrent access to the shared KV cache when multiple samples or beams are processed in parallel. The evidence does not establish how vLLM handles updates to the KV cache when beams diverge during beam search, ensuring that shared entries remain consistent.\n\n## What could not be established\n\n- How does vLLM ensure safe concurrent access to the shared KV cache when multiple samples or beams are processed in parallel?\n- How does vLLM handle updates to the KV cache when beams diverge during beam search, ensuring that shared entries remain consistent?\n\n## Verification\n\n5 of 7 claims are supported by the passages they cite.\n1 marked *partially supported*.\n1 marked *unverified*.\n\n## Sources\n\n[1] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — Method — 2023-09-12\n[2] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n[3] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n[4] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n[5] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n[6] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — 2023-09-12\n",
+  "draft": "vLLM reduces KV‑cache memory by allowing multiple output sequences to reuse the same cached states. The system’s PagedAttention engine stores KV entries in logical blocks that are mapped to physical blocks managed by a single KV‑cache manager, and this mapping is shared by all GPU workers [P5c9f646ffa37]. In parallel sampling, the prompt’s KV blocks are allocated once and referenced by every sample; the block engine tracks a reference count and only copies a block when a sample must write to the last logical block, using a copy‑on‑write step [P402025ed7055][Pbe8811fbeba5]. The “fork” operation creates new sequences from an existing one, so the new sequences initially point to the same physical blocks, and subsequent “append” steps add tokens while preserving the shared prefix [P34cd29a8ebec]. Beam search follows the same pattern: all beams share the prompt KV cache and early decoding steps, and because beams diverge later, additional physical blocks are allocated only for the divergent portions, yielding up to 55 % memory savings in the experiments [P6fb6ea0c7fc7][Pf50ce35e4c88]. The amount of sharing grows with the number of parallel sequences, as shown by the larger improvements observed for beam search versus basic sampling [P6fb6ea0c7fc7]. Overall, vLLM’s sharing relies on logical‑to‑physical block mapping, reference counting, and copy‑on‑write to keep most of the KV cache common across samples and beams [P402025ed7055][P34cd29a8ebec][P5c9f646ffa37].\n\nThe evidence does not establish how vLLM ensures safe concurrent access to the shared KV cache when multiple samples or beams are processed in parallel. The evidence does not establish how vLLM handles updates to the KV cache when beams diverge during beam search, ensuring that shared entries remain consistent.",
+  "draft_mode": "partial",
+  "synthesis_log": [
+    {
+      "mode": "answer",
+      "passages_cited": 7,
+      "normalised_citations": 0,
+      "unparsed_citations": 0,
+      "invalid_labels": [],
+      "uncited_sentences": 3,
+      "error": null
+    },
+    {
+      "mode": "partial",
+      "passages_cited": 6,
+      "normalised_citations": 0,
+      "unparsed_citations": 0,
+      "invalid_labels": [],
+      "uncited_sentences": 3,
+      "error": null
+    }
+  ],
   "critic_findings": [
     {
-      "claim": "vLLM reduces KV‑cache memory by letting multiple output sequences reuse the same physical blocks that store the prompt’s key and value states.",
+      "claim": "vLLM reduces KV‑cache memory by allowing multiple output sequences to reuse the same cached states.",
       "sub_question_id": "",
       "cited_passage_ids": [],
       "verdict": "UNSUPPORTED",
-      "reasoning": "no citation — nothing to verify the claim against | No supporting source found and retrieval budget is exhausted",
+      "reasoning": "no citation — nothing to verify the claim against | No source found and retrieval budget exhausted, so the claim remains a gap",
       "action_taken": "UNRESOLVED"
     },
     {
-      "claim": "The system represents the cache as logical KV blocks that are mapped to physical blocks managed by a single KV‑cache manager shared across all GPU workers [P5c9f646ffa37].",
+      "claim": "The system’s PagedAttention engine stores KV entries in logical blocks that are mapped to physical blocks managed by a single KV‑cache manager, and this mapping is shared by all GPU workers [P5c9f646ffa37].",
       "sub_question_id": "sq2",
       "cited_passage_ids": [
         "P5c9f646ffa37"
       ],
-      "verdict": "PARTIAL",
-      "reasoning": "Passage confirms a shared KV‑cache manager but does not explicitly describe logical‑to‑physical block mapping | Evidence confirms a shared manager but does not verify the logical‑to‑physical block mapping",
-      "action_taken": "HEDGE"
-    },
-    {
-      "claim": "When a request is decoded with parallel sampling, vLLM “forks’’ the original prompt sequence into several samples; each forked sequence initially points to the same physical blocks, so the prompt KV cache is shared [P34cd29a8ebec][Pbe8811fbeba5].",
-      "sub_question_id": "sq2",
-      "cited_passage_ids": [
-        "P34cd29a8ebec",
-        "Pbe8811fbeba5"
-      ],
       "verdict": "SUPPORTED",
-      "reasoning": "Both cited passages describe forking into multiple samples that initially share the same physical blocks",
+      "reasoning": "cited passage explicitly states a single KV‑cache manager and shared logical‑to‑physical block mapping",
       "action_taken": "ACCEPT"
     },
     {
-      "claim": "As generation proceeds, new tokens are appended to each sample.",
-      "sub_question_id": "",
-      "cited_passage_ids": [],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "no citation — nothing to verify the claim against | Claim lacks any citation and cannot be verified with remaining resources",
-      "action_taken": "UNRESOLVED"
-    },
-    {
-      "claim": "For tokens that belong to the shared prompt region, the existing physical blocks are read without duplication, while the newly generated KV entries are written into newly allocated physical blocks that are added to the block table [P98b2a98bf6c3].",
-      "sub_question_id": "sq2",
-      "cited_passage_ids": [
-        "P98b2a98bf6c3"
-      ],
-      "verdict": "SUPPORTED",
-      "reasoning": "Cited passage explains reading existing blocks without duplication and allocating new physical blocks for new KV entries",
-      "action_taken": "ACCEPT"
-    },
-    {
-      "claim": "To keep the shared region consistent, vLLM uses a copy‑on‑write scheme.",
-      "sub_question_id": "",
-      "cited_passage_ids": [],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "no citation — nothing to verify the claim against | No source confirms the copy‑on‑write scheme and retrieval is not possible",
-      "action_taken": "UNRESOLVED"
-    },
-    {
-      "claim": "If a sample needs to modify the last logical block of the shared prompt, the manager checks the reference count of the underlying physical block; when the count exceeds one it allocates a fresh physical block, copies the data, and decrements the count, after which the sample writes its new KV entries to the private block [P402025ed7055].",
-      "sub_question_id": "sq2",
-      "cited_passage_ids": [
-        "P402025ed7055"
-      ],
-      "verdict": "SUPPORTED",
-      "reasoning": "Passage details reference‑count check, allocation of a fresh block, copy, and decrement before writing",
-      "action_taken": "ACCEPT"
-    },
-    {
-      "claim": "The other sample can then continue writing directly to the original block because its reference count has dropped to one.",
-      "sub_question_id": "",
-      "cited_passage_ids": [],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "no citation — nothing to verify the claim against | No evidence supports the reference‑count claim and no further retrieval can be done",
-      "action_taken": "UNRESOLVED"
-    },
-    {
-      "claim": "This mechanism enables most of the prompt KV cache to be shared across parallel samples, with only the final logical block being duplicated as needed [P402025ed7055][Pf50ce35e4c88].",
+      "claim": "In parallel sampling, the prompt’s KV blocks are allocated once and referenced by every sample; the block engine tracks a reference count and only copies a block when a sample must write to the last logical block, using a copy‑on‑write step [P402025ed7055][Pbe8811fbeba5].",
       "sub_question_id": "sq2",
       "cited_passage_ids": [
         "P402025ed7055",
-        "Pf50ce35e4c88"
+        "Pbe8811fbeba5"
       ],
       "verdict": "SUPPORTED",
-      "reasoning": "Both passages affirm that most prompt KV cache is shared and only the final logical block is duplicated",
+      "reasoning": "both cited passages describe allocation once, reference counting, and copy‑on‑write for the last logical block",
       "action_taken": "ACCEPT"
     },
     {
-      "claim": "Beam search follows the same pattern: all beams start from a common prompt and therefore share its KV cache; as beams diverge, each creates its own physical blocks for newly generated tokens, yielding larger overall sharing (up to about 55 % memory saving) compared with independent sampling [P6fb6ea0c7fc7][Pf50ce35e4c88].",
+      "claim": "The “fork” operation creates new sequences from an existing one, so the new sequences initially point to the same physical blocks, and subsequent “append” steps add tokens while preserving the shared prefix [P34cd29a8ebec].",
+      "sub_question_id": "sq2",
+      "cited_passage_ids": [
+        "P34cd29a8ebec"
+      ],
+      "verdict": "SUPPORTED",
+      "reasoning": "cited passage explains the fork operation creates new sequences sharing physical blocks and append preserves the shared prefix",
+      "action_taken": "ACCEPT"
+    },
+    {
+      "claim": "Beam search follows the same pattern: all beams share the prompt KV cache and early decoding steps, and because beams diverge later, additional physical blocks are allocated only for the divergent portions, yielding up to 55 % memory savings in the experiments [P6fb6ea0c7fc7][Pf50ce35e4c88].",
       "sub_question_id": "sq2",
       "cited_passage_ids": [
         "P6fb6ea0c7fc7",
         "Pf50ce35e4c88"
       ],
       "verdict": "PARTIAL",
-      "reasoning": "Passages note increased sharing in beam search but do not specify the exact 55 % memory‑saving figure | Sources note increased sharing in beam search but do not substantiate the specific 55 % memory‑saving figure",
+      "reasoning": "Pf50ce35e4c88 gives the up‑to‑55% saving, but P6fb6ea0c7fc7 does not mention that figure | Evidence is mixed: one source reports up‑to‑55% saving while another does not mention it",
       "action_taken": "HEDGE"
+    },
+    {
+      "claim": "The amount of sharing grows with the number of parallel sequences, as shown by the larger improvements observed for beam search versus basic sampling [P6fb6ea0c7fc7].",
+      "sub_question_id": "sq2",
+      "cited_passage_ids": [
+        "P6fb6ea0c7fc7"
+      ],
+      "verdict": "SUPPORTED",
+      "reasoning": "cited passage reports larger improvements with more parallel sequences and greater sharing in beam search versus basic sampling",
+      "action_taken": "ACCEPT"
+    },
+    {
+      "claim": "Overall, vLLM’s sharing relies on logical‑to‑physical block mapping, reference counting, and copy‑on‑write to keep most of the KV cache common across samples and beams [P402025ed7055][P34cd29a8ebec][P5c9f646ffa37].",
+      "sub_question_id": "sq2",
+      "cited_passage_ids": [
+        "P402025ed7055",
+        "P34cd29a8ebec",
+        "P5c9f646ffa37"
+      ],
+      "verdict": "SUPPORTED",
+      "reasoning": "combined citations cover logical‑to‑physical mapping (P5c9...), reference counting and copy‑on‑write (P402025...), confirming the described sharing mechanisms",
+      "action_taken": "ACCEPT"
     }
   ],
   "premise_check": {
@@ -277,7 +277,7 @@
         "text": "vLLM shares KV cache memory across parallel samples and beams",
         "centrality": "core",
         "verdict": "SUPPORTED",
-        "reasoning": "P01 explicitly states that vLLM shares the KV cache for the prompt in parallel sampling and achieves greater sharing in beam search",
+        "reasoning": "P01 states that parallel sampling and beam search both share the KV cache, confirming vLLM shares KV cache across parallel samples and beams.",
         "correction": "",
         "cited_passage_ids": [
           "P6fb6ea0c7fc7"
@@ -287,7 +287,7 @@
         "text": "vLLM has KV cache memory",
         "centrality": "core",
         "verdict": "SUPPORTED",
-        "reasoning": "P05 describes a KV cache manager that manages KV cache memory, confirming its existence",
+        "reasoning": "P05 describes a KV cache manager that manages the KV cache memory, showing vLLM has KV cache memory.",
         "correction": "",
         "cited_passage_ids": [
           "P38b4a927221a"
@@ -297,11 +297,10 @@
         "text": "vLLM supports parallel samples and beams",
         "centrality": "core",
         "verdict": "SUPPORTED",
-        "reasoning": "P01 and P09 show that vLLM handles parallel sampling and beam search, indicating support for parallel samples and beams",
+        "reasoning": "P01 evaluates vLLM on parallel sampling and beam search, indicating it supports parallel samples and beams.",
         "correction": "",
         "cited_passage_ids": [
-          "P6fb6ea0c7fc7",
-          "P34cd29a8ebec"
+          "P6fb6ea0c7fc7"
         ]
       }
     ],
@@ -317,7 +316,7 @@
     "retrieval_calls_used": 20,
     "retrieval_calls_max": 20,
     "allocation": {},
-    "elapsed_s": 274.663
+    "elapsed_s": 214.747
   },
   "node_visits": [
     "premise_checker",
@@ -350,7 +349,15 @@
     "critic_router",
     "finalizer"
   ],
-  "trace_path": "/Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/eval/traces/agent-calibration-A10-a0-1795699494.jsonl",
+  "trace_path": "/Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/eval/traces/agent-calibration-A10-a1-1795761682.jsonl",
   "error": null,
-  "finished_at": "2026-11-26T13:29:29+00:00"
+  "finished_at": "2026-11-27T06:44:57+00:00",
+  "supersedes": {
+    "attempt": 0,
+    "thread_id": "agent:calibration:A10:a0",
+    "terminal_decision": "PARTIAL",
+    "rule": "threshold",
+    "score": 0.3333,
+    "reason": "C37.1 and C37.3: lost citations, titles and shared evidence window; calibration made homogeneous"
+  }
 }

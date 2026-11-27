@@ -4,36 +4,35 @@
   "subtype": null,
   "split": "calibration",
   "config": "agent",
-  "attempt": 1,
-  "thread_id": "agent:calibration:B01:a1",
+  "attempt": 2,
+  "thread_id": "agent:calibration:B01:a2",
   "resumed": "",
-  "terminal_decision": "ABSTAIN",
-  "rule": "system_failure",
-  "score": 0.0,
+  "terminal_decision": "PARTIAL",
+  "rule": "threshold",
+  "score": 0.3333,
   "calibrated": false,
   "decision": {
-    "terminal": "ABSTAIN",
-    "rule": "system_failure",
-    "score": 0.0,
+    "terminal": "PARTIAL",
+    "rule": "threshold",
+    "score": 0.3333,
     "thresholds": {
       "answer": 1.0,
       "partial": 0.3333333333333333,
       "source": "heuristic: all / any / none resolved"
     },
-    "margin": null,
-    "rationale": "Abstained because the report could not be verified: the critic failed (role 'judgment': every model in the chain failed or is out of quota. Tried ['openai/gpt-oss-120b']. Details: ['openai/gpt-oss-120b: openai/gpt-oss-120b: 200000/). This is a system failure, not a judgment about the evidence.",
+    "margin": 0.0,
+    "rationale": "Partial answer: score 0.33 is between tau_partial 0.33 and tau_answer 1.00 (uncalibrated heuristic; 1 of 3 core sub-question(s) resolved). Not established: What specific aspect of GPU memory usage does PagedAttention optimize (e.g., memory footpr; In what ways do the GPU memory optimizations of FlashAttention-2 differ from those of Page.",
     "scorer": "heuristic",
     "calibrated": false,
     "counterfactual": null,
     "notes": [
       "UNCALIBRATED: decided by the heuristic scorer, not a fitted model. Not reportable as a result of the abstention layer."
     ],
-    "epistemic": false,
+    "epistemic": true,
     "adaptive": true,
     "gaps": [
       "could not establish: What specific aspect of GPU memory usage does PagedAttention optimize (e.g., memory footprint for long sequences, paging overhead) and what technique does it employ to achieve this optimization?",
-      "could not establish: In what ways do the GPU memory optimizations of FlashAttention-2 differ from those of PagedAttention in terms of the memory aspect they target and the mechanisms used?",
-      "could not establish: What specific aspect of GPU memory usage does FlashAttention-2 optimize (e.g., memory bandwidth, memory footprint) and what technique does it employ to achieve this optimization?"
+      "could not establish: In what ways do the GPU memory optimizations of FlashAttention-2 differ from those of PagedAttention in terms of the memory aspect they target and the mechanisms used?"
     ],
     "sub_questions": [
       {
@@ -42,7 +41,7 @@
         "status": "sufficient",
         "included": true,
         "kind": "core",
-        "resolved": false,
+        "resolved": true,
         "p": null,
         "features": {
           "f1_max_rerank": 4.359348773956299,
@@ -50,19 +49,18 @@
           "f3_score_gap": 9.33456039428711,
           "f4_independent_sources": 6.0,
           "f5_contradiction_rate": 0.0,
-          "f6_entailment_strength": 0.0,
+          "f6_entailment_strength": 0.8333333333333334,
           "f7_premise_grounding": 1.0,
           "f8_rounds_consumed": 1.0,
           "f9_route_escalation": 0.5,
-          "f10_recency": 0.5797399041752225
+          "f10_recency": 0.5793976728268309
         },
         "verdicts": [
-          "UNSUPPORTED",
-          "UNSUPPORTED",
-          "UNSUPPORTED",
-          "UNSUPPORTED"
+          "PARTIAL",
+          "SUPPORTED",
+          "SUPPORTED"
         ],
-        "note": "retrieval sufficient but entailment 0.00 < 0.5"
+        "note": ""
       },
       {
         "id": "sq2",
@@ -78,15 +76,14 @@
           "f3_score_gap": 2.1677445471286774,
           "f4_independent_sources": 7.0,
           "f5_contradiction_rate": 0.0,
-          "f6_entailment_strength": 0.0,
+          "f6_entailment_strength": 1.0,
           "f7_premise_grounding": 1.0,
           "f8_rounds_consumed": 3.0,
           "f9_route_escalation": 1.0,
-          "f10_recency": 0.5992470910335387
+          "f10_recency": 0.5989048596851472
         },
         "verdicts": [
-          "UNSUPPORTED",
-          "UNSUPPORTED"
+          "SUPPORTED"
         ],
         "note": ""
       },
@@ -104,151 +101,111 @@
           "f3_score_gap": 0.6546952724456787,
           "f4_independent_sources": 7.0,
           "f5_contradiction_rate": 0.0,
-          "f6_entailment_strength": 0.0,
+          "f6_entailment_strength": 0.75,
           "f7_premise_grounding": 1.0,
           "f8_rounds_consumed": 2.0,
           "f9_route_escalation": 1.0,
-          "f10_recency": 0.5797399041752225
+          "f10_recency": 0.5793976728268309
         },
         "verdicts": [
-          "UNSUPPORTED"
+          "SUPPORTED",
+          "PARTIAL"
         ],
         "note": ""
       }
     ],
     "run_features": {
-      "fraction_resolved": 0.0,
+      "fraction_resolved": 0.3333333333333333,
       "premise_grounding": 1.0
     },
     "scorer_notes": [
       "uncalibrated heuristic scorer",
       "no fitted model at /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage1.joblib, /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage2.joblib"
     ],
-    "error": "role 'judgment': every model in the chain failed or is out of quota. Tried ['openai/gpt-oss-120b']. Details: ['openai/gpt-oss-120b: openai/gpt-oss-120b: 200000/200000 tokens used today, need 3902']",
-    "withheld_draft": "FlashAttention‑2 focuses on the intrinsic memory traffic of the attention kernel itself. By exploiting the asymmetric GPU memory hierarchy it replaces the quadratic‑size activation storage of naïve attention with a linear‑size scheme, achieving “10‑20× memory saving” and eliminating the need for approximation [Pe2f66d5714a1][P5cf8c2ca505a]. The authors identify that the original FlashAttention suffered from “suboptimal work partitioning between different thread blocks and warps” which caused unnecessary shared‑memory reads and low occupancy [Pe2f66d5714a1][Pdcb78c424cc2]. FlashAttention‑2 therefore redesigns the kernel to (1) cut non‑matmul FLOPs, (2) parallelize a single‑head computation across multiple thread blocks to raise occupancy, and (3) distribute work within each block to lessen shared‑memory communication [P4f463279a6c3][Pdcb78c424cc2]. These changes reduce the amount of data moved between registers, shared memory, and global memory, allowing the implementation to reach 50‑73 % of the theoretical FLOP ceiling on A100 GPUs [P4f463279a6c3][Pb9ecc35028e4][Pe078a0f2c04f][P3d0e7601963b]. In sum, FlashAttention‑2 optimizes the *algorithmic* memory footprint and the efficiency of memory accesses during the attention calculation.\n\nPagedAttention, by contrast, targets the key‑value (KV) cache that persists across inference steps. The KV cache is traditionally stored as a single contiguous tensor, which leads to severe fragmentation and “huge” waste when sequence lengths vary dynamically [P0e0bee546fc5][P12912f462c4d]. PagedAttention partitions the cache into fixed‑size blocks and virtualizes them, decoupling the logical token order from the physical layout. New physical GPU memory is allocated on demand in non‑contiguous chunks, and a mapping table translates the virtual contiguous view to these blocks, eliminating pre‑allocation and reducing wasted memory [P12912f462c4d][P2fe0adb13812]. Implemented as a transparent layer in vLLM, it achieves “near‑zero waste” in KV cache memory and enables flexible sharing of cache entries across and within requests [P0e0bee546fc5][Pb6ea891267ef]. Thus, PagedAttention optimizes *cache‑management* memory usage rather than the compute‑kernel’s memory traffic, addressing fragmentation and dynamic allocation rather than the quadratic‑to‑linear reduction pursued by FlashAttention‑2.",
+    "error": null,
+    "withheld_draft": "FlashAttention‑2 targets the intrinsic memory‑access pattern of the attention kernel itself. By exploiting the asymmetric GPU memory hierarchy it reduces the attention memory footprint from quadratic to linear in sequence length, a change first highlighted in the original FlashAttention design and retained in FlashAttention‑2 [Pe2f66d5714a1]. The authors attribute the remaining inefficiency to suboptimal work partitioning between thread blocks and warps, which leads to low occupancy and excess shared‑memory traffic [Pe2f66d5714a1]. FlashAttention‑2 therefore optimises GPU memory use by redesigning the work distribution: it parallelises a single‑head computation across multiple thread blocks, splits work among warps within each block, and trims non‑matmul FLOPs, all of which cut unnecessary shared‑memory reads/writes and improve occupancy [P4f463279a6c3][Pdcb78c424cc2].\n\nPagedAttention, in contrast, does not modify the core attention algorithm but introduces a cache‑management layer for the key‑value (KV) cache that dominates memory consumption during inference. It partitions the KV cache into fixed‑size pages and virtualises them, decoupling the logical token order from the physical layout so that memory can be allocated on demand rather than pre‑allocated as a single contiguous block [P12912f462c4d]. A dynamic mapping table links the virtual contiguous view to non‑contiguous physical GPU blocks, eliminating fragmentation and redundant duplication; this yields “near‑zero waste” in KV‑cache memory and enables flexible sharing of cache entries across requests [P0e0bee546fc5][P2fe0adb13812]. Because the technique operates purely at the cache‑allocation level, it leaves the model architecture unchanged and can be combined with any existing attention implementation [P2fe0adb13812].\n\nThus, FlashAttention‑2 optimises the *algorithmic* memory footprint and access efficiency of the attention computation itself, while PagedAttention optimises the *management* of the KV cache memory, reducing waste and fragmentation without altering the attention kernel.",
     "withheld_draft_mode": "answer",
-    "partial_rewrite": "not_needed"
+    "partial_rewrite": "requested"
   },
-  "final_report": "# How do FlashAttention-2 and PagedAttention differ in what they optimise about attention's use of GPU memory?\n\n> **NO ANSWER — the run failed; this is not a judgment about the evidence**\n> Decided by rule: `system_failure`\n\n## Why there is no answer\n\nAbstained because the report could not be verified: the critic failed (role 'judgment': every model in the chain failed or is out of quota. Tried ['openai/gpt-oss-120b']. Details: ['openai/gpt-oss-120b: openai/gpt-oss-120b: 200000/). This is a system failure, not a judgment about the evidence.\n\n**Not established:**\n\n- What specific aspect of GPU memory usage does PagedAttention optimize (e.g., memory footprint for long sequences, paging overhead) and what technique does it employ to achieve this optimization?\n- In what ways do the GPU memory optimizations of FlashAttention-2 differ from those of PagedAttention in terms of the memory aspect they target and the mechanisms used?\n- What specific aspect of GPU memory usage does FlashAttention-2 optimize (e.g., memory bandwidth, memory footprint) and what technique does it employ to achieve this optimization?\n",
+  "final_report": "# How do FlashAttention-2 and PagedAttention differ in what they optimise about attention's use of GPU memory?\n\n> **PARTIAL ANSWER — some parts of the question could not be established**\n> Evidence-sufficiency score 0.33 (heuristic)\n> _Uncalibrated: decided by the heuristic scorer, not a fitted model._\n\n## What the evidence establishes\n\nFlashAttention‑2 reduces the memory required by the attention kernel from a quadratic to a linear amount by exploiting the asymmetric GPU memory hierarchy, which cuts the KV‑cache‑related memory traffic dramatically [1][2]. *[partially supported]* Its speed gains stem from a redesign of work partitioning: the algorithm spreads a single‑head computation across multiple thread blocks to raise occupancy, and within each block distributes work among warps to lower shared‑memory communication [3][4][5]. These changes also trim non‑matrix‑multiply FLOPs, allowing the implementation to reach 50‑73 % of the theoretical FLOP ceiling on A100 GPUs [3][4].\n\nPagedAttention is presented as a cache‑management layer that virtually partitions the KV cache into fixed‑size blocks and maps a logical contiguous view onto non‑contiguous physical GPU memory [6][7]. By allocating physical blocks on demand and maintaining a mapping table, it eliminates the fragmentation and redundant duplication that arise when KV states are stored in a single contiguous tensor, achieving “near‑zero waste” in KV‑cache memory and enabling flexible sharing across requests [8][7].\n\nThe evidence does not establish what precise aspect of GPU memory usage PagedAttention optimizes (for example, whether it targets the memory footprint of long sequences versus paging‑overhead) nor the exact technique it employs to achieve that optimization. Likewise, the evidence does not establish in detail how the memory‑optimisation goals and mechanisms of FlashAttention‑2 differ from those of PagedAttention, beyond the general observations that FlashAttention‑2 focuses on reducing overall attention memory and improving work partitioning, while PagedAttention focuses on KV‑cache waste reduction through paging‑style management.\n\n## What could not be established\n\n- What specific aspect of GPU memory usage does PagedAttention optimize (e.g., memory footprint for long sequences, paging overhead) and what technique does it employ to achieve this optimization?\n- In what ways do the GPU memory optimizations of FlashAttention-2 differ from those of PagedAttention in terms of the memory aspect they target and the mechanisms used?\n\n## Verification\n\n4 of 5 claims are supported by the passages they cite.\n1 marked *partially supported*.\n\n## Sources\n\n[1] FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning — 2307.08691v1 — Abstract — 2023-07-17\n[2] FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning — 2307.08691v1 — Abstract — 2023-07-17\n[3] FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning — 2307.08691v1 — Abstract — 2023-07-17\n[4] [PDF] FlashAttention-2: Faster Attention with Better Parallelism and Work ... — https://tridao.me/publications/flash2/flash2.pdf\n[5] [PDF] FlashAttention-2: Faster Attention with Better Parallelism and Work ... — https://tridao.me/publications/flash2/flash2.pdf\n[6] Paged Attention: Turning the Page on Transformer Memory — https://pub.towardsai.net/paged-attention-turning-the-page-on-transformer-memory-f394ca74e230\n[7] Techniques for KV Cache Optimization in Large Language Models — https://www.omrimallis.com/posts/techniques-for-kv-cache-optimization\n[8] Efficient Memory Management for Large Language Model Serving with PagedAttention — 2309.06180v1 — Abstract — 2023-09-12\n",
+  "draft": "FlashAttention‑2 reduces the memory required by the attention kernel from a quadratic to a linear amount by exploiting the asymmetric GPU memory hierarchy, which cuts the KV‑cache‑related memory traffic dramatically [Pe2f66d5714a1][P3fc5de2a2483]. Its speed gains stem from a redesign of work partitioning: the algorithm spreads a single‑head computation across multiple thread blocks to raise occupancy, and within each block distributes work among warps to lower shared‑memory communication [P4f463279a6c3][Pe078a0f2c04f][Pdcb78c424cc2]. These changes also trim non‑matrix‑multiply FLOPs, allowing the implementation to reach 50‑73 % of the theoretical FLOP ceiling on A100 GPUs [P4f463279a6c3][Pe078a0f2c04f].\n\nPagedAttention is presented as a cache‑management layer that virtually partitions the KV cache into fixed‑size blocks and maps a logical contiguous view onto non‑contiguous physical GPU memory [P12912f462c4d][P2fe0adb13812]. By allocating physical blocks on demand and maintaining a mapping table, it eliminates the fragmentation and redundant duplication that arise when KV states are stored in a single contiguous tensor, achieving “near‑zero waste” in KV‑cache memory and enabling flexible sharing across requests [P0e0bee546fc5][P2fe0adb13812]. \n\nThe evidence does not establish what precise aspect of GPU memory usage PagedAttention optimizes (for example, whether it targets the memory footprint of long sequences versus paging‑overhead) nor the exact technique it employs to achieve that optimization [UNRESOLVED]. Likewise, the evidence does not establish in detail how the memory‑optimisation goals and mechanisms of FlashAttention‑2 differ from those of PagedAttention, beyond the general observations that FlashAttention‑2 focuses on reducing overall attention memory and improving work partitioning, while PagedAttention focuses on KV‑cache waste reduction through paging‑style management [UNRESOLVED].",
+  "draft_mode": "partial",
+  "synthesis_log": [
+    {
+      "mode": "answer",
+      "passages_cited": 6,
+      "normalised_citations": 0,
+      "unparsed_citations": 0,
+      "invalid_labels": [],
+      "uncited_sentences": 3,
+      "error": null
+    },
+    {
+      "mode": "partial",
+      "passages_cited": 8,
+      "normalised_citations": 0,
+      "unparsed_citations": 0,
+      "invalid_labels": [],
+      "uncited_sentences": 2,
+      "error": null
+    }
+  ],
   "critic_findings": [
     {
-      "claim": "FlashAttention‑2 focuses on the intrinsic memory traffic of the attention kernel itself.",
-      "sub_question_id": "",
-      "cited_passage_ids": [],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "critic unavailable (QuotaExhausted)",
-      "action_taken": "UNRESOLVED"
-    },
-    {
-      "claim": "By exploiting the asymmetric GPU memory hierarchy it replaces the quadratic‑size activation storage of naïve attention with a linear‑size scheme, achieving “10‑20× memory saving” and eliminating the need for approximation [Pe2f66d5714a1][P5cf8c2ca505a].",
+      "claim": "FlashAttention‑2 reduces the memory required by the attention kernel from a quadratic to a linear amount by exploiting the asymmetric GPU memory hierarchy, which cuts the KV‑cache‑related memory traffic dramatically [Pe2f66d5714a1][P3fc5de2a2483].",
       "sub_question_id": "sq1",
       "cited_passage_ids": [
         "Pe2f66d5714a1",
-        "P5cf8c2ca505a"
+        "P3fc5de2a2483"
       ],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "critic unavailable (QuotaExhausted)",
-      "action_taken": "UNRESOLVED"
+      "verdict": "PARTIAL",
+      "reasoning": "passage supports linear memory saving but does not mention KV‑cache traffic reduction | Evidence confirms linear memory reduction but does not mention KV‑cache traffic reduction, so the claim is only partially supported.",
+      "action_taken": "HEDGE"
     },
     {
-      "claim": "The authors identify that the original FlashAttention suffered from “suboptimal work partitioning between different thread blocks and warps” which caused unnecessary shared‑memory reads and low occupancy [Pe2f66d5714a1][Pdcb78c424cc2].",
-      "sub_question_id": "sq1",
-      "cited_passage_ids": [
-        "Pe2f66d5714a1",
-        "Pdcb78c424cc2"
-      ],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "critic unavailable (QuotaExhausted)",
-      "action_taken": "UNRESOLVED"
-    },
-    {
-      "claim": "FlashAttention‑2 therefore redesigns the kernel to (1) cut non‑matmul FLOPs, (2) parallelize a single‑head computation across multiple thread blocks to raise occupancy, and (3) distribute work within each block to lessen shared‑memory communication [P4f463279a6c3][Pdcb78c424cc2].",
+      "claim": "Its speed gains stem from a redesign of work partitioning: the algorithm spreads a single‑head computation across multiple thread blocks to raise occupancy, and within each block distributes work among warps to lower shared‑memory communication [P4f463279a6c3][Pe078a0f2c04f][Pdcb78c424cc2].",
       "sub_question_id": "sq1",
       "cited_passage_ids": [
         "P4f463279a6c3",
-        "Pdcb78c424cc2"
-      ],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "critic unavailable (QuotaExhausted)",
-      "action_taken": "UNRESOLVED"
-    },
-    {
-      "claim": "These changes reduce the amount of data moved between registers, shared memory, and global memory, allowing the implementation to reach 50‑73 % of the theoretical FLOP ceiling on A100 GPUs [P4f463279a6c3][Pb9ecc35028e4][Pe078a0f2c04f][P3d0e7601963b].",
-      "sub_question_id": "sq1",
-      "cited_passage_ids": [
-        "P4f463279a6c3",
-        "Pb9ecc35028e4",
         "Pe078a0f2c04f",
-        "P3d0e7601963b"
+        "Pdcb78c424cc2"
       ],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "critic unavailable (QuotaExhausted)",
-      "action_taken": "UNRESOLVED"
+      "verdict": "SUPPORTED",
+      "reasoning": "cited passages describe spreading single‑head across thread blocks and warps to reduce shared‑memory communication",
+      "action_taken": "ACCEPT"
     },
     {
-      "claim": "In sum, FlashAttention‑2 optimizes the *algorithmic* memory footprint and the efficiency of memory accesses during the attention calculation.",
-      "sub_question_id": "",
-      "cited_passage_ids": [],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "critic unavailable (QuotaExhausted)",
-      "action_taken": "UNRESOLVED"
-    },
-    {
-      "claim": "PagedAttention, by contrast, targets the key‑value (KV) cache that persists across inference steps.",
-      "sub_question_id": "",
-      "cited_passage_ids": [],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "critic unavailable (QuotaExhausted)",
-      "action_taken": "UNRESOLVED"
-    },
-    {
-      "claim": "The KV cache is traditionally stored as a single contiguous tensor, which leads to severe fragmentation and “huge” waste when sequence lengths vary dynamically [P0e0bee546fc5][P12912f462c4d].",
-      "sub_question_id": "sq2",
+      "claim": "These changes also trim non‑matrix‑multiply FLOPs, allowing the implementation to reach 50‑73 % of the theoretical FLOP ceiling on A100 GPUs [P4f463279a6c3][Pe078a0f2c04f].",
+      "sub_question_id": "sq1",
       "cited_passage_ids": [
-        "P0e0bee546fc5",
-        "P12912f462c4d"
+        "P4f463279a6c3",
+        "Pe078a0f2c04f"
       ],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "critic unavailable (QuotaExhausted)",
-      "action_taken": "UNRESOLVED"
+      "verdict": "SUPPORTED",
+      "reasoning": "passages state reduction of non‑matmul FLOPs and achieving 50‑73% of theoretical FLOP ceiling on A100",
+      "action_taken": "ACCEPT"
     },
     {
-      "claim": "PagedAttention partitions the cache into fixed‑size blocks and virtualizes them, decoupling the logical token order from the physical layout.",
-      "sub_question_id": "",
-      "cited_passage_ids": [],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "critic unavailable (QuotaExhausted)",
-      "action_taken": "UNRESOLVED"
-    },
-    {
-      "claim": "New physical GPU memory is allocated on demand in non‑contiguous chunks, and a mapping table translates the virtual contiguous view to these blocks, eliminating pre‑allocation and reducing wasted memory [P12912f462c4d][P2fe0adb13812].",
+      "claim": "PagedAttention is presented as a cache‑management layer that virtually partitions the KV cache into fixed‑size blocks and maps a logical contiguous view onto non‑contiguous physical GPU memory [P12912f462c4d][P2fe0adb13812].",
       "sub_question_id": "sq3",
       "cited_passage_ids": [
         "P12912f462c4d",
         "P2fe0adb13812"
       ],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "critic unavailable (QuotaExhausted)",
-      "action_taken": "UNRESOLVED"
+      "verdict": "SUPPORTED",
+      "reasoning": "both sources describe virtual partitioning of KV cache into fixed‑size blocks with logical‑physical mapping",
+      "action_taken": "ACCEPT"
     },
     {
-      "claim": "Implemented as a transparent layer in vLLM, it achieves “near‑zero waste” in KV cache memory and enables flexible sharing of cache entries across and within requests [P0e0bee546fc5][Pb6ea891267ef].",
+      "claim": "By allocating physical blocks on demand and maintaining a mapping table, it eliminates the fragmentation and redundant duplication that arise when KV states are stored in a single contiguous tensor, achieving “near‑zero waste” in KV‑cache memory and enabling flexible sharing across requests [P0e0bee546fc5][P2fe0adb13812].",
       "sub_question_id": "sq2",
       "cited_passage_ids": [
         "P0e0bee546fc5",
-        "Pb6ea891267ef"
+        "P2fe0adb13812"
       ],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "critic unavailable (QuotaExhausted)",
-      "action_taken": "UNRESOLVED"
-    },
-    {
-      "claim": "Thus, PagedAttention optimizes *cache‑management* memory usage rather than the compute‑kernel’s memory traffic, addressing fragmentation and dynamic allocation rather than the quadratic‑to‑linear reduction pursued by FlashAttention‑2.",
-      "sub_question_id": "",
-      "cited_passage_ids": [],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "critic unavailable (QuotaExhausted)",
-      "action_taken": "UNRESOLVED"
+      "verdict": "SUPPORTED",
+      "reasoning": "sources report on‑demand block allocation, mapping table, near‑zero waste and flexible sharing across requests",
+      "action_taken": "ACCEPT"
     }
   ],
   "premise_check": {
@@ -258,7 +215,7 @@
         "text": "FlashAttention-2 exists as a method for attention",
         "centrality": "core",
         "verdict": "SUPPORTED",
-        "reasoning": "FlashAttention-2 is described as an attention algorithm in the paper",
+        "reasoning": "The paper introduces FlashAttention-2 as an attention algorithm.",
         "correction": "",
         "cited_passage_ids": [
           "P66cf7cd37428"
@@ -268,7 +225,7 @@
         "text": "PagedAttention exists as a method for attention",
         "centrality": "core",
         "verdict": "SUPPORTED",
-        "reasoning": "PagedAttention is introduced as a new attention algorithm",
+        "reasoning": "The work presents PagedAttention as a new attention algorithm.",
         "correction": "",
         "cited_passage_ids": [
           "P42c2849a149a"
@@ -278,7 +235,7 @@
         "text": "FlashAttention-2 optimises some aspect of attention's GPU memory usage",
         "centrality": "core",
         "verdict": "SUPPORTED",
-        "reasoning": "FlashAttention-2 reduces memory usage from quadratic to linear and improves memory efficiency",
+        "reasoning": "FlashAttention-2 is described as reducing memory usage from quadratic to linear, optimizing GPU memory consumption.",
         "correction": "",
         "cited_passage_ids": [
           "P5cf8c2ca505a"
@@ -288,7 +245,7 @@
         "text": "PagedAttention optimises some aspect of attention's GPU memory usage",
         "centrality": "core",
         "verdict": "SUPPORTED",
-        "reasoning": "PagedAttention manages KV cache in non‑contiguous blocks to reduce memory waste and improve memory management",
+        "reasoning": "PagedAttention manages the KV cache in non‑contiguous blocks to reduce memory waste, optimizing GPU memory usage.",
         "correction": "",
         "cited_passage_ids": [
           "P42c2849a149a"
@@ -302,12 +259,12 @@
     "error": null
   },
   "budget": {
-    "llm_calls_used": 9,
+    "llm_calls_used": 14,
     "llm_calls_max": 25,
     "retrieval_calls_used": 10,
     "retrieval_calls_max": 20,
     "allocation": {},
-    "elapsed_s": 57.33
+    "elapsed_s": 227.68
   },
   "node_visits": [
     "premise_checker",
@@ -324,9 +281,12 @@
     "critic",
     "critic_router",
     "decider",
+    "synthesizer",
+    "critic",
+    "critic_router",
     "finalizer"
   ],
-  "trace_path": "/Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/eval/traces/agent-calibration-B01-a1-1795700252.jsonl",
-  "error": "role 'judgment': every model in the chain failed or is out of quota. Tried ['openai/gpt-oss-120b']. Details: ['openai/gpt-oss-120b: openai/gpt-oss-120b: 200000/200000 tokens used today, need 3902']",
-  "finished_at": "2026-11-26T13:38:30+00:00"
+  "trace_path": "/Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/eval/traces/agent-calibration-B01-a2-1795761900.jsonl",
+  "error": null,
+  "finished_at": "2026-11-27T06:48:49+00:00"
 }

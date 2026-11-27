@@ -4,8 +4,8 @@
   "subtype": null,
   "split": "calibration",
   "config": "agent",
-  "attempt": 0,
-  "thread_id": "agent:calibration:A05:a0",
+  "attempt": 1,
+  "thread_id": "agent:calibration:A05:a1",
   "resumed": "",
   "terminal_decision": "PARTIAL",
   "rule": "threshold",
@@ -36,19 +36,19 @@
     "sub_questions": [
       {
         "id": "sq1",
-        "text": "What BLEU score did the Transformer model described by Vaswani et al. (2017) achieve on the WMT 2014 English‑German translation benchmark?",
+        "text": "What BLEU score did the original Transformer achieve on the WMT 2014 English‑German translation task?",
         "status": "sufficient",
         "included": true,
         "kind": "core",
         "resolved": true,
         "p": null,
         "features": {
-          "f1_max_rerank": 8.885268211364746,
-          "f2_mean_top3": 3.284961541493734,
-          "f3_score_gap": 12.795222759246826,
-          "f4_independent_sources": 14.0,
+          "f1_max_rerank": 8.72252368927002,
+          "f2_mean_top3": 2.548114061355591,
+          "f3_score_gap": 15.401695728302002,
+          "f4_independent_sources": 7.0,
           "f5_contradiction_rate": 0.0,
-          "f6_entailment_strength": 0.625,
+          "f6_entailment_strength": 1.0,
           "f7_premise_grounding": 1.0,
           "f8_rounds_consumed": 1.0,
           "f9_route_escalation": 0.5,
@@ -57,8 +57,7 @@
         "verdicts": [
           "SUPPORTED",
           "SUPPORTED",
-          "UNSUPPORTED",
-          "PARTIAL"
+          "SUPPORTED"
         ],
         "note": ""
       },
@@ -103,7 +102,7 @@
           "f7_premise_grounding": 1.0,
           "f8_rounds_consumed": 2.0,
           "f9_route_escalation": 1.0,
-          "f10_recency": 0.5797399041752225
+          "f10_recency": 0.5793976728268309
         },
         "verdicts": [],
         "note": ""
@@ -118,11 +117,33 @@
       "no fitted model at /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage1.joblib, /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage2.joblib"
     ],
     "error": null,
-    "withheld_draft": "The original Transformer reported a BLEU score of 28.4 on the WMT 2014 English‑to‑German translation task, surpassing the previous best results by more than two points [P25b038f40d30]. On the same benchmark suite, the model achieved a BLEU score of 41.8 for English‑to‑French [P25b038f40d30]. The English‑to‑French result was obtained after training for 3.5 days on eight GPUs, which the authors describe as a modest training budget compared with earlier recurrent or convolutional systems [P25b038f40d30]. For English‑to‑German, the paper notes that the Transformer required “significantly less time to train” than competing architectures, but it does not give an exact wall‑clock figure for that language pair [P25b038f40d30]. Consequently, the documented training cost is a concrete 3.5‑day, eight‑GPU run for the French task, while the German task’s cost is only characterized qualitatively as substantially reduced relative to prior models.",
+    "withheld_draft": "The Transformer reported a BLEU score of 28.4 on the WMT 2014 English‑to‑German translation benchmark, establishing a new state‑of‑the‑art result for that language pair[P25b038f40d30]. On the WMT 2014 English‑to‑French benchmark the same architecture achieved a BLEU score of 41.8, also setting a single‑model record[P25b038f40d30]. The English‑to‑French model was trained for 3.5 days using eight GPUs, a training budget the authors describe as “significantly less time to train” than prior approaches[P25b038f40d30]. The source passage does not give an explicit training‑time figure for the English‑to‑German experiment, so the exact cost for that task is not documented in the available evidence.",
     "withheld_draft_mode": "answer",
     "partial_rewrite": "requested"
   },
-  "final_report": "# What BLEU scores did the original Transformer achieve on the WMT 2014 translation tasks, and at what training cost?\n\n> **PARTIAL ANSWER — some parts of the question could not be established**\n> Evidence-sufficiency score 0.67 (heuristic)\n> _Uncalibrated: decided by the heuristic scorer, not a fitted model._\n\n## What the evidence establishes\n\nThe original Transformer reported a BLEU score of 28.4 on the WMT 2014 English‑to‑German translation task and a BLEU score of 41.8 on the WMT 2014 English‑to‑French task [1]. For the English‑to‑French experiment the paper states that the model was trained for 3.5 days on eight GPUs [1]. *[unverified]* The abstract also notes that the Transformer required “significantly less time to train” than prior models, but it does not give a precise overall training‑cost figure such as total GPU‑days, FLOPs, or a compute budget for either language pair [1]. Consequently, the evidence does not establish a complete training‑cost metric for the original Transformer model. The lack of reported aggregate compute usage means the training cost remains unresolved.\n\n## What could not be established\n\n- What training cost (e.g., number of GPU days, FLOPs, or compute budget) was reported for the original Transformer model in the paper?\n\n## Verification\n\n2 of 3 claims are supported by the passages they cite.\n1 marked *unverified*.\n\n## Sources\n\n[1] Attention Is All You Need — 1706.03762v7 — Abstract — 2017-06-12\n",
+  "final_report": "# What BLEU scores did the original Transformer achieve on the WMT 2014 translation tasks, and at what training cost?\n\n> **PARTIAL ANSWER — some parts of the question could not be established**\n> Evidence-sufficiency score 0.67 (heuristic)\n> _Uncalibrated: decided by the heuristic scorer, not a fitted model._\n\n## What the evidence establishes\n\nThe original Transformer reported a BLEU score of 28.4 on the WMT 2014 English‑to‑German translation task and a BLEU score of 41.8 on the WMT 2014 English‑to‑French task [1]. For the English‑to‑French experiment the authors specified the training cost as 3.5 days on eight GPUs [1]. The paper does not give a comparable training‑time or compute‑budget figure for the English‑to‑German experiment; it only notes that the model required “significantly less time to train” without quantifying that cost [1]. *[unverified]* Consequently, the evidence does not establish the exact training cost (e.g., GPU‑days, FLOPs, or overall compute budget) for the original Transformer on the English‑to‑German WMT 2014 task. The lack of a reported figure means the training cost for that language pair remains unresolved. *[unverified]*\n\n## What could not be established\n\n- What training cost (e.g., number of GPU days, FLOPs, or compute budget) was reported for the original Transformer model in the paper?\n\n## Verification\n\n2 of 4 claims are supported by the passages they cite.\n2 marked *unverified*.\n\n## Sources\n\n[1] Attention Is All You Need — 1706.03762v7 — Abstract — 2017-06-12\n",
+  "draft": "The original Transformer reported a BLEU score of 28.4 on the WMT 2014 English‑to‑German translation task and a BLEU score of 41.8 on the WMT 2014 English‑to‑French task [P25b038f40d30]. For the English‑to‑French experiment the authors specified the training cost as 3.5 days on eight GPUs [P25b038f40d30]. The paper does not give a comparable training‑time or compute‑budget figure for the English‑to‑German experiment; it only notes that the model required “significantly less time to train” without quantifying that cost [P25b038f40d30]. Consequently, the evidence does not establish the exact training cost (e.g., GPU‑days, FLOPs, or overall compute budget) for the original Transformer on the English‑to‑German WMT 2014 task. The lack of a reported figure means the training cost for that language pair remains unresolved.",
+  "draft_mode": "partial",
+  "synthesis_log": [
+    {
+      "mode": "answer",
+      "passages_cited": 1,
+      "normalised_citations": 3,
+      "unparsed_citations": 0,
+      "invalid_labels": [],
+      "uncited_sentences": 1,
+      "error": null
+    },
+    {
+      "mode": "partial",
+      "passages_cited": 1,
+      "normalised_citations": 0,
+      "unparsed_citations": 0,
+      "invalid_labels": [],
+      "uncited_sentences": 2,
+      "error": null
+    }
+  ],
   "critic_findings": [
     {
       "claim": "The original Transformer reported a BLEU score of 28.4 on the WMT 2014 English‑to‑German translation task and a BLEU score of 41.8 on the WMT 2014 English‑to‑French task [P25b038f40d30].",
@@ -131,28 +152,36 @@
         "P25b038f40d30"
       ],
       "verdict": "SUPPORTED",
-      "reasoning": "The abstract reports 28.4 BLEU for English‑German and (in the omitted continuation) 41.8 BLEU for English‑French.",
+      "reasoning": "The cited abstract explicitly reports 28.4 BLEU for English‑German and 41.8 BLEU for English‑French.",
       "action_taken": "ACCEPT"
     },
     {
-      "claim": "For the English‑to‑French experiment the paper states that the model was trained for 3.5 days on eight GPUs [P25b038f40d30].",
-      "sub_question_id": "sq1",
-      "cited_passage_ids": [
-        "P25b038f40d30"
-      ],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "The cited abstract contains no statement about training for 3.5 days on eight GPUs. | REVISE_PLAN unavailable (The sub‑question asks about BLEU score on English‑German, not the training cost for English‑French, so it must be rewritten.)",
-      "action_taken": "UNRESOLVED"
-    },
-    {
-      "claim": "The abstract also notes that the Transformer required “significantly less time to train” than prior models, but it does not give a precise overall training‑cost figure such as total GPU‑days, FLOPs, or a compute budget for either language pair [P25b038f40d30].",
+      "claim": "For the English‑to‑French experiment the authors specified the training cost as 3.5 days on eight GPUs [P25b038f40d30].",
       "sub_question_id": "sq1",
       "cited_passage_ids": [
         "P25b038f40d30"
       ],
       "verdict": "SUPPORTED",
-      "reasoning": "The abstract says the model requires significantly less time to train and provides no precise GPU‑days, FLOPs, or compute budget.",
+      "reasoning": "The abstract states the English‑French model was trained for 3.5 days on eight GPUs.",
       "action_taken": "ACCEPT"
+    },
+    {
+      "claim": "The paper does not give a comparable training‑time or compute‑budget figure for the English‑to‑German experiment; it only notes that the model required “significantly less time to train” without quantifying that cost [P25b038f40d30].",
+      "sub_question_id": "sq1",
+      "cited_passage_ids": [
+        "P25b038f40d30"
+      ],
+      "verdict": "UNSUPPORTED",
+      "reasoning": "The abstract does not say the paper lacks a training‑time figure for English‑German; it merely omits a specific number, so the claim is not directly supported. | RE_RETRIEVE unavailable (The claim lacks evidence; a targeted query may locate the paper to verify the missing training‑time figure)",
+      "action_taken": "UNRESOLVED"
+    },
+    {
+      "claim": "The lack of a reported figure means the training cost for that language pair remains unresolved.",
+      "sub_question_id": "",
+      "cited_passage_ids": [],
+      "verdict": "UNSUPPORTED",
+      "reasoning": "no citation — nothing to verify the claim against | RE_RETRIEVE unavailable (No citation is provided; retrieving the paper can confirm whether the training cost is indeed unreported)",
+      "action_taken": "UNRESOLVED"
     }
   ],
   "premise_check": {
@@ -162,7 +191,7 @@
         "text": "The original Transformer model achieved BLEU scores on the WMT 2014 translation tasks.",
         "centrality": "core",
         "verdict": "SUPPORTED",
-        "reasoning": "The abstract reports BLEU scores of 28.4 on English‑German and 41.8 on English‑French WMT 2014 tasks.",
+        "reasoning": "P01 reports BLEU scores of 28.4 on English‑German and 41.8 on English‑French WMT 2014 tasks.",
         "correction": "",
         "cited_passage_ids": [
           "P25b038f40d30"
@@ -172,11 +201,10 @@
         "text": "The original Transformer model has a reported training cost.",
         "centrality": "core",
         "verdict": "SUPPORTED",
-        "reasoning": "The paper states the model was trained for 3.5 days on eight GPUs, describing the training cost as a small fraction of prior models.",
+        "reasoning": "P01 states the model was trained for 3.5 days on eight GPUs, describing the training cost as a small fraction of prior models.",
         "correction": "",
         "cited_passage_ids": [
-          "P25b038f40d30",
-          "P9911d4067067"
+          "P25b038f40d30"
         ]
       }
     ],
@@ -187,12 +215,12 @@
     "error": null
   },
   "budget": {
-    "llm_calls_used": 17,
+    "llm_calls_used": 9,
     "llm_calls_max": 25,
-    "retrieval_calls_used": 8,
+    "retrieval_calls_used": 6,
     "retrieval_calls_max": 20,
     "allocation": {},
-    "elapsed_s": 350.385
+    "elapsed_s": 150.823
   },
   "node_visits": [
     "premise_checker",
@@ -204,22 +232,21 @@
     "synthesizer",
     "critic",
     "critic_router",
-    "retriever",
-    "synthesizer",
-    "critic",
-    "critic_router",
-    "planner",
-    "retriever",
-    "synthesizer",
-    "critic",
-    "critic_router",
     "decider",
     "synthesizer",
     "critic",
     "critic_router",
     "finalizer"
   ],
-  "trace_path": "/Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/eval/traces/agent-calibration-A05-a0-1795698537.jsonl",
+  "trace_path": "/Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/eval/traces/agent-calibration-A05-a1-1795761257.jsonl",
   "error": null,
-  "finished_at": "2026-11-26T13:14:48+00:00"
+  "finished_at": "2026-11-27T06:36:48+00:00",
+  "supersedes": {
+    "attempt": 0,
+    "thread_id": "agent:calibration:A05:a0",
+    "terminal_decision": "PARTIAL",
+    "rule": "threshold",
+    "score": 0.6667,
+    "reason": "C37.1 and C37.3: lost citations, titles and shared evidence window; calibration made homogeneous"
+  }
 }

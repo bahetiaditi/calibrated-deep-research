@@ -4,24 +4,24 @@
   "subtype": null,
   "split": "calibration",
   "config": "agent",
-  "attempt": 0,
-  "thread_id": "agent:calibration:A06:a0",
+  "attempt": 1,
+  "thread_id": "agent:calibration:A06:a1",
   "resumed": "",
-  "terminal_decision": "ABSTAIN",
+  "terminal_decision": "PARTIAL",
   "rule": "threshold",
-  "score": 0.0,
+  "score": 0.5,
   "calibrated": false,
   "decision": {
-    "terminal": "ABSTAIN",
+    "terminal": "PARTIAL",
     "rule": "threshold",
-    "score": 0.0,
+    "score": 0.5,
     "thresholds": {
       "answer": 1.0,
       "partial": 0.5,
       "source": "heuristic: all / any / none resolved"
     },
-    "margin": 0.5,
-    "rationale": "Abstained: score 0.00 < tau_partial 0.50 (uncalibrated heuristic; 0 of 2 core sub-question(s) resolved, 1 background not scored). Not established: In the original Transformer \"base\" model described by Vaswani et al. (2017), how many atte; What were the findings of the ablation study that varied the number of attention heads in .",
+    "margin": 0.0,
+    "rationale": "Partial answer: score 0.50 is between tau_partial 0.50 and tau_answer 1.00 (uncalibrated heuristic; 1 of 2 core sub-question(s) resolved, 1 background not scored). Not established: What were the findings of the ablation study that varied the number of attention heads in .",
     "scorer": "heuristic",
     "calibrated": false,
     "counterfactual": null,
@@ -31,8 +31,7 @@
     "epistemic": true,
     "adaptive": true,
     "gaps": [
-      "could not establish: What were the findings of the ablation study that varied the number of attention heads in the base Transformer?",
-      "could not establish: In the original Transformer \"base\" model described by Vaswani et al. (2017), how many attention heads are used in each multi‑head attention layer?"
+      "could not establish: What were the findings of the ablation study that varied the number of attention heads in the base Transformer?"
     ],
     "sub_questions": [
       {
@@ -41,24 +40,25 @@
         "status": "sufficient",
         "included": true,
         "kind": "core",
-        "resolved": false,
+        "resolved": true,
         "p": null,
         "features": {
           "f1_max_rerank": 7.443840980529785,
           "f2_mean_top3": 6.199273109436035,
           "f3_score_gap": 3.7627174854278564,
-          "f4_independent_sources": 18.0,
+          "f4_independent_sources": 14.0,
           "f5_contradiction_rate": 0.0,
-          "f6_entailment_strength": 0.0,
+          "f6_entailment_strength": 0.5,
           "f7_premise_grounding": 0.75,
-          "f8_rounds_consumed": 2.0,
+          "f8_rounds_consumed": 1.0,
           "f9_route_escalation": 1.0,
-          "f10_recency": 0.4801505817932923
+          "f10_recency": 0.3193018480492813
         },
         "verdicts": [
+          "SUPPORTED",
           "UNSUPPORTED"
         ],
-        "note": "retrieval sufficient but entailment 0.00 < 0.5"
+        "note": ""
       },
       {
         "id": "sq2",
@@ -78,7 +78,7 @@
           "f7_premise_grounding": 0.75,
           "f8_rounds_consumed": 2.0,
           "f9_route_escalation": 1.0,
-          "f10_recency": 0.5797399041752225
+          "f10_recency": 0.5793976728268309
         },
         "verdicts": [],
         "note": ""
@@ -101,14 +101,14 @@
           "f7_premise_grounding": 0.75,
           "f8_rounds_consumed": 3.0,
           "f9_route_escalation": 1.0,
-          "f10_recency": 0.5992470910335387
+          "f10_recency": 0.5989048596851472
         },
         "verdicts": [],
         "note": ""
       }
     ],
     "run_features": {
-      "fraction_resolved": 0.0,
+      "fraction_resolved": 0.5,
       "premise_grounding": 0.75
     },
     "scorer_notes": [
@@ -116,28 +116,50 @@
       "no fitted model at /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage1.joblib, /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage2.joblib"
     ],
     "error": null,
-    "withheld_draft": "The original “base” Transformer architecture employs eight parallel attention heads in each multi‑head attention layer [Pb6eeca1bdcd7]. The cited description specifies h = 8 heads, with each head using a dimensionality of dmodel/h = 64, yielding the same total computational cost as a single‑head full‑dimensional attention.\n\nThe provided evidence does not contain any reported results from an ablation study that varies the number of attention heads in the base model, so the effects of such a manipulation cannot be stated from the available sources.",
+    "withheld_draft": "The original “base” Transformer architecture employs eight parallel attention heads, i.e., h = 8 [Pb6eeca1bdcd7]. Although later work has examined the distinction between multi‑head and single‑head configurations, the passages provided do not contain a systematic ablation that varies the number of heads within the base model itself. One study contrasts multi‑head and single‑head Transformers but reports only qualitative observations about head independence rather than quantitative results from a head‑count ablation [Pd1e9a594059e]. Consequently, the number of heads is established as eight, while the specific outcomes of an ablation on head count for the base Transformer remain undocumented in the available evidence.",
     "withheld_draft_mode": "answer",
-    "partial_rewrite": "not_needed"
+    "partial_rewrite": "requested"
   },
-  "final_report": "# How many attention heads does the base Transformer use, and what did the ablation on the number of heads show?\n\n> **NO ANSWER — the evidence does not support one**\n> Evidence-sufficiency score 0.00 (heuristic)\n> _Uncalibrated: decided by the heuristic scorer, not a fitted model._\n\n## Why there is no answer\n\nAbstained: score 0.00 < tau_partial 0.50 (uncalibrated heuristic; 0 of 2 core sub-question(s) resolved, 1 background not scored).\n\n**Not established:**\n\n- What were the findings of the ablation study that varied the number of attention heads in the base Transformer?\n- In the original Transformer \"base\" model described by Vaswani et al. (2017), how many attention heads are used in each multi‑head attention layer?\n",
+  "final_report": "# How many attention heads does the base Transformer use, and what did the ablation on the number of heads show?\n\n> **PARTIAL ANSWER — some parts of the question could not be established**\n> Evidence-sufficiency score 0.50 (heuristic)\n> _Uncalibrated: decided by the heuristic scorer, not a fitted model._\n\n## What the evidence establishes\n\nThe original “base” Transformer architecture employs eight parallel attention heads; the paper specifies h = 8 heads and sets each head’s dimension to dmodel/h = 64 [1]. No other source in the provided corpus gives a different head count for the base model, so the evidence supports only this figure. *[unverified]*\n\nThe collection of documents does not contain a reported ablation that systematically varies the number of attention heads in the base Transformer and records the resulting performance effects. While some papers discuss multi‑head versus single‑head configurations (e.g., an empirical comparison of multi‑head and single‑head Transformers) and test different head counts in other contexts, none present the specific ablation results asked about. Consequently, the evidence does not establish what the ablation on the number of heads showed, and the question remains unresolved due to a lack of relevant data in the supplied sources.\n\n## What could not be established\n\n- What were the findings of the ablation study that varied the number of attention heads in the base Transformer?\n\n## Verification\n\n1 of 2 claims are supported by the passages they cite.\n1 marked *unverified*.\n\n## Sources\n\n[1] Attention Is All You Need — 1706.03762v7 — 2017-06-12\n",
+  "draft": "The original “base” Transformer architecture employs eight parallel attention heads; the paper specifies h = 8 heads and sets each head’s dimension to dmodel/h = 64 [Pb6eeca1bdcd7]. No other source in the provided corpus gives a different head count for the base model, so the evidence supports only this figure.\n\nThe collection of documents does not contain a reported ablation that systematically varies the number of attention heads in the base Transformer and records the resulting performance effects. While some papers discuss multi‑head versus single‑head configurations (e.g., an empirical comparison of multi‑head and single‑head Transformers) and test different head counts in other contexts, none present the specific ablation results asked about. Consequently, the evidence does not establish what the ablation on the number of heads showed, and the question remains unresolved due to a lack of relevant data in the supplied sources.",
+  "draft_mode": "partial",
+  "synthesis_log": [
+    {
+      "mode": "answer",
+      "passages_cited": 2,
+      "normalised_citations": 2,
+      "unparsed_citations": 0,
+      "invalid_labels": [],
+      "uncited_sentences": 2,
+      "error": null
+    },
+    {
+      "mode": "partial",
+      "passages_cited": 1,
+      "normalised_citations": 1,
+      "unparsed_citations": 0,
+      "invalid_labels": [],
+      "uncited_sentences": 4,
+      "error": null
+    }
+  ],
   "critic_findings": [
     {
-      "claim": "The original “base” Transformer architecture employs eight parallel attention heads in each multi‑head attention layer [Pb6eeca1bdcd7].",
+      "claim": "The original “base” Transformer architecture employs eight parallel attention heads; the paper specifies h = 8 heads and sets each head’s dimension to dmodel/h = 64 [Pb6eeca1bdcd7].",
       "sub_question_id": "sq1",
       "cited_passage_ids": [
         "Pb6eeca1bdcd7"
       ],
-      "verdict": "UNSUPPORTED",
-      "reasoning": "the cited passage describes the authors' model, not the original base Transformer architecture | The sub‑question is clear and the claim is likely true; a different query should locate the original paper’s description. | retry: Vaswani 2017 \"base model\" \"number of attention heads\"",
-      "action_taken": "RE_RETRIEVE"
+      "verdict": "SUPPORTED",
+      "reasoning": "The cited passage explicitly states h = 8 heads and dmodel/h = 64.",
+      "action_taken": "ACCEPT"
     },
     {
-      "claim": "The cited description specifies h = 8 heads, with each head using a dimensionality of dmodel/h = 64, yielding the same total computational cost as a single‑head full‑dimensional attention.",
+      "claim": "No other source in the provided corpus gives a different head count for the base model, so the evidence supports only this figure.",
       "sub_question_id": "",
       "cited_passage_ids": [],
       "verdict": "UNSUPPORTED",
-      "reasoning": "no citation — nothing to verify the claim against | No sub‑question or citation is available, and without a target passage the claim cannot be verified.",
+      "reasoning": "no citation — nothing to verify the claim against | RE_RETRIEVE unavailable (Need to see if any source reports a different number of attention heads for the base model)",
       "action_taken": "UNRESOLVED"
     }
   ],
@@ -148,7 +170,7 @@
         "text": "The base Transformer architecture includes attention heads",
         "centrality": "core",
         "verdict": "SUPPORTED",
-        "reasoning": "Passages describe the Transformer using multiple attention heads, e.g., multi‑head attention and the original model having 8 heads",
+        "reasoning": "Passages state the Transformer uses multiple attention heads, e.g., the original model had 8 heads",
         "correction": "",
         "cited_passage_ids": [
           "Pec91280db362",
@@ -159,7 +181,7 @@
         "text": "An ablation study on the number of attention heads for the base Transformer was conducted",
         "centrality": "core",
         "verdict": "UNVERIFIABLE",
-        "reasoning": "No passage reports an ablation study on the number of attention heads for the base Transformer",
+        "reasoning": "No passage reports an ablation study on head count for the base Transformer",
         "correction": "",
         "cited_passage_ids": []
       }
@@ -171,12 +193,12 @@
     "error": null
   },
   "budget": {
-    "llm_calls_used": 14,
+    "llm_calls_used": 16,
     "llm_calls_max": 25,
-    "retrieval_calls_used": 12,
+    "retrieval_calls_used": 11,
     "retrieval_calls_max": 20,
     "allocation": {},
-    "elapsed_s": 104.715
+    "elapsed_s": 159.856
   },
   "node_visits": [
     "premise_checker",
@@ -195,12 +217,21 @@
     "synthesizer",
     "critic",
     "critic_router",
-    "retriever",
-    "synthesizer",
     "decider",
+    "synthesizer",
+    "critic",
+    "critic_router",
     "finalizer"
   ],
-  "trace_path": "/Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/eval/traces/agent-calibration-A06-a0-1795699243.jsonl",
+  "trace_path": "/Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/eval/traces/agent-calibration-A06-a1-1795761408.jsonl",
   "error": null,
-  "finished_at": "2026-11-26T13:22:29+00:00"
+  "finished_at": "2026-11-27T06:39:28+00:00",
+  "supersedes": {
+    "attempt": 0,
+    "thread_id": "agent:calibration:A06:a0",
+    "terminal_decision": "ABSTAIN",
+    "rule": "threshold",
+    "score": 0.0,
+    "reason": "C37.1 and C37.3: lost citations, titles and shared evidence window; calibration made homogeneous"
+  }
 }

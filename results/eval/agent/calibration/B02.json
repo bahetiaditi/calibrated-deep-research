@@ -4,8 +4,8 @@
   "subtype": null,
   "split": "calibration",
   "config": "agent",
-  "attempt": 0,
-  "thread_id": "agent:calibration:B02:a0",
+  "attempt": 1,
+  "thread_id": "agent:calibration:B02:a1",
   "resumed": "",
   "terminal_decision": "ABSTAIN",
   "rule": "system_failure",
@@ -21,7 +21,7 @@
       "source": "heuristic: all / any / none resolved"
     },
     "margin": null,
-    "rationale": "Abstained because the run failed before a report could be written (role 'judgment': every model in the chain failed or is out of quota. Tried ['openai/gpt-oss-120b']. Details: [\"openai/gpt-oss-120b: RateLimitError: Error code: ). This is a system failure, not a judgment about the evidence.",
+    "rationale": "Abstained because the run failed before a report could be written (role 'judgment': every model in the chain failed or is out of quota. Tried ['openai/gpt-oss-120b']. Details: ['openai/gpt-oss-120b: openai/gpt-oss-120b: 200000/). This is a system failure, not a judgment about the evidence.",
     "scorer": "heuristic",
     "calibrated": false,
     "counterfactual": null,
@@ -114,12 +114,12 @@
       "uncalibrated heuristic scorer",
       "no fitted model at /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage1.joblib, /Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/sufficiency_stage2.joblib"
     ],
-    "error": "role 'judgment': every model in the chain failed or is out of quota. Tried ['openai/gpt-oss-120b']. Details: [\"openai/gpt-oss-120b: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01m1tzn3zve0s8ekka9t8xs695` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 194657, Requested 6917. Please try again in 11m19.968s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}\"]",
+    "error": "role 'judgment': every model in the chain failed or is out of quota. Tried ['openai/gpt-oss-120b']. Details: ['openai/gpt-oss-120b: openai/gpt-oss-120b: 200000/200000 tokens used today, need 7730']",
     "withheld_draft": "",
     "withheld_draft_mode": "",
     "partial_rewrite": "not_needed"
   },
-  "final_report": "# How does QLoRA build on LoRA, and what does it find about where the adapters must be placed?\n\n> **NO ANSWER — the run failed; this is not a judgment about the evidence**\n> Decided by rule: `system_failure`\n\n## Why there is no answer\n\nAbstained because the run failed before a report could be written (role 'judgment': every model in the chain failed or is out of quota. Tried ['openai/gpt-oss-120b']. Details: [\"openai/gpt-oss-120b: RateLimitError: Error code: ). This is a system failure, not a judgment about the evidence.\n\n**Not established:**\n\n- What modifications does QLoRA introduce to the original LoRA method?\n- According to the QLoRA paper, which specific transformer layers (such as the query, key, value projection matrices or the feed‑forward network) are modified by inserting the low‑rank adapters?\n- According to the QLoRA paper, what experimental findings are reported about the effect of placing LoRA adapters in different transformer components (such as attention layers versus feed‑forward….\n",
+  "final_report": "# How does QLoRA build on LoRA, and what does it find about where the adapters must be placed?\n\n> **NO ANSWER — the run failed; this is not a judgment about the evidence**\n> Decided by rule: `system_failure`\n\n## Why there is no answer\n\nAbstained because the run failed before a report could be written (role 'judgment': every model in the chain failed or is out of quota. Tried ['openai/gpt-oss-120b']. Details: ['openai/gpt-oss-120b: openai/gpt-oss-120b: 200000/). This is a system failure, not a judgment about the evidence.\n\n**Not established:**\n\n- What modifications does QLoRA introduce to the original LoRA method?\n- According to the QLoRA paper, which specific transformer layers (such as the query, key, value projection matrices or the feed‑forward network) are modified by inserting the low‑rank adapters?\n- According to the QLoRA paper, what experimental findings are reported about the effect of placing LoRA adapters in different transformer components (such as attention layers versus feed‑forward….\n",
   "draft": "",
   "draft_mode": "answer",
   "synthesis_log": [
@@ -130,7 +130,7 @@
       "unparsed_citations": 0,
       "invalid_labels": [],
       "uncited_sentences": 0,
-      "error": "role 'judgment': every model in the chain failed or is out of quota. Tried ['openai/gpt-oss-120b']. Details: [\"openai/gpt-oss-120b: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01m1tzn3zve0s8ekka9t8xs695` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 194657, Requested 6917. Please try again in 11m19.968s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}\"]"
+      "error": "role 'judgment': every model in the chain failed or is out of quota. Tried ['openai/gpt-oss-120b']. Details: ['openai/gpt-oss-120b: openai/gpt-oss-120b: 200000/200000 tokens used today, need 7730']"
     }
   ],
   "critic_findings": [],
@@ -178,7 +178,7 @@
     "retrieval_calls_used": 15,
     "retrieval_calls_max": 20,
     "allocation": {},
-    "elapsed_s": 115.824
+    "elapsed_s": 65.779
   },
   "node_visits": [
     "premise_checker",
@@ -201,7 +201,7 @@
     "decider",
     "finalizer"
   ],
-  "trace_path": "/Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/eval/traces/agent-calibration-B02-a0-1795762129.jsonl",
-  "error": "role 'judgment': every model in the chain failed or is out of quota. Tried ['openai/gpt-oss-120b']. Details: [\"openai/gpt-oss-120b: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01m1tzn3zve0s8ekka9t8xs695` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 194657, Requested 6917. Please try again in 11m19.968s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}\"]",
-  "finished_at": "2026-11-27T06:50:45+00:00"
+  "trace_path": "/Users/aditibaheti/Documents/Agentic Research/calibrated-deep-research/results/eval/traces/agent-calibration-B02-a1-1795765353.jsonl",
+  "error": "role 'judgment': every model in the chain failed or is out of quota. Tried ['openai/gpt-oss-120b']. Details: ['openai/gpt-oss-120b: openai/gpt-oss-120b: 200000/200000 tokens used today, need 7730']",
+  "finished_at": "2026-11-27T07:43:40+00:00"
 }

@@ -78,6 +78,7 @@ GAP_STATEMENT = "GAP_STATEMENT"
 # How many times a failed critique batch may be halved (C28.3): 2 levels =
 # at most 4 calls for one review, spent only when a batch fails.
 MAX_SPLIT_DEPTH = 2
+NO_VERDICT = "no verdict returned"
 VERDICTS = (SUPPORTED, PARTIAL, UNSUPPORTED, CONTRADICTED)
 
 # Below this a sentence is almost certainly connective tissue. Used only to
@@ -107,6 +108,10 @@ class CriticReport:
     discourse_sentences: int = 0
     gap_statements: list[str] = field(default_factory=list)
     error: str | None = None
+    # C37.4: sentences still without a verdict after the re-ask. They stand as
+    # UNSUPPORTED (no claim passes unverified) but are counted, so a record
+    # can tell the critic's failure from the draft's.
+    missing_verdicts: int = 0
 
     @property
     def claims(self) -> int:
@@ -205,9 +210,12 @@ class Critic:
                     error=str(exc),
                 )
 
+            missing_verdicts = 0
             for sentence in judged:
+                if sentence.index not in verdicts:
+                    missing_verdicts += 1
                 verdict, reasoning = verdicts.get(
-                    sentence.index, (UNSUPPORTED, "no verdict returned")
+                    sentence.index, (UNSUPPORTED, NO_VERDICT)
                 )
                 if verdict == NOT_A_CLAIM:
                     discourse += 1
@@ -231,6 +239,9 @@ class Critic:
                     verdict = UNSUPPORTED
                     reasoning = (
                         "no citation — nothing to verify the claim against"
+                        # C37.4: an unjudged uncited sentence might have been
+                        # a gap statement or discourse; say it was unjudged.
+                        + (f"; {NO_VERDICT}" if reasoning == NO_VERDICT else "")
                     )
                 findings.append(
                     self._finding(sentence, verdict, reasoning, evidence,
@@ -238,7 +249,8 @@ class Critic:
                 )
 
         report = CriticReport(findings=findings, discourse_sentences=discourse,
-                              gap_statements=gap_statements)
+                              gap_statements=gap_statements,
+                              missing_verdicts=missing_verdicts if judged else 0)
         self._trace(report, len(sentences))
         return report
 
@@ -265,7 +277,7 @@ class Critic:
         MAX_SPLIT_DEPTH (two levels, at most four calls) the failure stands.
         """
         try:
-            return self._judge(state, sentences, evidence, contradicted)
+            verdicts = self._judge(state, sentences, evidence, contradicted)
         except Exception as exc:  # noqa: BLE001
             if depth >= MAX_SPLIT_DEPTH or len(sentences) < 2:
                 raise
@@ -280,6 +292,37 @@ class Critic:
             verdicts.update(self._judge_split(state, sentences[half:], evidence,
                                               contradicted, depth + 1))
             return verdicts
+
+        # C37.4. A call that SUCCEEDS can still leave sentences unjudged. When
+        # the output is cut at max_output_tokens, `extract_json` closes the
+        # truncated array (C3's repair), so the call parses, no exception is
+        # raised, split-on-failure never fires — and every sentence after
+        # the cut defaulted to UNSUPPORTED "no verdict returned". Live, A09
+        # (calibration, a1): four correctly cited claims, including the
+        # 225 TFLOPs/s result, marked unverified in the user's report and
+        # sent to the router as failures. Three individually correct rules
+        # (repair truncation; resolve missing verdicts against the claim;
+        # split only on exceptions) combining badly.
+        #
+        # The missing sentences are judged again, alone: a smaller batch
+        # needs less output, and it is a different prompt, so the cache
+        # cannot return the same truncated answer. Bounded by the same
+        # depth as splitting.
+        missing = [s for s in sentences if s.index not in verdicts]
+        if missing and depth < MAX_SPLIT_DEPTH:
+            log.warning("critic returned %d of %d verdicts; judging the %d missing",
+                        len(sentences) - len(missing), len(sentences), len(missing))
+            if self.tracer is not None:
+                self.tracer.note("critic_missing_verdicts", sentences=len(sentences),
+                                 missing=len(missing), depth=depth + 1)
+            try:
+                verdicts.update(self._judge_split(state, missing, evidence,
+                                                  contradicted, depth + 1))
+            except Exception as exc:  # noqa: BLE001
+                # The verdicts already returned stand; the re-ask's failure
+                # leaves only the missing ones unjudged, as before C37.4.
+                log.warning("critic re-ask failed (%s)", type(exc).__name__)
+        return verdicts
 
     def _judge(
         self,
@@ -394,6 +437,7 @@ class Critic:
                 round(report.grounding_precision, 4)
                 if report.grounding_precision is not None else None
             ),
+            missing_verdicts=report.missing_verdicts,
         )
 
 

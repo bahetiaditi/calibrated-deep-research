@@ -1,6 +1,13 @@
 # HANDOFF — calibrated-deep-research
 
 **Snapshot: 26 November 2026, after commit `8f93afa` (C37).**
+**Update 27 November 2026, after C37.4:** N1 is closed (see REFERENCE,
+"N1 diagnosed", C37.1–C37.4). The 0.484 was mostly the system — lost
+citations (A03) and uncited sentences — with 2 of 15 labels grader error.
+Four fixes since: C37.1 dagger citations + `--rerun`; C37.2 grading
+corrections; C37.3 titles + one evidence window for writer and critic;
+C37.4 critic re-asks missing verdicts. Next: C37.5 (bootstrap CIs), N2,
+then C33. §8 N1 and §10 below are historical.
 Written to start a new chat with full context. Read this first, then
 `REFERENCE.md` sections 1–13 (the design) and its dated build log (every
 commit's reasoning and live findings). REFERENCE.md is the source of truth;

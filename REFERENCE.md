@@ -4662,3 +4662,78 @@ Tests: `tests/test_c37_3.py` (8), plus one in `test_c37_1.py` for resumable
 re-run batches. Mutation checks, each failing ≥1 test: skipping the
 same-reason check; critic header without the title; critic window back to 800; premise header
 without the title; premise fitting back to a fixed 60 per header.
+
+**2026-11-27 — C37.3 verified live; calibration re-runs (a1).**
+`smoke_c37_3` could not run (the day's 120b quota was spent when it was
+issued); the re-runs are the live check instead, and they are stronger
+evidence — the same claims, inside full runs.
+
+| id | before (a0) | after (a1) | what changed |
+|---|---|---|---|
+| A03 | ANSWER 1.00, 0/8 claims verified, citations lost | ANSWER 1.00, 6/10 SUPPORTED, 0 unparsed | C37.1: dagger citations parsed |
+| A05 | PARTIAL 0.67 | PARTIAL 0.67 | "3.5 days on eight GPUs" now SUPPORTED (C37.3 window) — but its passage is owned by the BLEU sub-questions, so the training-cost sub-question (abandoned in retrieval) gets one verified claim, below the ≥2 the heuristic needs. Ownership-by-retrieval (#5), not a defect |
+| A06 | ABSTAIN 0.00 (false abstention) | PARTIAL 0.50 | eight-heads claim SUPPORTED (C37.3 title). The ablation sub-question is still abandoned: the gold ablation passage was not retrieved — a retrieval miss, honest |
+| A09 | ANSWER 1.00 | ANSWER 1.00, 4/10 SUPPORTED | **new defect, C37.4** |
+| A10 | PARTIAL 0.33 | PARTIAL 0.33 | — |
+| B01 | system_failure | PARTIAL 0.33 | quota re-run |
+| B02 | — | system_failure | day quota; re-runs tomorrow |
+
+The re-runs replayed planner and retrieval calls from the cache: 9–22 LLM
+calls per question, and 6 questions in one quota day.
+
+**2026-11-27 — C37.4. A critic call that parses can still leave sentences
+unjudged.**
+
+**What broke.** A09's critique returned verdicts for its first sentences
+only. Four correctly cited claims — the 2× speedup, 50–73 % of peak FLOPs/s,
+225 TFLOPs/s per A100, FlashAttention's 2–4× — came back UNSUPPORTED with
+the reasoning "no verdict returned", were marked *[unverified]* in the
+user's report, and were sent to the router as failures (REVISE_PLAN,
+refused only because the ceiling was reached). In A09's a0 run the
+same claims were SUPPORTED or PARTIAL and every sentence had a verdict; the
+a1 draft has ten sentences to a0's eight, and C37.3 lengthened each passage
+the critic reads, so the a1 critique needed more output. The mechanism is three individually correct
+rules: `extract_json` closes a truncated JSON array (C3: truncation at the
+output cap is common and the partial content is useful); a sentence with no
+verdict resolves against the claim (C23: no claim passes unverified); and
+the critic splits a batch only when the call raises (C28.3). A truncated
+answer repairs into valid JSON, nothing raises, no split happens, and every
+sentence after the cut is silently a failure. This is the system-side twin
+of N1's grader defect (missing label → UNSUPPORTED), which C37.2 fixed in
+the judge and nobody had checked in the critic.
+
+**Fix.** After a successful call, sentences without a verdict are judged
+again, alone — a smaller batch needs less output, and it is a different
+prompt, so the cache cannot return the same truncated answer. Bounded by
+`MAX_SPLIT_DEPTH` (at most two re-asks). What is still missing stays
+UNSUPPORTED (C23 holds: no claim passes unverified) but is now counted
+(`CriticReport.missing_verdicts`, the `critic` trace note), traced
+(`critic_missing_verdicts`), and named in the finding even for an uncited
+sentence ("no citation …; no verdict returned"), which before C37.4 hid that
+the critic never classified it (it might have been a gap statement). A
+failing re-ask keeps the verdicts already returned.
+
+**Not changed:** the output cap (raising it shrinks every judgment prompt's
+budget, which is derived from TPM − cap, C27.3) and the critic prompt
+(changing it would invalidate the cache for every completed run).
+
+**Which records are affected.** The fix is a no-op when every verdict comes
+back (one call, identical result — tested), so only records with a gap need
+re-running. `scripts/probe_critic_verdicts.py` (zero API calls) reads the
+records (cited "no verdict" findings) and the local traces (critic calls at
+the output cap, which also catch uncited sentences). From the committed
+records: **A09 only**. Re-run A09 under C37.4; the local-trace check
+decides whether any other record joins it.
+
+**Renumbering.** Bootstrap CIs and the unread `spot_check_fraction`
+(C37.2's note "→ C37.4") move to **C37.5**: this defect had to come first,
+because it changes system behaviour and calibration runs continue daily.
+
+Tests: `tests/test_c37_4.py` (6). Mutation checks, each failing ≥1 test:
+no re-ask; unbounded re-ask depth; re-asking the whole batch instead of the
+missing sentences; dropping the "no verdict" marker on uncited sentences.
+
+**Lesson (adds to §12's first):** a repair step that turns a failure into a
+partial success must hand the gap to whoever can fill it; here the repair
+was in the parser and the gap was in the critic, two commits and twenty
+entries apart.
